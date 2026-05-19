@@ -1,0 +1,6 @@
+# Copy to .dev.vars (gitignored) for local `wrangler dev`.
+# In production these go in the Cloudflare dashboard or `wrangler secret put`.
+
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+MANDRILL_API_KEY="md-..."

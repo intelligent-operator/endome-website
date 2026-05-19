@@ -1,0 +1,43 @@
+name = "endome-website"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets (HTML, CSS, images) served straight from /public.
+# The Worker runs only when an asset isn't found (e.g. /api/*).
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = false
+
+# Public, non-secret config. Override per-environment as needed.
+[vars]
+SITE_URL = "https://endome.app"
+NEWSLETTER_FROM_EMAIL = "hello@endome.app"
+NEWSLETTER_FROM_NAME = "EndoMe"
+NOTIFY_EMAIL = "hello@endome.app"
+STRIPE_DNA_PRICE_ID = "price_replace_me"
+
+# ----------------------------------------------------------------------
+# Secrets (set via the Cloudflare dashboard or `wrangler secret put`).
+# Do NOT put real values in this file.
+#
+#   STRIPE_SECRET_KEY      sk_live_...   (or sk_test_... in preview)
+#   STRIPE_WEBHOOK_SECRET  whsec_...     (Stripe -> Webhooks)
+#   MANDRILL_API_KEY       md-...        (Mailchimp Transactional)
+# ----------------------------------------------------------------------
+
+# Custom domain routing. Add the zone in the Cloudflare dashboard first.
+# [[routes]]
+# pattern = "endome.app/*"
+# zone_name = "endome.app"
+# custom_domain = true
+
+[observability]
+enabled = true
+
+# Preview / staging environment used by CI on non-main branches.
+[env.preview]
+name = "endome-website-preview"
+vars = { SITE_URL = "https://preview.endome.app" }

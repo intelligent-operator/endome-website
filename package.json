@@ -1,0 +1,15 @@
+{
+  "name": "endome-website",
+  "private": true,
+  "version": "0.1.0",
+  "description": "EndoMe marketing site — Cloudflare Workers + Static Assets",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:preview": "wrangler deploy --env preview",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.95.0"
+  }
+}

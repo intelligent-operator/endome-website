@@ -48,7 +48,7 @@
         <h2>Your Story Starts here</h2>
         <p>EndoMe is your endometriosis support community powered by testing, tracking, and personalised guidance—so you can understand your body, get answers sooner, and feel supported every step of the way.</p>
         <div class="hero-ctas">
-          <a href="#dna" class="btn btn-primary">Request a DNA Test →</a>
+          <a href="#dna" class="btn btn-primary" data-checkout>Request a DNA Test →</a>
           <a href="#how" class="btn btn-ghost">Explore the App</a>
         </div>
         <div class="hero-badges">
@@ -491,7 +491,7 @@
       </div>
       <div class="cta-actions">
         <a href="#" class="btn btn-ghost light">Create an Account</a>
-        <a href="#" class="btn btn-primary">Request a DNA Test</a>
+        <a href="#" class="btn btn-primary" data-checkout>Request a DNA Test</a>
         <span class="store-note">Available on iOS and Android</span>
       </div>
     </div>
@@ -535,13 +535,16 @@
       <div class="newsletter">
         <h5>Stay in the Loop</h5>
         <p>Get health tips, stories, and product updates.</p>
-        <form onsubmit="event.preventDefault()">
-          <input type="email" placeholder="Enter your email" />
+        <form id="newsletter-form" novalidate>
+          <input type="email" name="email" placeholder="Enter your email" required />
           <button type="submit" class="pill-btn">Subscribe</button>
         </form>
+        <p id="newsletter-status" class="form-status" aria-live="polite"></p>
       </div>
     </div>
-    <div class="footer-bottom">© 2024 EndoMe. All rights reserved.</div>
+    <div class="footer-bottom">© 2026 EndoMe. All rights reserved.</div>
   </footer>
+
+  <script src="/app.js" defer></script>
 </body>
 </html>

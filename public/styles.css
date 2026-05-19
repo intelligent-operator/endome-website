@@ -394,6 +394,7 @@ p{margin:0 0 .6em}
   font-family:inherit;font-size:13px;outline:none;
 }
 .newsletter input:focus{border-color:#ff4e8a}
+.form-status{font-size:12px;color:#7a5f6c;margin-top:8px;min-height:1em}
 .footer-bottom{
   text-align:center;color:#7a5f6c;font-size:12px;
   border-top:1px solid #ffd6e0;margin-top:24px;padding-top:16px;
