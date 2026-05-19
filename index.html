@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EndoMe – Your Story Starts here</title>
+  <meta name="description" content="EndoMe is an endometriosis support community powered by DNA testing, symptom tracking and AI guidance. Your story starts here." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- =========================== HERO =========================== -->
+  <section class="hero">
+    <div class="hero-pattern" aria-hidden="true"></div>
+
+    <nav class="navbar">
+      <a href="#" class="logo">
+        <span class="logo-mark">
+          <svg viewBox="0 0 40 40" width="32" height="32" aria-hidden="true">
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ff5d8f"/>
+                <stop offset="100%" stop-color="#ff9bb3"/>
+              </linearGradient>
+            </defs>
+            <path d="M20 4c-8.8 0-16 7.2-16 16s7.2 16 16 16c4.5 0 8.6-1.9 11.5-4.9l-3.4-3.4C26 30 23.1 31.4 20 31.4c-6.3 0-11.4-5.1-11.4-11.4S13.7 8.6 20 8.6c6.3 0 11.4 5.1 11.4 11.4 0 1.4-.3 2.7-.7 4l3.7 2C35.5 24 36 22 36 20c0-8.8-7.2-16-16-16z" fill="url(#logoGrad)"/>
+            <circle cx="29" cy="20" r="2.4" fill="#ff5d8f"/>
+          </svg>
+        </span>
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#how">How It Works</a></li>
+        <li><a href="#dna">DNA Test</a></li>
+        <li><a href="#support">Support Plan</a></li>
+        <li><a href="#tracker">Symptom Tracker</a></li>
+        <li><a href="#endopet">EndoPet</a></li>
+        <li><a href="#community">Community</a></li>
+      </ul>
+      <a href="#cta" class="btn btn-primary nav-cta">Get Started</a>
+    </nav>
+
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <h1>EndoMe</h1>
+        <h2>Your Story Starts here</h2>
+        <p>EndoMe is your endometriosis support community powered by testing, tracking, and personalised guidance—so you can understand your body, get answers sooner, and feel supported every step of the way.</p>
+        <div class="hero-ctas">
+          <a href="#dna" class="btn btn-primary">Request a DNA Test →</a>
+          <a href="#how" class="btn btn-ghost">Explore the App</a>
+        </div>
+        <div class="hero-badges">
+          <div class="badge"><span class="badge-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 6v6c0 5 3.8 9.4 9 10 5.2-.6 9-5 9-10V6l-9-4z" stroke="#ff5d8f" stroke-width="2" stroke-linejoin="round"/></svg>
+          </span><div><strong>Science-backed</strong><span>insights</span></div></div>
+          <div class="badge"><span class="badge-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke="#ff5d8f" stroke-width="2"/><path d="M8 11V8a4 4 0 018 0v3" stroke="#ff5d8f" stroke-width="2"/></svg>
+          </span><div><strong>Private &amp;</strong><span>secure</span></div></div>
+          <div class="badge"><span class="badge-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2" stroke-linejoin="round"/></svg>
+          </span><div><strong>Community</strong><span>powered</span></div></div>
+        </div>
+      </div>
+
+      <div class="hero-phones" aria-hidden="true">
+        <!-- LEFT PHONE: Results Summary -->
+        <div class="phone phone-left">
+          <div class="phone-screen">
+            <div class="phone-notch"></div>
+            <div class="phone-status"><span>9:41</span><span class="signal">●●● ▲</span></div>
+            <div class="screen-title">Results Summary</div>
+            <div class="screen-sub">Your Propensity Insight</div>
+            <div class="gauge">
+              <svg viewBox="0 0 120 70" width="100%">
+                <path d="M10 60 A50 50 0 0 1 110 60" stroke="#ffd6e0" stroke-width="10" fill="none" stroke-linecap="round"/>
+                <path d="M10 60 A50 50 0 0 1 90 22" stroke="url(#gg)" stroke-width="10" fill="none" stroke-linecap="round"/>
+                <defs><linearGradient id="gg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ffb168"/><stop offset="1" stop-color="#ff5d8f"/></linearGradient></defs>
+                <circle cx="90" cy="22" r="4" fill="#ff5d8f"/>
+              </svg>
+              <div class="gauge-label">Moderate<br/><strong>Propensity</strong></div>
+            </div>
+            <p class="screen-note">Your results suggest a moderate propensity for endometriosis.</p>
+            <div class="screen-sub small">What Contributed</div>
+            <div class="bar"><span>DNA Markers</span><div class="bar-track"><div class="bar-fill" style="width:72%"></div></div><span class="bar-val">72%</span></div>
+            <div class="bar"><span>Blood Markers</span><div class="bar-track"><div class="bar-fill" style="width:58%;background:linear-gradient(90deg,#ffb168,#ff8aa6)"></div></div><span class="bar-val">58%</span></div>
+            <div class="bar"><span>Other Tests</span><div class="bar-track"><div class="bar-fill" style="width:40%;background:linear-gradient(90deg,#ffd6e0,#ff9bb3)"></div></div><span class="bar-val">40%</span></div>
+            <div class="phone-tabbar"><span>Home</span><span>Tests</span><span>Plan</span><span>Profile</span></div>
+          </div>
+        </div>
+
+        <!-- CENTER PHONE: Symptom Check-in -->
+        <div class="phone phone-center">
+          <div class="phone-screen">
+            <div class="phone-notch"></div>
+            <div class="phone-status"><span>9:41</span><span class="signal">●●● ▲</span></div>
+            <div class="screen-greet">Good morning, Alex <span>✨</span></div>
+            <div class="screen-date">Today, May 30</div>
+            <div class="check-in-card">
+              <div class="check-in-head"><strong>Symptom Check-in</strong><span class="dot-pink"></span></div>
+              <p>How are you feeling today?</p>
+              <button class="pill-btn">Log Symptoms</button>
+            </div>
+            <div class="cycle-row">
+              <div>
+                <div class="screen-sub small">Cycle Day 14</div>
+                <div class="cycle-sub">Follicular Phase</div>
+              </div>
+              <span class="chev">›</span>
+            </div>
+            <div class="screen-sub small">Today's Overview</div>
+            <div class="overview">
+              <div class="ov-card"><div class="emoji">😣</div><span>Pain</span><strong>Moderate</strong></div>
+              <div class="ov-card"><div class="emoji">😪</div><span>Fatigue</span><strong>High</strong></div>
+              <div class="ov-card"><div class="emoji">🙂</div><span>Mood</span><strong>Good</strong></div>
+            </div>
+            <div class="endopet-row">
+              <div>
+                <div class="screen-sub small">Your EndoPet</div>
+                <div class="cycle-sub">Luna</div>
+                <div class="level-pill">Level 4</div>
+              </div>
+              <div class="mini-pet">
+                <svg viewBox="0 0 60 60" width="60" height="60"><ellipse cx="30" cy="38" rx="20" ry="18" fill="#ff9bb3"/><circle cx="30" cy="30" r="18" fill="#ffb6c8"/><polygon points="16,18 22,28 12,28" fill="#ffb6c8"/><polygon points="44,18 38,28 48,28" fill="#ffb6c8"/><circle cx="24" cy="30" r="2.2" fill="#3a1d2b"/><circle cx="36" cy="30" r="2.2" fill="#3a1d2b"/><path d="M26 36 Q30 39 34 36" stroke="#3a1d2b" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="22" cy="35" r="1.8" fill="#ff5d8f" opacity=".5"/><circle cx="38" cy="35" r="1.8" fill="#ff5d8f" opacity=".5"/></svg>
+              </div>
+            </div>
+            <div class="phone-tabbar"><span>Home</span><span>Track</span><span>Plan</span><span>Community</span><span>Profile</span></div>
+          </div>
+        </div>
+
+        <!-- RIGHT PHONE: Support Plan -->
+        <div class="phone phone-right">
+          <div class="phone-screen">
+            <div class="phone-notch"></div>
+            <div class="phone-status"><span>9:41</span><span class="signal">●●● ▲</span></div>
+            <div class="screen-title">Your Support Plan</div>
+            <div class="screen-sub small">Personalised for you</div>
+            <div class="plan-card">
+              <div class="plan-ico" style="background:#ffe5ed">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2"/></svg>
+              </div>
+              <div><strong>Lifestyle &amp; Nutrition</strong><span>Anti-inflammatory foods and routines</span></div>
+            </div>
+            <div class="plan-card">
+              <div class="plan-ico" style="background:#ffd6cc">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12a7 7 0 0114 0c0 4-3 7-7 7s-7-3-7-7z" stroke="#ff8a5c" stroke-width="2"/></svg>
+              </div>
+              <div><strong>Pain &amp; Flare Support</strong><span>Evidence-based tips to manage pain</span></div>
+            </div>
+            <div class="plan-card">
+              <div class="plan-ico" style="background:#ece0ff">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9 4a5 5 0 016 0c1 2 4 2 4 6 0 3-3 4-3 6s2 4-1 4-3-2-4-2-2 2-4 2-2-2-1-4-3-3-3-6c0-4 3-4 4-6z" stroke="#9b6cff" stroke-width="2"/></svg>
+              </div>
+              <div><strong>Mind &amp; Meet</strong><span>Tools for stress, sleep and emotional wellbeing</span></div>
+            </div>
+            <div class="plan-card">
+              <div class="plan-ico" style="background:#fff0d6">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#f5a623" stroke-width="2"/><path d="M12 7v5l3 2" stroke="#f5a623" stroke-width="2" stroke-linecap="round"/></svg>
+              </div>
+              <div><strong>Next Step</strong><span>Book a specialist consultation</span></div>
+            </div>
+            <button class="pill-btn full">View Full Plan</button>
+            <div class="phone-tabbar"><span>Home</span><span>Track</span><span>Plan</span><span>Community</span><span>Profile</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <svg class="hero-wave" viewBox="0 0 1440 80" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 40 C 360 90, 1080 0, 1440 50 L1440 80 L0 80 Z" fill="#ffffff"/>
+    </svg>
+  </section>
+
+  <!-- =========================== HOW IT WORKS =========================== -->
+  <section class="how" id="how">
+    <h2 class="section-title">How <span class="brand">EndoMe</span> Works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-art">
+          <svg viewBox="0 0 80 60" width="80" height="60"><rect x="8" y="14" width="50" height="38" rx="5" fill="#ffd6e0"/><rect x="14" y="20" width="38" height="6" rx="3" fill="#ff5d8f"/><rect x="14" y="30" width="28" height="4" rx="2" fill="#ffb6c8"/><rect x="14" y="38" width="22" height="4" rx="2" fill="#ffb6c8"/><rect x="58" y="22" width="14" height="4" rx="2" fill="#ff5d8f" transform="rotate(20 58 22)"/></svg>
+        </div>
+        <h3>1. Request a DNA Test</h3>
+        <p>Order your at-home DNA test kit. Simple, private, and delivered to your door.</p>
+      </div>
+      <div class="step-arrow">⋯</div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-art">
+          <svg viewBox="0 0 80 60" width="80" height="60"><rect x="14" y="12" width="10" height="38" rx="5" fill="#ff5d8f"/><rect x="30" y="18" width="10" height="32" rx="5" fill="#ffb168"/><rect x="46" y="14" width="10" height="36" rx="5" fill="#ff9bb3"/><circle cx="62" cy="20" r="5" fill="#ff5d8f"/><path d="M62 26 q-3 6 0 10 q3-4 0-10z" fill="#ff5d8f"/></svg>
+        </div>
+        <h3>2. Add Blood Results &amp; Other Tests</h3>
+        <p>Securely upload blood results and other relevant test data.</p>
+      </div>
+      <div class="step-arrow">⋯</div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-art">
+          <svg viewBox="0 0 80 60" width="80" height="60"><rect x="20" y="6" width="40" height="50" rx="6" fill="#ffd6e0"/><rect x="24" y="12" width="32" height="34" rx="3" fill="#ffffff"/><circle cx="40" cy="26" r="6" fill="#ff5d8f"/><path d="M30 38 q10 -8 20 0" stroke="#ff5d8f" stroke-width="2" fill="none"/></svg>
+        </div>
+        <h3>3. Track Daily Symptoms</h3>
+        <p>Log your symptoms, cycles, mood, and more to uncover your unique patterns.</p>
+      </div>
+      <div class="step-arrow">⋯</div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-art">
+          <svg viewBox="0 0 80 60" width="80" height="60"><path d="M40 10 c-12 0-20 8-20 18 0 6 4 12 10 14 v6 h20 v-6 c6-2 10-8 10-14 0-10-8-18-20-18z" fill="#ffb6c8"/><path d="M30 26 q5-4 10 0 m0 0 q5-4 10 0" stroke="#ff5d8f" stroke-width="2" fill="none"/><circle cx="26" cy="14" r="2" fill="#ffd6e0"/><circle cx="56" cy="18" r="2" fill="#ffd6e0"/><circle cx="60" cy="36" r="2" fill="#ffd6e0"/></svg>
+        </div>
+        <h3>4. Receive an AI Supported Plan</h3>
+        <p>Get personalised insights, guidance, and support recommendations.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== EARLY SCREENING =========================== -->
+  <section class="screening" id="dna">
+    <div class="screening-grid">
+      <div class="screening-copy">
+        <h2>Early endometriosis screening</h2>
+        <p class="lead">Better insights. Earlier conversations. Better care.</p>
+        <p>EndoMe combines your DNA markers, blood results, and other tests to assess your propensity for endometriosis—helping you and your doctor make informed decisions sooner.</p>
+        <ul class="check-list">
+          <li><span class="check">✓</span> Multi-layered data approach</li>
+          <li><span class="check">✓</span> Evidence-informed algorithms</li>
+          <li><span class="check">✓</span> Actionable, easy-to-understand insights</li>
+          <li><span class="check">✓</span> Designed to support—not diagnose</li>
+        </ul>
+        <a href="#" class="link-arrow">Learn more about our science →</a>
+      </div>
+      <div class="screening-card">
+        <div class="sc-row">
+          <div class="sc-block">
+            <div class="screen-sub small">Propensity Insight</div>
+            <div class="gauge big">
+              <svg viewBox="0 0 140 80" width="100%">
+                <path d="M14 70 A56 56 0 0 1 126 70" stroke="#ffd6e0" stroke-width="12" fill="none" stroke-linecap="round"/>
+                <path d="M14 70 A56 56 0 0 1 102 24" stroke="url(#gg2)" stroke-width="12" fill="none" stroke-linecap="round"/>
+                <defs><linearGradient id="gg2" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ffb168"/><stop offset="1" stop-color="#ff5d8f"/></linearGradient></defs>
+                <circle cx="102" cy="24" r="5" fill="#ff5d8f"/>
+              </svg>
+              <div class="gauge-label">Moderate<br/><strong>Propensity</strong></div>
+            </div>
+            <p class="screen-note">This result suggests a <em>moderate</em> propensity for endometriosis.</p>
+            <p class="screen-warn"><strong>This is not a diagnosis.</strong> Share this with your healthcare provider.</p>
+          </div>
+          <div class="sc-block">
+            <div class="screen-sub small">Contributing Factors</div>
+            <div class="bar"><span>DNA Markers</span><div class="bar-track"><div class="bar-fill" style="width:72%"></div></div><span class="bar-val">72%</span></div>
+            <div class="bar"><span>Blood Markers</span><div class="bar-track"><div class="bar-fill" style="width:58%;background:linear-gradient(90deg,#ffb168,#ff8aa6)"></div></div><span class="bar-val">58%</span></div>
+            <div class="bar"><span>Other Tests</span><div class="bar-track"><div class="bar-fill" style="width:40%;background:linear-gradient(90deg,#ffd6e0,#ff9bb3)"></div></div><span class="bar-val">40%</span></div>
+
+            <div class="screen-sub small">Your Timeline</div>
+            <svg viewBox="0 0 220 50" width="100%" class="timeline">
+              <polyline points="0,40 30,28 60,32 90,22 120,18 150,28 180,12 220,22" fill="none" stroke="#ff5d8f" stroke-width="2"/>
+              <g fill="#ff5d8f"><circle cx="30" cy="28" r="3"/><circle cx="60" cy="32" r="3"/><circle cx="90" cy="22" r="3"/><circle cx="120" cy="18" r="3"/><circle cx="150" cy="28" r="3"/><circle cx="180" cy="12" r="3"/></g>
+              <rect x="160" y="0" width="40" height="14" rx="6" fill="#ff5d8f"/>
+              <text x="180" y="10" font-size="8" text-anchor="middle" fill="#fff">May 10</text>
+            </svg>
+          </div>
+          <div class="sc-block at-a-glance">
+            <div class="screen-sub small">At a Glance</div>
+            <div class="glance">
+              <div class="g-ico">📄</div>
+              <div><span>Tests Uploaded</span><strong>4</strong></div>
+            </div>
+            <div class="glance">
+              <div class="g-ico">🧬</div>
+              <div><span>Data Points</span><strong>23</strong></div>
+            </div>
+            <div class="glance">
+              <div class="g-ico">🕓</div>
+              <div><span>Last Updated</span><strong>May 10, 2024</strong></div>
+            </div>
+            <button class="pill-btn full">View Full Report</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== TRACKER =========================== -->
+  <section class="tracker" id="tracker">
+    <div class="tracker-grid">
+      <div class="tracker-visual">
+        <div class="phone phone-tracker">
+          <div class="phone-screen">
+            <div class="phone-notch"></div>
+            <div class="phone-status"><span>9:41</span><span class="signal">●●● ▲</span></div>
+            <div class="screen-title small-title">← Symptom Tracker</div>
+            <div class="screen-sub small">May 10</div>
+            <div class="day-dots">
+              <span>7</span><span>8</span><span>9</span><span class="active">10</span><span>11</span><span>12</span><span>13</span>
+            </div>
+            <div class="slider"><label>Pain</label><div class="slider-bar"><span class="dot" style="left:60%;background:#ff5d8f"></span></div><span class="slider-val">Moderate</span></div>
+            <div class="slider"><label>Bloating</label><div class="slider-bar"><span class="dot" style="left:30%;background:#ffb168"></span></div><span class="slider-val">Mild</span></div>
+            <div class="slider"><label>Fatigue</label><div class="slider-bar"><span class="dot" style="left:80%;background:#ffd24a"></span></div><span class="slider-val">High</span></div>
+            <div class="slider"><label>Mood</label><div class="slider-bar"><span class="dot" style="left:55%;background:#9b6cff"></span></div><span class="slider-val">Good</span></div>
+            <div class="slider"><label>Sleep</label><div class="slider-bar"><span class="dot" style="left:40%;background:#5cc7ff"></span></div><span class="slider-val">Okay</span></div>
+          </div>
+        </div>
+        <div class="ai-card">
+          <div class="ai-head">
+            <div class="ai-pet">
+              <svg viewBox="0 0 40 40" width="32" height="32"><ellipse cx="20" cy="26" rx="14" ry="12" fill="#ff9bb3"/><circle cx="20" cy="20" r="12" fill="#ffb6c8"/><circle cx="16" cy="20" r="1.4" fill="#3a1d2b"/><circle cx="24" cy="20" r="1.4" fill="#3a1d2b"/><path d="M17 24 q3 2 6 0" stroke="#3a1d2b" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>
+            </div>
+            <strong>AI Assistant</strong>
+          </div>
+          <p>I've noticed a pattern of increased fatigue and pain during your luteal phase.</p>
+          <p class="muted">You might try:</p>
+          <ul class="ai-list">
+            <li><span class="dot-pink-sm"></span>Magnesium-rich foods</li>
+            <li><span class="dot-pink-sm"></span>Gentle movement</li>
+            <li><span class="dot-pink-sm"></span>Heat therapy</li>
+            <li><span class="dot-pink-sm"></span>Better sleep routine</li>
+          </ul>
+          <p class="muted">Would you like more tips?</p>
+          <button class="pill-btn">Yes, show me</button>
+        </div>
+      </div>
+      <div class="tracker-copy">
+        <h2>Track. Understand. Get Support That Fits You.</h2>
+        <p>Log daily symptoms, cycles, pain, fatigue, mood, and more. EndoMe's AI learns your patterns over time to deliver tailored insights, reminders, and support suggestions.</p>
+        <div class="feature-grid">
+          <div class="feature"><span class="f-ico">📅</span><span>Daily symptom logging</span></div>
+          <div class="feature"><span class="f-ico">📈</span><span>Personalised recommendations</span></div>
+          <div class="feature"><span class="f-ico">🔁</span><span>Cycle &amp; flare pattern insights</span></div>
+          <div class="feature"><span class="f-ico">👥</span><span>Shareable reports for doctors</span></div>
+          <div class="feature"><span class="f-ico">🔔</span><span>Smart reminders &amp; nudges</span></div>
+          <div class="feature"><span class="f-ico">📊</span><span>Progress tracking over time</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== ENDOPET =========================== -->
+  <section class="endopet" id="endopet">
+    <div class="endopet-grid">
+      <div class="endopet-copy">
+        <h2>Meet EndoPet <span class="paw">🐾</span></h2>
+        <p class="lead">Your little companion on this journey.</p>
+        <p>Choose your EndoPet when you sign up! By logging your symptoms and results, your pet grows, gains experience, and unlocks fun accessories.</p>
+        <div class="pet-perks">
+          <div class="perk"><span class="perk-ico" style="background:#ffe5ed">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2"/></svg>
+          </span><div><strong>Track</strong><span>consistently</span></div></div>
+          <div class="perk"><span class="perk-ico" style="background:#fff3d6">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9" fill="#f5a623"/></svg>
+          </span><div><strong>Earn XP &amp;</strong><span>level up</span></div></div>
+          <div class="perk"><span class="perk-ico" style="background:#ffd6e0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="11" rx="2" fill="#ff5d8f"/><rect x="3" y="6" width="18" height="5" rx="2" fill="#ff9bb3"/><rect x="11" y="6" width="2" height="15" fill="#fff"/></svg>
+          </span><div><strong>Unlock cute</strong><span>accessories</span></div></div>
+        </div>
+      </div>
+      <div class="endopet-pets">
+        <div class="pet-card">
+          <h4>Happy Luna</h4>
+          <span class="level">Level 2</span>
+          <div class="pet-art">
+            <svg viewBox="0 0 120 120" width="140" height="140">
+              <ellipse cx="60" cy="80" rx="40" ry="34" fill="#ff9bb3"/>
+              <circle cx="60" cy="60" r="36" fill="#ffb6c8"/>
+              <polygon points="30,30 42,52 22,52" fill="#ffb6c8"/>
+              <polygon points="90,30 78,52 98,52" fill="#ffb6c8"/>
+              <polygon points="32,34 40,49 28,49" fill="#ff9bb3"/>
+              <polygon points="88,34 80,49 92,49" fill="#ff9bb3"/>
+              <path d="M44 58 q4 -4 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M68 58 q4 -4 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M52 70 q8 6 16 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <circle cx="40" cy="68" r="4" fill="#ff5d8f" opacity=".5"/>
+              <circle cx="80" cy="68" r="4" fill="#ff5d8f" opacity=".5"/>
+              <path d="M30 96 q6 6 12 0 q6 6 12 0 q6 6 12 0 q6 6 12 0" stroke="#ff5d8f" stroke-width="1.5" fill="none"/>
+            </svg>
+          </div>
+        </div>
+        <span class="arrow-pet">›</span>
+        <div class="pet-card">
+          <h4>Tired Luna</h4>
+          <span class="level">Level 2</span>
+          <div class="pet-art">
+            <svg viewBox="0 0 120 120" width="140" height="140">
+              <ellipse cx="60" cy="80" rx="40" ry="34" fill="#ff9bb3"/>
+              <circle cx="60" cy="60" r="36" fill="#ffb6c8"/>
+              <polygon points="30,30 42,52 22,52" fill="#ffb6c8"/>
+              <polygon points="90,30 78,52 98,52" fill="#ffb6c8"/>
+              <path d="M42 58 q4 0 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M70 58 q4 0 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M52 76 q8 -4 16 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <circle cx="40" cy="68" r="4" fill="#ff5d8f" opacity=".4"/>
+              <circle cx="80" cy="68" r="4" fill="#ff5d8f" opacity=".4"/>
+              <text x="86" y="42" font-size="10" fill="#9b6cff">z</text>
+              <text x="92" y="34" font-size="14" fill="#9b6cff">z</text>
+            </svg>
+          </div>
+        </div>
+        <span class="arrow-pet">›</span>
+        <div class="pet-card">
+          <h4>Super Luna</h4>
+          <span class="level">Level 6</span>
+          <div class="pet-art">
+            <svg viewBox="0 0 120 120" width="140" height="140">
+              <path d="M30 70 L18 100 L36 92 L40 110 L60 88 L80 110 L84 92 L102 100 L90 70" fill="#9b6cff"/>
+              <ellipse cx="60" cy="80" rx="40" ry="34" fill="#ff9bb3"/>
+              <circle cx="60" cy="60" r="36" fill="#ffb6c8"/>
+              <polygon points="30,30 42,52 22,52" fill="#ffb6c8"/>
+              <polygon points="90,30 78,52 98,52" fill="#ffb6c8"/>
+              <path d="M44 58 q4 -4 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M68 58 q4 -4 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M52 70 q8 6 16 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <circle cx="40" cy="68" r="4" fill="#ff5d8f" opacity=".5"/>
+              <circle cx="80" cy="68" r="4" fill="#ff5d8f" opacity=".5"/>
+              <text x="22" y="22" font-size="16" fill="#f5a623">✦</text>
+              <text x="92" y="20" font-size="14" fill="#f5a623">✦</text>
+              <text x="98" y="60" font-size="12" fill="#f5a623">✦</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== COMMUNITY =========================== -->
+  <section class="community" id="community">
+    <h2 class="section-title">You're Not Alone. <span class="brand">We're Here Together.</span></h2>
+    <div class="community-grid">
+      <div class="comm-card">
+        <div class="comm-art">
+          <svg viewBox="0 0 120 100" width="120" height="100">
+            <circle cx="35" cy="38" r="16" fill="#f5c69b"/>
+            <path d="M19 56 q16 -10 32 0 v40 h-32z" fill="#9b6cff"/>
+            <path d="M22 30 q12 -22 26 -6 q-4 8 -13 8 q-9 0 -13 -2z" fill="#3a1d2b"/>
+            <circle cx="65" cy="34" r="16" fill="#f0a87a"/>
+            <path d="M49 52 q16 -10 32 0 v44 h-32z" fill="#ff5d8f"/>
+            <path d="M52 26 q13 -20 26 -4 q-6 12 -16 12 q-8 0 -10 -8z" fill="#5a2c2c"/>
+            <circle cx="95" cy="40" r="14" fill="#f5c69b"/>
+            <path d="M81 56 q14 -8 28 0 v40 h-28z" fill="#ffb168"/>
+            <path d="M83 34 q10 -16 22 -4 q-5 8 -12 8 q-7 0 -10 -4z" fill="#7a4a2a"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Community Stories</h3>
+          <p>Real stories from real people who get it.</p>
+          <a href="#" class="link-arrow">Read Stories →</a>
+        </div>
+      </div>
+      <div class="comm-card">
+        <div class="comm-art">
+          <svg viewBox="0 0 120 100" width="120" height="100">
+            <path d="M14 14 q-6 0 -6 6 v40 q0 6 6 6 h10 v12 l14 -12 h30 q6 0 6 -6 v-40 q0 -6 -6 -6z" fill="#ffb6c8"/>
+            <circle cx="28" cy="38" r="3" fill="#fff"/><circle cx="40" cy="38" r="3" fill="#fff"/><circle cx="52" cy="38" r="3" fill="#fff"/>
+            <path d="M60 34 q-6 0 -6 6 v30 q0 6 6 6 h36 v10 l12 -10 h2 q6 0 6 -6 v-30 q0 -6 -6 -6z" fill="#ff9bb3"/>
+            <circle cx="74" cy="56" r="3" fill="#fff"/><circle cx="86" cy="56" r="3" fill="#fff"/><circle cx="98" cy="56" r="3" fill="#fff"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Support Circles</h3>
+          <p>Join topic-based groups and live discussions.</p>
+          <a href="#" class="link-arrow">Join a Circle →</a>
+        </div>
+      </div>
+      <div class="comm-card">
+        <div class="comm-art">
+          <svg viewBox="0 0 120 100" width="120" height="100">
+            <rect x="22" y="58" width="50" height="10" fill="#ff5d8f"/>
+            <rect x="20" y="68" width="54" height="12" fill="#9b6cff"/>
+            <rect x="24" y="42" width="46" height="16" fill="#ffb168"/>
+            <rect x="26" y="26" width="42" height="16" fill="#ff9bb3"/>
+            <path d="M80 80 q0 -30 18 -34 q-2 14 0 22 q4 -10 12 -10 q-4 16 -12 22z" fill="#7ed957"/>
+            <rect x="78" y="78" width="34" height="10" fill="#a06b3b"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Resources</h3>
+          <p>Expert articles, guides, and trusted information.</p>
+          <a href="#" class="link-arrow">Explore Resources →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== CTA =========================== -->
+  <section class="cta" id="cta">
+    <div class="cta-inner">
+      <div class="cta-logo">
+        <svg viewBox="0 0 60 60" width="56" height="56"><path d="M30 8c-12 0-22 10-22 22s10 22 22 22c6 0 12-2 16-7l-5-5q-5 4-11 4c-9 0-16-7-16-16s7-16 16-16c9 0 16 7 16 16 0 2 0 4-1 5l5 3q2-4 2-8c0-12-10-22-22-22z" fill="#fff"/></svg>
+      </div>
+      <div class="cta-copy">
+        <h2>Start earlier. Understand more. Feel supported.</h2>
+        <p>Take control of your health with EndoMe.</p>
+      </div>
+      <div class="cta-actions">
+        <a href="#" class="btn btn-ghost light">Create an Account</a>
+        <a href="#" class="btn btn-primary">Request a DNA Test</a>
+        <span class="store-note">Available on iOS and Android</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================== FOOTER =========================== -->
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="#" class="logo">
+          <span class="logo-mark">
+            <svg viewBox="0 0 40 40" width="28" height="28" aria-hidden="true">
+              <path d="M20 4c-8.8 0-16 7.2-16 16s7.2 16 16 16c4.5 0 8.6-1.9 11.5-4.9l-3.4-3.4C26 30 23.1 31.4 20 31.4c-6.3 0-11.4-5.1-11.4-11.4S13.7 8.6 20 8.6c6.3 0 11.4 5.1 11.4 11.4 0 1.4-.3 2.7-.7 4l3.7 2C35.5 24 36 22 36 20c0-8.8-7.2-16-16-16z" fill="#ff5d8f"/>
+              <circle cx="29" cy="20" r="2.4" fill="#ff5d8f"/>
+            </svg>
+          </span>
+          <span class="logo-text">EndoMe</span>
+        </a>
+        <p class="footer-tag">Science. Support. You.</p>
+        <p class="footer-blurb">A community and platform for endometriosis.</p>
+        <div class="socials">
+          <span>📷</span><span>📘</span><span>🐦</span><span>🎵</span>
+        </div>
+      </div>
+      <div>
+        <h5>Platform</h5>
+        <ul><li><a href="#how">How It Works</a></li><li><a href="#dna">DNA Test</a></li><li><a href="#tracker">Symptom Tracker</a></li><li><a href="#support">Support Plan</a></li><li><a href="#endopet">EndoPet</a></li></ul>
+      </div>
+      <div>
+        <h5>Community</h5>
+        <ul><li><a href="#community">Community</a></li><li><a href="#">Support Circles</a></li><li><a href="#">Stories</a></li><li><a href="#">Resources</a></li><li><a href="#">Events</a></li></ul>
+      </div>
+      <div>
+        <h5>Company</h5>
+        <ul><li><a href="#">About Us</a></li><li><a href="#">Science</a></li><li><a href="#">Careers</a></li><li><a href="#">Blog</a></li><li><a href="#">Contact Us</a></li></ul>
+      </div>
+      <div>
+        <h5>Legal</h5>
+        <ul><li><a href="#">Terms of Service</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Data Security</a></li><li><a href="#">Medical Disclaimer</a></li></ul>
+      </div>
+      <div class="newsletter">
+        <h5>Stay in the Loop</h5>
+        <p>Get health tips, stories, and product updates.</p>
+        <form onsubmit="event.preventDefault()">
+          <input type="email" placeholder="Enter your email" />
+          <button type="submit" class="pill-btn">Subscribe</button>
+        </form>
+      </div>
+    </div>
+    <div class="footer-bottom">© 2024 EndoMe. All rights reserved.</div>
+  </footer>
+</body>
+</html>
