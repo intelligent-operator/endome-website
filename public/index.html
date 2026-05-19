@@ -18,15 +18,18 @@
     <nav class="navbar">
       <a href="#" class="logo">
         <span class="logo-mark">
-          <svg viewBox="0 0 40 40" width="32" height="32" aria-hidden="true">
+          <svg viewBox="0 0 100 100" width="36" height="36" aria-hidden="true">
             <defs>
-              <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#ff5d8f"/>
-                <stop offset="100%" stop-color="#ff9bb3"/>
+              <linearGradient id="logoBgNav" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ffb085"/>
+                <stop offset="55%" stop-color="#ff6a8a"/>
+                <stop offset="100%" stop-color="#ec3a82"/>
               </linearGradient>
             </defs>
-            <path d="M20 4c-8.8 0-16 7.2-16 16s7.2 16 16 16c4.5 0 8.6-1.9 11.5-4.9l-3.4-3.4C26 30 23.1 31.4 20 31.4c-6.3 0-11.4-5.1-11.4-11.4S13.7 8.6 20 8.6c6.3 0 11.4 5.1 11.4 11.4 0 1.4-.3 2.7-.7 4l3.7 2C35.5 24 36 22 36 20c0-8.8-7.2-16-16-16z" fill="url(#logoGrad)"/>
-            <circle cx="29" cy="20" r="2.4" fill="#ff5d8f"/>
+            <rect width="100" height="100" rx="22" fill="url(#logoBgNav)"/>
+            <path d="M27 32 C 22 22, 36 18, 42 28 C 46 34, 50 38, 50 38 C 50 38, 54 34, 58 28 C 64 18, 78 22, 73 32 C 68 44, 50 58, 50 58 C 50 58, 32 44, 27 32 Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+            <path d="M44 45 C 41 41, 36 43, 38 47 C 40 51, 50 56, 50 56 C 50 56, 60 51, 62 47 C 64 43, 59 41, 56 45 C 54 47, 52 47, 50 47 C 48 47, 46 47, 44 45 Z" fill="#fff"/>
+            <path d="M58 56 C 72 64, 78 80, 64 88 C 52 94, 40 88, 38 78 C 36 70, 44 64, 52 68" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
           </svg>
         </span>
         <span class="logo-text">EndoMe</span>
@@ -39,7 +42,10 @@
         <li><a href="#endopet">EndoPet</a></li>
         <li><a href="#community">Community</a></li>
       </ul>
-      <a href="#cta" class="btn btn-primary nav-cta">Get Started</a>
+      <div class="nav-actions">
+        <a href="#" class="nav-signin" data-open-login>Sign In</a>
+        <a href="#cta" class="btn btn-primary nav-cta">Get Started</a>
+      </div>
     </nav>
 
     <div class="hero-inner">
@@ -336,87 +342,197 @@
 
   <!-- =========================== ENDOPET =========================== -->
   <section class="endopet" id="endopet">
-    <div class="endopet-grid">
-      <div class="endopet-copy">
-        <h2>Meet EndoPet <span class="paw">🐾</span></h2>
-        <p class="lead">Your little companion on this journey.</p>
-        <p>Choose your EndoPet when you sign up! By logging your symptoms and results, your pet grows, gains experience, and unlocks fun accessories.</p>
-        <div class="pet-perks">
-          <div class="perk"><span class="perk-ico" style="background:#ffe5ed">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2"/></svg>
-          </span><div><strong>Track</strong><span>consistently</span></div></div>
-          <div class="perk"><span class="perk-ico" style="background:#fff3d6">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9" fill="#f5a623"/></svg>
-          </span><div><strong>Earn XP &amp;</strong><span>level up</span></div></div>
-          <div class="perk"><span class="perk-ico" style="background:#ffd6e0">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="11" rx="2" fill="#ff5d8f"/><rect x="3" y="6" width="18" height="5" rx="2" fill="#ff9bb3"/><rect x="11" y="6" width="2" height="15" fill="#fff"/></svg>
-          </span><div><strong>Unlock cute</strong><span>accessories</span></div></div>
+    <div class="endopet-head">
+      <h2>Choose your <span class="brand">EndoPet</span> <span class="paw">🐾</span></h2>
+      <p class="lead">Pick your little companion.</p>
+      <p class="endopet-blurb">Your EndoPet is here to support, encourage, and grow with you on your journey. The more you log, the more it levels up — unlocking accessories and fun new looks.</p>
+    </div>
+
+    <div class="pets-grid">
+      <!-- LUNA — pink cat -->
+      <div class="pet-card selected">
+        <span class="pet-fav" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 12l4 4L19 6" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <div class="pet-art">
+          <svg viewBox="0 0 140 140" width="100%" height="auto" aria-hidden="true">
+            <ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/>
+            <path d="M40 60 L26 30 L48 46 Z" fill="#ff8aab"/>
+            <path d="M100 60 L114 30 L92 46 Z" fill="#ff8aab"/>
+            <path d="M44 56 L34 38 L50 50 Z" fill="#ffb0c4"/>
+            <path d="M96 56 L106 38 L90 50 Z" fill="#ffb0c4"/>
+            <ellipse cx="70" cy="92" rx="34" ry="26" fill="#ff9bb3"/>
+            <path d="M104 108 q22 -8 16 6 q-6 12 -18 4" fill="#ff9bb3"/>
+            <circle cx="70" cy="72" r="32" fill="#ffb6c8"/>
+            <circle cx="59" cy="74" r="4.5" fill="#2c1320"/><circle cx="60.8" cy="72.4" r="1.5" fill="#fff"/>
+            <circle cx="81" cy="74" r="4.5" fill="#2c1320"/><circle cx="82.8" cy="72.4" r="1.5" fill="#fff"/>
+            <path d="M70 82 l-2 3 h4 z" fill="#ff5d8f"/>
+            <path d="M67 86 q3 3 6 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <ellipse cx="54" cy="84" rx="5" ry="3" fill="#ff5d8f" opacity=".35"/>
+            <ellipse cx="86" cy="84" rx="5" ry="3" fill="#ff5d8f" opacity=".35"/>
+            <path d="M50 84 l-10 -2 M50 86 l-10 2 M90 84 l10 -2 M90 86 l10 2" stroke="#fff" stroke-width=".8"/>
+            <path d="M62 102 q8 6 16 0" stroke="#ff5d8f" stroke-width="2" fill="none"/>
+            <circle cx="70" cy="106" r="3" fill="#ff5d8f"/>
+          </svg>
         </div>
+        <h4>Luna <span class="paw-mini">🐾</span></h4>
       </div>
-      <div class="endopet-pets">
-        <div class="pet-card">
-          <h4>Happy Luna</h4>
-          <span class="level">Level 2</span>
-          <div class="pet-art">
-            <svg viewBox="0 0 120 120" width="140" height="140">
-              <ellipse cx="60" cy="80" rx="40" ry="34" fill="#ff9bb3"/>
-              <circle cx="60" cy="60" r="36" fill="#ffb6c8"/>
-              <polygon points="30,30 42,52 22,52" fill="#ffb6c8"/>
-              <polygon points="90,30 78,52 98,52" fill="#ffb6c8"/>
-              <polygon points="32,34 40,49 28,49" fill="#ff9bb3"/>
-              <polygon points="88,34 80,49 92,49" fill="#ff9bb3"/>
-              <path d="M44 58 q4 -4 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <path d="M68 58 q4 -4 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <path d="M52 70 q8 6 16 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <circle cx="40" cy="68" r="4" fill="#ff5d8f" opacity=".5"/>
-              <circle cx="80" cy="68" r="4" fill="#ff5d8f" opacity=".5"/>
-              <path d="M30 96 q6 6 12 0 q6 6 12 0 q6 6 12 0 q6 6 12 0" stroke="#ff5d8f" stroke-width="1.5" fill="none"/>
-            </svg>
-          </div>
+
+      <!-- POPPY — golden puppy -->
+      <div class="pet-card">
+        <span class="pet-fav heart" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2" fill="none"/></svg>
+        </span>
+        <div class="pet-art">
+          <svg viewBox="0 0 140 140" width="100%" height="auto" aria-hidden="true">
+            <ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/>
+            <ellipse cx="44" cy="80" rx="14" ry="20" fill="#e8a86a"/>
+            <ellipse cx="96" cy="80" rx="14" ry="20" fill="#e8a86a"/>
+            <ellipse cx="70" cy="94" rx="36" ry="26" fill="#f5c184"/>
+            <circle cx="70" cy="68" r="32" fill="#f5c184"/>
+            <circle cx="70" cy="56" r="14" fill="#e8a86a"/>
+            <circle cx="59" cy="72" r="4.5" fill="#2c1320"/><circle cx="60.8" cy="70.4" r="1.5" fill="#fff"/>
+            <circle cx="81" cy="72" r="4.5" fill="#2c1320"/><circle cx="82.8" cy="70.4" r="1.5" fill="#fff"/>
+            <ellipse cx="70" cy="82" rx="3.5" ry="2.5" fill="#2c1320"/>
+            <path d="M66 88 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <path d="M70 88 l0 4" stroke="#ff7a99" stroke-width="2" fill="none"/>
+            <ellipse cx="54" cy="80" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <ellipse cx="86" cy="80" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <path d="M40 100 Q70 116 100 100 L100 116 Q70 124 40 116 Z" fill="#ff8aab"/>
+          </svg>
         </div>
-        <span class="arrow-pet">›</span>
-        <div class="pet-card">
-          <h4>Tired Luna</h4>
-          <span class="level">Level 2</span>
-          <div class="pet-art">
-            <svg viewBox="0 0 120 120" width="140" height="140">
-              <ellipse cx="60" cy="80" rx="40" ry="34" fill="#ff9bb3"/>
-              <circle cx="60" cy="60" r="36" fill="#ffb6c8"/>
-              <polygon points="30,30 42,52 22,52" fill="#ffb6c8"/>
-              <polygon points="90,30 78,52 98,52" fill="#ffb6c8"/>
-              <path d="M42 58 q4 0 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <path d="M70 58 q4 0 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <path d="M52 76 q8 -4 16 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <circle cx="40" cy="68" r="4" fill="#ff5d8f" opacity=".4"/>
-              <circle cx="80" cy="68" r="4" fill="#ff5d8f" opacity=".4"/>
-              <text x="86" y="42" font-size="10" fill="#9b6cff">z</text>
-              <text x="92" y="34" font-size="14" fill="#9b6cff">z</text>
-            </svg>
-          </div>
-        </div>
-        <span class="arrow-pet">›</span>
-        <div class="pet-card">
-          <h4>Super Luna</h4>
-          <span class="level">Level 6</span>
-          <div class="pet-art">
-            <svg viewBox="0 0 120 120" width="140" height="140">
-              <path d="M30 70 L18 100 L36 92 L40 110 L60 88 L80 110 L84 92 L102 100 L90 70" fill="#9b6cff"/>
-              <ellipse cx="60" cy="80" rx="40" ry="34" fill="#ff9bb3"/>
-              <circle cx="60" cy="60" r="36" fill="#ffb6c8"/>
-              <polygon points="30,30 42,52 22,52" fill="#ffb6c8"/>
-              <polygon points="90,30 78,52 98,52" fill="#ffb6c8"/>
-              <path d="M44 58 q4 -4 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <path d="M68 58 q4 -4 8 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <path d="M52 70 q8 6 16 0" stroke="#3a1d2b" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-              <circle cx="40" cy="68" r="4" fill="#ff5d8f" opacity=".5"/>
-              <circle cx="80" cy="68" r="4" fill="#ff5d8f" opacity=".5"/>
-              <text x="22" y="22" font-size="16" fill="#f5a623">✦</text>
-              <text x="92" y="20" font-size="14" fill="#f5a623">✦</text>
-              <text x="98" y="60" font-size="12" fill="#f5a623">✦</text>
-            </svg>
-          </div>
-        </div>
+        <h4>Poppy <span class="paw-mini">🐾</span></h4>
       </div>
+
+      <!-- MOCHI — lilac bunny -->
+      <div class="pet-card">
+        <span class="pet-fav heart" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2" fill="none"/></svg>
+        </span>
+        <div class="pet-art">
+          <svg viewBox="0 0 140 140" width="100%" height="auto" aria-hidden="true">
+            <ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/>
+            <ellipse cx="52" cy="34" rx="9" ry="22" fill="#dcd0f0"/>
+            <ellipse cx="88" cy="34" rx="9" ry="22" fill="#dcd0f0"/>
+            <ellipse cx="52" cy="34" rx="4" ry="14" fill="#ffb6c8"/>
+            <ellipse cx="88" cy="34" rx="4" ry="14" fill="#ffb6c8"/>
+            <ellipse cx="70" cy="92" rx="38" ry="30" fill="#e8dcfb"/>
+            <circle cx="70" cy="72" r="30" fill="#f0e6fb"/>
+            <circle cx="60" cy="74" r="4.5" fill="#2c1320"/><circle cx="61.8" cy="72.4" r="1.5" fill="#fff"/>
+            <circle cx="80" cy="74" r="4.5" fill="#2c1320"/><circle cx="81.8" cy="72.4" r="1.5" fill="#fff"/>
+            <path d="M68 84 l2 2 l2 -2 z" fill="#ff7a99"/>
+            <path d="M66 88 q4 3 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <ellipse cx="55" cy="84" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <ellipse cx="85" cy="84" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <path d="M60 104 q6 -2 8 4 q2 -6 8 -4" fill="#ff5d8f"/>
+            <circle cx="68" cy="102" r="2" fill="#7ed957"/>
+          </svg>
+        </div>
+        <h4>Mochi <span class="paw-mini">🐾</span></h4>
+      </div>
+
+      <!-- SUNNY — fox -->
+      <div class="pet-card">
+        <span class="pet-fav heart" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2" fill="none"/></svg>
+        </span>
+        <div class="pet-art">
+          <svg viewBox="0 0 140 140" width="100%" height="auto" aria-hidden="true">
+            <ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/>
+            <path d="M100 102 q34 -8 28 18 q-6 18 -28 6 z" fill="#e8762a"/>
+            <path d="M114 116 q14 -2 12 8 q-4 6 -12 0 z" fill="#fff"/>
+            <ellipse cx="70" cy="96" rx="32" ry="22" fill="#e8762a"/>
+            <ellipse cx="70" cy="100" rx="20" ry="14" fill="#fff"/>
+            <path d="M40 38 L52 60 L34 56 Z" fill="#e8762a"/>
+            <path d="M100 38 L88 60 L106 56 Z" fill="#e8762a"/>
+            <path d="M44 44 L50 58 L40 56 Z" fill="#2c1320"/>
+            <path d="M96 44 L90 58 L100 56 Z" fill="#2c1320"/>
+            <circle cx="70" cy="72" r="32" fill="#f08b3a"/>
+            <path d="M70 60 Q50 72 56 92 Q70 86 70 86 Q70 86 84 92 Q90 72 70 60 Z" fill="#fff"/>
+            <circle cx="60" cy="72" r="4.5" fill="#2c1320"/><circle cx="61.8" cy="70.4" r="1.5" fill="#fff"/>
+            <circle cx="80" cy="72" r="4.5" fill="#2c1320"/><circle cx="81.8" cy="70.4" r="1.5" fill="#fff"/>
+            <ellipse cx="70" cy="84" rx="3.5" ry="2.5" fill="#2c1320"/>
+            <path d="M66 90 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <ellipse cx="54" cy="84" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <ellipse cx="86" cy="84" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+          </svg>
+        </div>
+        <h4>Sunny <span class="paw-mini">🐾</span></h4>
+      </div>
+
+      <!-- COCO — koala -->
+      <div class="pet-card">
+        <span class="pet-fav heart" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2" fill="none"/></svg>
+        </span>
+        <div class="pet-art">
+          <svg viewBox="0 0 140 140" width="100%" height="auto" aria-hidden="true">
+            <ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/>
+            <ellipse cx="70" cy="98" rx="36" ry="26" fill="#9d8fc7"/>
+            <circle cx="34" cy="58" r="16" fill="#9d8fc7"/>
+            <circle cx="106" cy="58" r="16" fill="#9d8fc7"/>
+            <circle cx="34" cy="58" r="9" fill="#f4cce3"/>
+            <circle cx="106" cy="58" r="9" fill="#f4cce3"/>
+            <circle cx="70" cy="68" r="30" fill="#b5a7d8"/>
+            <circle cx="60" cy="68" r="4.5" fill="#2c1320"/><circle cx="61.8" cy="66.4" r="1.5" fill="#fff"/>
+            <circle cx="80" cy="68" r="4.5" fill="#2c1320"/><circle cx="81.8" cy="66.4" r="1.5" fill="#fff"/>
+            <ellipse cx="70" cy="82" rx="9" ry="7" fill="#2c1320"/>
+            <path d="M62 92 q8 4 16 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <ellipse cx="52" cy="78" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <ellipse cx="88" cy="78" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <path d="M60 110 q4 -6 10 0 q4 -10 12 -2" stroke="#7ed957" stroke-width="3" fill="none" stroke-linecap="round"/>
+            <ellipse cx="76" cy="106" rx="4" ry="6" fill="#7ed957" transform="rotate(20 76 106)"/>
+          </svg>
+        </div>
+        <h4>Coco <span class="paw-mini">🐾</span></h4>
+      </div>
+
+      <!-- KIKI — kangaroo -->
+      <div class="pet-card">
+        <span class="pet-fav heart" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2" fill="none"/></svg>
+        </span>
+        <div class="pet-art">
+          <svg viewBox="0 0 140 140" width="100%" height="auto" aria-hidden="true">
+            <ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/>
+            <path d="M104 106 q30 4 18 16 q-12 6 -22 -6 z" fill="#d9a872"/>
+            <ellipse cx="70" cy="100" rx="38" ry="22" fill="#d9a872"/>
+            <ellipse cx="84" cy="106" rx="14" ry="12" fill="#f5d29b"/>
+            <ellipse cx="56" cy="34" rx="6" ry="20" fill="#d9a872"/>
+            <ellipse cx="84" cy="34" rx="6" ry="20" fill="#d9a872"/>
+            <ellipse cx="56" cy="36" rx="2.5" ry="14" fill="#ffb6c8"/>
+            <ellipse cx="84" cy="36" rx="2.5" ry="14" fill="#ffb6c8"/>
+            <ellipse cx="70" cy="70" rx="28" ry="26" fill="#e8b985"/>
+            <circle cx="60" cy="68" r="4.5" fill="#2c1320"/><circle cx="61.8" cy="66.4" r="1.5" fill="#fff"/>
+            <circle cx="80" cy="68" r="4.5" fill="#2c1320"/><circle cx="81.8" cy="66.4" r="1.5" fill="#fff"/>
+            <ellipse cx="70" cy="80" rx="3.5" ry="2.5" fill="#2c1320"/>
+            <path d="M66 86 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+            <ellipse cx="54" cy="80" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <ellipse cx="86" cy="80" rx="5" ry="3" fill="#ff5d8f" opacity=".3"/>
+            <!-- joey -->
+            <circle cx="84" cy="102" r="6" fill="#d9a872"/>
+            <ellipse cx="81" cy="96" rx="1.4" ry="4" fill="#d9a872"/>
+            <ellipse cx="86" cy="96" rx="1.4" ry="4" fill="#d9a872"/>
+            <circle cx="82.5" cy="102" r="1" fill="#2c1320"/>
+            <circle cx="85.5" cy="102" r="1" fill="#2c1320"/>
+          </svg>
+        </div>
+        <h4>Kiki <span class="paw-mini">🐾</span></h4>
+      </div>
+    </div>
+
+    <p class="pets-note"><span class="pets-note-icon">💖</span> You can change or unlock more EndoPets later <span class="pets-note-icon">🔒</span></p>
+
+    <div class="pet-perks">
+      <div class="perk"><span class="perk-ico" style="background:#ffe5ed">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" stroke="#ff5d8f" stroke-width="2"/></svg>
+      </span><div><strong>Track</strong><span>consistently</span></div></div>
+      <div class="perk"><span class="perk-ico" style="background:#fff3d6">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9" fill="#f5a623"/></svg>
+      </span><div><strong>Earn XP &amp;</strong><span>level up</span></div></div>
+      <div class="perk"><span class="perk-ico" style="background:#ffd6e0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="11" rx="2" fill="#ff5d8f"/><rect x="3" y="6" width="18" height="5" rx="2" fill="#ff9bb3"/><rect x="11" y="6" width="2" height="15" fill="#fff"/></svg>
+      </span><div><strong>Unlock cute</strong><span>accessories</span></div></div>
     </div>
   </section>
 
@@ -483,7 +599,11 @@
   <section class="cta" id="cta">
     <div class="cta-inner">
       <div class="cta-logo">
-        <svg viewBox="0 0 60 60" width="56" height="56"><path d="M30 8c-12 0-22 10-22 22s10 22 22 22c6 0 12-2 16-7l-5-5q-5 4-11 4c-9 0-16-7-16-16s7-16 16-16c9 0 16 7 16 16 0 2 0 4-1 5l5 3q2-4 2-8c0-12-10-22-22-22z" fill="#fff"/></svg>
+        <svg viewBox="0 0 100 100" width="64" height="64" aria-hidden="true">
+          <path d="M27 32 C 22 22, 36 18, 42 28 C 46 34, 50 38, 50 38 C 50 38, 54 34, 58 28 C 64 18, 78 22, 73 32 C 68 44, 50 58, 50 58 C 50 58, 32 44, 27 32 Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+          <path d="M44 45 C 41 41, 36 43, 38 47 C 40 51, 50 56, 50 56 C 50 56, 60 51, 62 47 C 64 43, 59 41, 56 45 C 54 47, 52 47, 50 47 C 48 47, 46 47, 44 45 Z" fill="#fff"/>
+          <path d="M58 56 C 72 64, 78 80, 64 88 C 52 94, 40 88, 38 78 C 36 70, 44 64, 52 68" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        </svg>
       </div>
       <div class="cta-copy">
         <h2>Start earlier. Understand more. Feel supported.</h2>
@@ -503,9 +623,18 @@
       <div class="footer-brand">
         <a href="#" class="logo">
           <span class="logo-mark">
-            <svg viewBox="0 0 40 40" width="28" height="28" aria-hidden="true">
-              <path d="M20 4c-8.8 0-16 7.2-16 16s7.2 16 16 16c4.5 0 8.6-1.9 11.5-4.9l-3.4-3.4C26 30 23.1 31.4 20 31.4c-6.3 0-11.4-5.1-11.4-11.4S13.7 8.6 20 8.6c6.3 0 11.4 5.1 11.4 11.4 0 1.4-.3 2.7-.7 4l3.7 2C35.5 24 36 22 36 20c0-8.8-7.2-16-16-16z" fill="#ff5d8f"/>
-              <circle cx="29" cy="20" r="2.4" fill="#ff5d8f"/>
+            <svg viewBox="0 0 100 100" width="32" height="32" aria-hidden="true">
+              <defs>
+                <linearGradient id="logoBgFooter" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#ffb085"/>
+                  <stop offset="55%" stop-color="#ff6a8a"/>
+                  <stop offset="100%" stop-color="#ec3a82"/>
+                </linearGradient>
+              </defs>
+              <rect width="100" height="100" rx="22" fill="url(#logoBgFooter)"/>
+              <path d="M27 32 C 22 22, 36 18, 42 28 C 46 34, 50 38, 50 38 C 50 38, 54 34, 58 28 C 64 18, 78 22, 73 32 C 68 44, 50 58, 50 58 C 50 58, 32 44, 27 32 Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+              <path d="M44 45 C 41 41, 36 43, 38 47 C 40 51, 50 56, 50 56 C 50 56, 60 51, 62 47 C 64 43, 59 41, 56 45 C 54 47, 52 47, 50 47 C 48 47, 46 47, 44 45 Z" fill="#fff"/>
+              <path d="M58 56 C 72 64, 78 80, 64 88 C 52 94, 40 88, 38 78 C 36 70, 44 64, 52 68" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
             </svg>
           </span>
           <span class="logo-text">EndoMe</span>
@@ -544,6 +673,48 @@
     </div>
     <div class="footer-bottom">© 2026 EndoMe. All rights reserved.</div>
   </footer>
+
+  <!-- =========================== LOGIN MODAL =========================== -->
+  <div class="modal" id="login-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <div class="modal-backdrop" data-close-login></div>
+    <div class="modal-card">
+      <button class="modal-close" data-close-login aria-label="Close">×</button>
+      <div class="modal-logo">
+        <svg viewBox="0 0 100 100" width="56" height="56" aria-hidden="true">
+          <defs>
+            <linearGradient id="logoBgModal" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ffb085"/>
+              <stop offset="55%" stop-color="#ff6a8a"/>
+              <stop offset="100%" stop-color="#ec3a82"/>
+            </linearGradient>
+          </defs>
+          <rect width="100" height="100" rx="22" fill="url(#logoBgModal)"/>
+          <path d="M27 32 C 22 22, 36 18, 42 28 C 46 34, 50 38, 50 38 C 50 38, 54 34, 58 28 C 64 18, 78 22, 73 32 C 68 44, 50 58, 50 58 C 50 58, 32 44, 27 32 Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+          <path d="M44 45 C 41 41, 36 43, 38 47 C 40 51, 50 56, 50 56 C 50 56, 60 51, 62 47 C 64 43, 59 41, 56 45 C 54 47, 52 47, 50 47 C 48 47, 46 47, 44 45 Z" fill="#fff"/>
+          <path d="M58 56 C 72 64, 78 80, 64 88 C 52 94, 40 88, 38 78 C 36 70, 44 64, 52 68" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <h3 id="login-title">Welcome back</h3>
+      <p class="modal-sub">Sign in to your EndoMe account.</p>
+      <form id="login-form" novalidate>
+        <label class="field">
+          <span>Email</span>
+          <input type="email" name="email" autocomplete="email" placeholder="you@example.com" required />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" name="password" autocomplete="current-password" placeholder="••••••••" required minlength="6" />
+        </label>
+        <div class="field-row">
+          <label class="check"><input type="checkbox" name="remember" /> <span>Remember me</span></label>
+          <a href="#" class="link-arrow small">Forgot password?</a>
+        </div>
+        <button type="submit" class="btn btn-primary full">Sign In</button>
+        <p id="login-status" class="form-status" aria-live="polite"></p>
+      </form>
+      <p class="modal-foot">New here? <a href="#cta">Create an account</a></p>
+    </div>
+  </div>
 
   <script src="/app.js" defer></script>
 </body>

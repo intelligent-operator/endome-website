@@ -22,6 +22,9 @@ export default {
         if (url.pathname === "/api/contact" && request.method === "POST") {
           return await handleContact(request, env);
         }
+        if (url.pathname === "/api/login" && request.method === "POST") {
+          return await handleLogin(request, env);
+        }
         return json({ error: "Not found" }, 404);
       } catch (err) {
         console.error("api error", err);
@@ -133,6 +136,20 @@ async function handleStripeWebhook(request, env) {
     });
   }
   return new Response("ok");
+}
+
+// --- Login (stub — customer portal coming soon) --------------------------
+async function handleLogin(request, env) {
+  const { email, password } = await readJson(request);
+  if (!isEmail(email) || !password) {
+    return json({ error: "Please enter a valid email and password." }, 400);
+  }
+  // TODO: replace with real auth (KV/D1-backed users, password hashing,
+  // session cookie) once the customer portal is built.
+  return json({
+    ok: false,
+    error: "Customer portal coming soon. You'll get an email when accounts go live.",
+  });
 }
 
 // --- Generic contact form (optional) --------------------------------------
