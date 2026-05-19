@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EndoMe – Your Story Starts here</title>
   <meta name="description" content="EndoMe is an endometriosis support community powered by DNA testing, symptom tracking and AI guidance. Your story starts here." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo.svg" />
+  <meta name="theme-color" content="#ff4e8a" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -17,21 +20,7 @@
 
     <nav class="navbar">
       <a href="#" class="logo">
-        <span class="logo-mark">
-          <svg viewBox="0 0 100 100" width="36" height="36" aria-hidden="true">
-            <defs>
-              <linearGradient id="logoBgNav" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#ffb085"/>
-                <stop offset="55%" stop-color="#ff6a8a"/>
-                <stop offset="100%" stop-color="#ec3a82"/>
-              </linearGradient>
-            </defs>
-            <rect width="100" height="100" rx="22" fill="url(#logoBgNav)"/>
-            <path d="M27 32 C 22 22, 36 18, 42 28 C 46 34, 50 38, 50 38 C 50 38, 54 34, 58 28 C 64 18, 78 22, 73 32 C 68 44, 50 58, 50 58 C 50 58, 32 44, 27 32 Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-            <path d="M44 45 C 41 41, 36 43, 38 47 C 40 51, 50 56, 50 56 C 50 56, 60 51, 62 47 C 64 43, 59 41, 56 45 C 54 47, 52 47, 50 47 C 48 47, 46 47, 44 45 Z" fill="#fff"/>
-            <path d="M58 56 C 72 64, 78 80, 64 88 C 52 94, 40 88, 38 78 C 36 70, 44 64, 52 68" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-          </svg>
-        </span>
+        <img src="/logo.svg" alt="" class="logo-mark" width="36" height="36" />
         <span class="logo-text">EndoMe</span>
       </a>
       <ul class="nav-links">
@@ -44,7 +33,7 @@
       </ul>
       <div class="nav-actions">
         <a href="#" class="nav-signin" data-open-login>Sign In</a>
-        <a href="#cta" class="btn btn-primary nav-cta">Get Started</a>
+        <a href="/dashboard" class="btn btn-primary nav-cta">Get Started</a>
       </div>
     </nav>
 
@@ -216,6 +205,20 @@
         </div>
         <h3>4. Receive an AI Supported Plan</h3>
         <p>Get personalised insights, guidance, and support recommendations.</p>
+      </div>
+    </div>
+
+    <div class="no-test-callout">
+      <div class="ntc-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28"><path d="M12 21s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.5-7 10-7 10z" fill="#fff"/></svg>
+      </div>
+      <div class="ntc-copy">
+        <h3>Don't want a DNA test? You can still use EndoMe.</h3>
+        <p>Skip straight to symptom tracking, AI support, and the community. Use what works for your journey — the app meets you where you are.</p>
+      </div>
+      <div class="ntc-actions">
+        <a href="/dashboard" class="btn btn-primary">Start Tracking</a>
+        <a href="#tracker" class="btn btn-ghost">See How It Works</a>
       </div>
     </div>
   </section>
@@ -599,18 +602,14 @@
   <section class="cta" id="cta">
     <div class="cta-inner">
       <div class="cta-logo">
-        <svg viewBox="0 0 100 100" width="64" height="64" aria-hidden="true">
-          <path d="M27 32 C 22 22, 36 18, 42 28 C 46 34, 50 38, 50 38 C 50 38, 54 34, 58 28 C 64 18, 78 22, 73 32 C 68 44, 50 58, 50 58 C 50 58, 32 44, 27 32 Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-          <path d="M44 45 C 41 41, 36 43, 38 47 C 40 51, 50 56, 50 56 C 50 56, 60 51, 62 47 C 64 43, 59 41, 56 45 C 54 47, 52 47, 50 47 C 48 47, 46 47, 44 45 Z" fill="#fff"/>
-          <path d="M58 56 C 72 64, 78 80, 64 88 C 52 94, 40 88, 38 78 C 36 70, 44 64, 52 68" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-        </svg>
+        <img src="/logo.svg" alt="" width="64" height="64" />
       </div>
       <div class="cta-copy">
         <h2>Start earlier. Understand more. Feel supported.</h2>
         <p>Take control of your health with EndoMe.</p>
       </div>
       <div class="cta-actions">
-        <a href="#" class="btn btn-ghost light">Create an Account</a>
+        <a href="/dashboard" class="btn btn-ghost light">Create an Account</a>
         <a href="#" class="btn btn-primary" data-checkout>Request a DNA Test</a>
         <span class="store-note">Available on iOS and Android</span>
       </div>
@@ -622,21 +621,7 @@
     <div class="footer-grid">
       <div class="footer-brand">
         <a href="#" class="logo">
-          <span class="logo-mark">
-            <svg viewBox="0 0 100 100" width="32" height="32" aria-hidden="true">
-              <defs>
-                <linearGradient id="logoBgFooter" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stop-color="#ffb085"/>
-                  <stop offset="55%" stop-color="#ff6a8a"/>
-                  <stop offset="100%" stop-color="#ec3a82"/>
-                </linearGradient>
-              </defs>
-              <rect width="100" height="100" rx="22" fill="url(#logoBgFooter)"/>
-              <path d="M27 32 C 22 22, 36 18, 42 28 C 46 34, 50 38, 50 38 C 50 38, 54 34, 58 28 C 64 18, 78 22, 73 32 C 68 44, 50 58, 50 58 C 50 58, 32 44, 27 32 Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-              <path d="M44 45 C 41 41, 36 43, 38 47 C 40 51, 50 56, 50 56 C 50 56, 60 51, 62 47 C 64 43, 59 41, 56 45 C 54 47, 52 47, 50 47 C 48 47, 46 47, 44 45 Z" fill="#fff"/>
-              <path d="M58 56 C 72 64, 78 80, 64 88 C 52 94, 40 88, 38 78 C 36 70, 44 64, 52 68" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-            </svg>
-          </span>
+          <img src="/logo.svg" alt="" class="logo-mark" width="32" height="32" />
           <span class="logo-text">EndoMe</span>
         </a>
         <p class="footer-tag">Science. Support. You.</p>
@@ -680,19 +665,7 @@
     <div class="modal-card">
       <button class="modal-close" data-close-login aria-label="Close">×</button>
       <div class="modal-logo">
-        <svg viewBox="0 0 100 100" width="56" height="56" aria-hidden="true">
-          <defs>
-            <linearGradient id="logoBgModal" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#ffb085"/>
-              <stop offset="55%" stop-color="#ff6a8a"/>
-              <stop offset="100%" stop-color="#ec3a82"/>
-            </linearGradient>
-          </defs>
-          <rect width="100" height="100" rx="22" fill="url(#logoBgModal)"/>
-          <path d="M27 32 C 22 22, 36 18, 42 28 C 46 34, 50 38, 50 38 C 50 38, 54 34, 58 28 C 64 18, 78 22, 73 32 C 68 44, 50 58, 50 58 C 50 58, 32 44, 27 32 Z" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-          <path d="M44 45 C 41 41, 36 43, 38 47 C 40 51, 50 56, 50 56 C 50 56, 60 51, 62 47 C 64 43, 59 41, 56 45 C 54 47, 52 47, 50 47 C 48 47, 46 47, 44 45 Z" fill="#fff"/>
-          <path d="M58 56 C 72 64, 78 80, 64 88 C 52 94, 40 88, 38 78 C 36 70, 44 64, 52 68" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-        </svg>
+        <img src="/logo.svg" alt="" width="56" height="56" />
       </div>
       <h3 id="login-title">Welcome back</h3>
       <p class="modal-sub">Sign in to your EndoMe account.</p>

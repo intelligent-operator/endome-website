@@ -1,0 +1,40 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="EndoMe">
+  <defs>
+    <radialGradient id="endomeBg" cx="32%" cy="22%" r="95%">
+      <stop offset="0%" stop-color="#ffb380"/>
+      <stop offset="45%" stop-color="#ff6a92"/>
+      <stop offset="100%" stop-color="#e8348a"/>
+    </radialGradient>
+  </defs>
+  <circle cx="100" cy="100" r="100" fill="url(#endomeBg)"/>
+  <!-- Big outline heart - balloon style, leaning right -->
+  <path d="M 54 76
+           C 44 58, 70 46, 90 60
+           C 100 68, 106 80, 108 86
+           C 110 84, 116 74, 128 64
+           C 146 50, 172 62, 158 84
+           C 142 110, 116 126, 112 128"
+        fill="none"
+        stroke="#fff"
+        stroke-width="4.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+  <!-- Small filled heart inside -->
+  <path d="M 94 92
+           C 86 86, 78 90, 82 98
+           C 86 106, 100 116, 108 120
+           C 116 116, 130 106, 134 98
+           C 138 90, 130 86, 122 92
+           C 116 96, 112 98, 108 98
+           C 104 98, 100 96, 94 92 Z"
+        fill="#fff"/>
+  <!-- Cursive C tail -->
+  <path d="M 126 104
+           C 156 116, 170 144, 158 168
+           C 146 188, 116 192, 98 178
+           C 86 168, 88 148, 106 144"
+        fill="none"
+        stroke="#fff"
+        stroke-width="5.5"
+        stroke-linecap="round"/>
+</svg>

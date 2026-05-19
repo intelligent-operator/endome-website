@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – EndoMe</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/dashboard.css" />
+</head>
+<body class="dash-body">
+
+  <!-- TOP BAR -->
+  <header class="dash-topbar">
+    <a href="/" class="logo">
+      <img src="/logo.svg" alt="" class="logo-mark" width="32" height="32" />
+      <span class="logo-text">EndoMe</span>
+    </a>
+    <div class="dash-search">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><circle cx="11" cy="11" r="7" stroke="#a08596" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="#a08596" stroke-width="2" stroke-linecap="round"/></svg>
+      <input type="search" placeholder="Search EndoMe..." />
+    </div>
+    <nav class="dash-topnav">
+      <a class="active" href="#">Dashboard</a>
+      <a href="#">Results</a>
+      <a href="#">Symptoms</a>
+      <a href="#">Support Plan</a>
+      <a href="#">EndoPet</a>
+      <a href="#">Community</a>
+    </nav>
+    <div class="dash-user">
+      <button class="bell" aria-label="Notifications">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M6 19h12l-1.5-2V11a4.5 4.5 0 10-9 0v6L6 19z" stroke="#3a2330" stroke-width="2" stroke-linejoin="round"/><path d="M10 22h4" stroke="#3a2330" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="bell-dot">3</span>
+      </button>
+      <div class="profile">
+        <div class="avatar">
+          <svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/><circle cx="20" cy="16" r="7" fill="#8a4a2a"/><path d="M6 36c2-8 8-12 14-12s12 4 14 12" fill="#f5c69b"/><circle cx="20" cy="16" r="6" fill="#f5c69b"/></svg>
+        </div>
+        <span class="profile-name">Hi, Alex</span>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M6 9l6 6 6-6" stroke="#3a2330" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-layout">
+    <!-- LEFT SIDEBAR -->
+    <aside class="dash-sidebar">
+      <nav class="side-nav">
+        <a class="active" href="#"><span class="ico">🏠</span> Overview</a>
+        <a href="#"><span class="ico">🧬</span> DNA Test</a>
+        <a href="#"><span class="ico">📤</span> Results Upload</a>
+        <a href="#"><span class="ico">📅</span> Symptom Tracker</a>
+        <a href="#"><span class="ico">🤖</span> AI Assistant</a>
+        <a href="#"><span class="ico">📋</span> Support Plan</a>
+        <a href="#"><span class="ico">🐾</span> EndoPet</a>
+        <a href="#"><span class="ico">💬</span> Community</a>
+        <a href="#"><span class="ico">📚</span> Resources</a>
+        <a href="#"><span class="ico">⚙️</span> Settings</a>
+      </nav>
+      <div class="side-card check-in">
+        <div class="ci-head"><span>📅</span> <strong>Daily Check-in</strong></div>
+        <p>Keep your journey on track.</p>
+        <button class="pill-btn">Log Symptoms</button>
+      </div>
+      <div class="side-card help">
+        <div class="help-ico">🎧</div>
+        <div>
+          <strong>Need help?</strong>
+          <p>Our support team is here for you.</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="dash-main">
+      <!-- Welcome banner -->
+      <section class="welcome-banner">
+        <div class="wb-copy">
+          <h1>Welcome back, Alex <span class="wave">👋</span></h1>
+          <p class="wb-lead">Your Story Starts here</p>
+          <p class="wb-text">Track your symptoms, understand your body, and get the support you deserve. You're not alone — we're here with you.</p>
+          <div class="wb-actions">
+            <a class="btn btn-primary" href="#"><span class="btn-ico">✏️</span> Log Today's Symptoms</a>
+            <a class="btn btn-ghost" href="#"><span class="btn-ico">⬆</span> Upload Test Results</a>
+            <a class="btn btn-ghost" href="#"><span class="btn-ico">🧪</span> Request DNA Test</a>
+          </div>
+        </div>
+        <div class="wb-art" aria-hidden="true">
+          <svg viewBox="0 0 320 200" width="100%" height="100%">
+            <!-- ribbons / hearts pattern -->
+            <g opacity=".35">
+              <path d="M260 30 q-10 14 0 28 q10 -14 0 -28z" fill="#ff9bb3"/>
+              <path d="M30 80 q-8 12 0 22 q8 -12 0 -22z" fill="#ff9bb3"/>
+              <circle cx="295" cy="120" r="3" fill="#ff9bb3"/>
+              <circle cx="20" cy="160" r="3" fill="#ff9bb3"/>
+            </g>
+            <!-- person 1 (left, in coat) -->
+            <g transform="translate(60,40)">
+              <ellipse cx="40" cy="160" rx="42" ry="8" fill="#ffd6e0"/>
+              <path d="M10 90 Q40 70 70 90 L70 160 L10 160 Z" fill="#fff"/>
+              <rect x="32" y="92" width="16" height="50" fill="#ff9bb3"/>
+              <circle cx="40" cy="56" r="22" fill="#f5c69b"/>
+              <path d="M18 50 Q40 18 62 50 Q62 70 50 72 Q40 60 30 72 Q18 70 18 50z" fill="#9b4060"/>
+              <circle cx="34" cy="58" r="1.6" fill="#2c1320"/>
+              <circle cx="46" cy="58" r="1.6" fill="#2c1320"/>
+              <path d="M36 66 q4 3 8 0" stroke="#2c1320" stroke-width="1.4" fill="none"/>
+              <!-- stethoscope -->
+              <path d="M30 100 q-6 8 0 16 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none"/>
+              <circle cx="38" cy="118" r="3" fill="#2c1320"/>
+            </g>
+            <!-- person 2 (center) -->
+            <g transform="translate(125,30)">
+              <ellipse cx="40" cy="170" rx="44" ry="8" fill="#ffd6e0"/>
+              <path d="M8 100 Q40 80 72 100 L72 170 L8 170 Z" fill="#7a4a52"/>
+              <circle cx="40" cy="60" r="24" fill="#8a5a3a"/>
+              <path d="M16 56 Q40 22 64 56 Q64 76 50 78 Q40 66 30 78 Q16 76 16 56z" fill="#2c1320"/>
+              <circle cx="33" cy="62" r="1.6" fill="#2c1320"/>
+              <circle cx="47" cy="62" r="1.6" fill="#2c1320"/>
+              <path d="M35 70 q5 3 10 0" stroke="#2c1320" stroke-width="1.4" fill="none"/>
+            </g>
+            <!-- person 3 (right) -->
+            <g transform="translate(200,46)">
+              <ellipse cx="40" cy="156" rx="42" ry="8" fill="#ffd6e0"/>
+              <path d="M10 92 Q40 72 70 92 L70 156 L10 156 Z" fill="#ff9bb3"/>
+              <circle cx="40" cy="56" r="22" fill="#f5c69b"/>
+              <path d="M18 50 Q40 16 62 50 Q70 70 60 78 Q50 60 40 76 Q30 60 20 78 Q10 70 18 50z" fill="#ff5d8f"/>
+              <circle cx="34" cy="58" r="1.6" fill="#2c1320"/>
+              <circle cx="46" cy="58" r="1.6" fill="#2c1320"/>
+              <path d="M36 66 q4 3 8 0" stroke="#2c1320" stroke-width="1.4" fill="none"/>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- 4 stat cards -->
+      <section class="stat-row">
+        <div class="card stat-card">
+          <div class="card-head"><span class="ico-tile pink">📊</span> Propensity Insight <span class="info">ⓘ</span></div>
+          <div class="mini-gauge">
+            <svg viewBox="0 0 120 70" width="100%">
+              <path d="M10 60 A50 50 0 0 1 110 60" stroke="#ffd6e0" stroke-width="10" fill="none" stroke-linecap="round"/>
+              <path d="M10 60 A50 50 0 0 1 90 22" stroke="url(#sg1)" stroke-width="10" fill="none" stroke-linecap="round"/>
+              <defs><linearGradient id="sg1" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#ffb168"/><stop offset="1" stop-color="#ff5d8f"/></linearGradient></defs>
+              <circle cx="90" cy="22" r="4" fill="#ff5d8f"/>
+            </svg>
+            <div class="mg-label"><strong>Moderate</strong><br/>Propensity</div>
+          </div>
+          <p class="card-note">This insight supports earlier conversations with a clinician.</p>
+          <p class="card-warn">This is supportive information, not a diagnosis.</p>
+        </div>
+
+        <div class="card stat-card">
+          <div class="card-head"><span class="ico-tile peach">🌸</span> Cycle Snapshot <span class="info">ⓘ</span></div>
+          <div class="cycle-day">Day 14</div>
+          <div class="cycle-phase">Follicular Phase</div>
+          <ul class="cycle-stats">
+            <li><span class="cs-ico">🔥</span><span>Pain</span><span class="dots"><i></i><i></i><i></i><i class="o"></i><i class="o"></i></span><span class="cs-val">Medium</span></li>
+            <li><span class="cs-ico">😴</span><span>Fatigue</span><span class="dots"><i></i><i></i><i></i><i></i><i class="o"></i></span><span class="cs-val">Medium</span></li>
+            <li><span class="cs-ico">🙂</span><span>Mood</span><span class="dots"><i></i><i></i><i></i><i></i><i class="o"></i></span><span class="cs-val">Good</span></li>
+            <li><span class="cs-ico">🌙</span><span>Sleep</span><span class="dots"><i></i><i></i><i></i><i></i><i class="o"></i></span><span class="cs-val">Good</span></li>
+          </ul>
+          <p class="cycle-next">Next period in about 14 days</p>
+        </div>
+
+        <div class="card stat-card">
+          <div class="card-head"><span class="ico-tile pink">✨</span> AI Guidance</div>
+          <div class="ai-bubble">
+            <div class="ai-avatar">🤖</div>
+            <div>
+              <strong>A flare pattern may be emerging.</strong>
+              <p>Consider rest, hydration, and reviewing your support plan.</p>
+            </div>
+          </div>
+          <a href="#" class="pill-btn full ghost">Chat with AI Assistant →</a>
+        </div>
+
+        <div class="card stat-card">
+          <div class="card-head"><span class="ico-tile pink">🐾</span> EndoPet Status</div>
+          <div class="ep-mini">
+            <div class="ep-art">
+              <svg viewBox="0 0 100 100" width="80" height="80"><ellipse cx="50" cy="68" rx="30" ry="22" fill="#ff9bb3"/><circle cx="50" cy="50" r="26" fill="#ffb6c8"/><polygon points="28,24 38,42 22,42" fill="#ff8aab"/><polygon points="72,24 62,42 78,42" fill="#ff8aab"/><circle cx="42" cy="52" r="3" fill="#2c1320"/><circle cx="58" cy="52" r="3" fill="#2c1320"/><path d="M45 60 q5 4 10 0" stroke="#2c1320" stroke-width="1.6" fill="none"/></svg>
+            </div>
+            <div>
+              <strong>Luna <span class="edit-ico">✏️</span></strong>
+              <div class="ep-level">Level 4</div>
+              <span class="happy-pill">Happy</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Symptom tracker + Support plan -->
+      <section class="row-2col">
+        <div class="card tracker-card">
+          <div class="card-head wide">
+            <span><span class="ico-tile pink">📈</span> Symptom Tracker</span>
+            <div class="seg">
+              <button>Today</button><button class="on">Week</button><button>Month</button>
+              <button class="more">⋯</button>
+            </div>
+          </div>
+          <div class="tracker-grid-2">
+            <div>
+              <table class="symptom-table">
+                <thead><tr><th></th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead>
+                <tbody>
+                  <tr><th>🔥 Pain</th><td class="c4"></td><td class="c5"></td><td class="c3"></td><td class="c2"></td><td class="c4"></td><td class="c3"></td><td class="c2"></td></tr>
+                  <tr><th>💧 Bloating</th><td class="c3 o"></td><td class="c4 o"></td><td class="c3 o"></td><td class="c2 o"></td><td class="c3 o"></td><td class="c2 o"></td><td class="c1 o"></td></tr>
+                  <tr><th>😴 Fatigue</th><td class="c2 y"></td><td class="c3 y"></td><td class="c4 y"></td><td class="c5 y"></td><td class="c3 y"></td><td class="c2 y"></td><td class="c2 y"></td></tr>
+                  <tr><th>🙂 Mood</th><td class="c4 g"></td><td class="c3 g"></td><td class="c4 g"></td><td class="c5 g"></td><td class="c4 g"></td><td class="c4 g"></td><td class="c5 g"></td></tr>
+                  <tr><th>🌙 Sleep</th><td class="c3 v"></td><td class="c4 v"></td><td class="c3 v"></td><td class="c4 v"></td><td class="c4 v"></td><td class="c5 v"></td><td class="c5 v"></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <div class="chart-head">Symptoms Over Time <span class="seg-mini">Past 4 weeks ▾</span></div>
+              <svg viewBox="0 0 300 160" width="100%">
+                <g stroke="#f5e4ec" stroke-width="1">
+                  <line x1="30" y1="20" x2="290" y2="20"/>
+                  <line x1="30" y1="55" x2="290" y2="55"/>
+                  <line x1="30" y1="90" x2="290" y2="90"/>
+                  <line x1="30" y1="125" x2="290" y2="125"/>
+                </g>
+                <g font-size="9" fill="#9a7889">
+                  <text x="22" y="22" text-anchor="end">10</text>
+                  <text x="22" y="58" text-anchor="end">5</text>
+                  <text x="22" y="92" text-anchor="end">0</text>
+                </g>
+                <!-- pain (pink) -->
+                <polyline fill="none" stroke="#ff5d8f" stroke-width="2" points="40,60 90,50 140,70 190,55 240,40 280,55"/>
+                <!-- bloating (orange) -->
+                <polyline fill="none" stroke="#ff8a3c" stroke-width="2" points="40,80 90,70 140,85 190,75 240,65 280,75"/>
+                <!-- fatigue (yellow) -->
+                <polyline fill="none" stroke="#f5c542" stroke-width="2" points="40,70 90,85 140,65 190,80 240,70 280,80"/>
+                <!-- mood (green) -->
+                <polyline fill="none" stroke="#5cc77c" stroke-width="2" points="40,95 90,90 140,100 190,92 240,98 280,90"/>
+                <!-- sleep (purple) -->
+                <polyline fill="none" stroke="#9b6cff" stroke-width="2" points="40,110 90,100 140,108 190,105 240,100 280,108"/>
+                <g font-size="9" fill="#9a7889">
+                  <text x="40" y="150">Apr 18</text>
+                  <text x="100" y="150">Apr 25</text>
+                  <text x="160" y="150">May 2</text>
+                  <text x="220" y="150">May 9</text>
+                  <text x="270" y="150">May 16</text>
+                </g>
+              </svg>
+              <div class="legend">
+                <span><i style="background:#ff5d8f"></i>Pain</span>
+                <span><i style="background:#ff8a3c"></i>Bloating</span>
+                <span><i style="background:#f5c542"></i>Fatigue</span>
+                <span><i style="background:#5cc77c"></i>Mood</span>
+                <span><i style="background:#9b6cff"></i>Sleep</span>
+              </div>
+            </div>
+          </div>
+          <a href="#" class="link-arrow">View Tracker →</a>
+        </div>
+
+        <div class="card plan-card">
+          <div class="card-head"><span class="ico-tile pink">💖</span> Your Personalised Support Plan</div>
+          <div class="plan-item">
+            <div class="plan-ico" style="background:#e6f7e0">🌿</div>
+            <div class="plan-body">
+              <strong>Nutrition &amp; Lifestyle</strong>
+              <span>3 of 5 tasks completed</span>
+              <div class="bar-track"><div class="bar-fill" style="width:60%"></div></div>
+            </div>
+            <span class="plan-pct">60%</span><span class="chev">›</span>
+          </div>
+          <div class="plan-item">
+            <div class="plan-ico" style="background:#ffe5d4">🔥</div>
+            <div class="plan-body">
+              <strong>Pain &amp; Flare Support</strong>
+              <span>2 of 4 tasks completed</span>
+              <div class="bar-track"><div class="bar-fill" style="width:50%;background:linear-gradient(90deg,#ff8a3c,#ff5d8f)"></div></div>
+            </div>
+            <span class="plan-pct">50%</span><span class="chev">›</span>
+          </div>
+          <div class="plan-item">
+            <div class="plan-ico" style="background:#ffd6e0">🪷</div>
+            <div class="plan-body">
+              <strong>Mind &amp; Mood</strong>
+              <span>2 of 5 tasks completed</span>
+              <div class="bar-track"><div class="bar-fill" style="width:40%"></div></div>
+            </div>
+            <span class="plan-pct">40%</span><span class="chev">›</span>
+          </div>
+          <div class="plan-item">
+            <div class="plan-ico" style="background:#fff0d6">🎯</div>
+            <div class="plan-body">
+              <strong>Next Best Step</strong>
+              <span>1 of 3 tasks completed</span>
+              <div class="bar-track"><div class="bar-fill" style="width:33%;background:linear-gradient(90deg,#f5a623,#ff5d8f)"></div></div>
+            </div>
+            <span class="plan-pct">33%</span><span class="chev">›</span>
+          </div>
+          <button class="pill-btn full">View Full Plan ›</button>
+        </div>
+      </section>
+
+      <!-- 3 bottom cards -->
+      <section class="row-3col">
+        <div class="card">
+          <div class="card-head"><span class="ico-tile pink">🧬</span> DNA &amp; Test Results</div>
+          <p class="card-sub">Your insights in one place</p>
+          <ul class="tests-list">
+            <li><span class="tick"></span><div><strong>DNA Test</strong><span>Completed on Apr 12, 2025</span></div><span class="badge ok">Complete</span></li>
+            <li><span class="tick"></span><div><strong>Blood Results</strong><span>Uploaded on May 10, 2025</span></div><span class="badge ok">Complete</span></li>
+            <li><span class="tick"></span><div><strong>Pelvic Ultrasound</strong><span>Uploaded on Apr 28, 2025</span></div><span class="badge ok">Complete</span></li>
+          </ul>
+          <button class="pill-btn full">View Full Report ›</button>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="ico-tile pink">👥</span> Community Support</div>
+          <p class="card-sub">Connect, share, and feel supported</p>
+          <div class="community-mini">
+            <svg viewBox="0 0 120 80" width="120" height="80">
+              <circle cx="35" cy="38" r="14" fill="#f5c69b"/>
+              <path d="M19 56 q16 -8 32 0 v24 h-32z" fill="#9b6cff"/>
+              <circle cx="65" cy="34" r="14" fill="#f0a87a"/>
+              <path d="M49 52 q16 -8 32 0 v28 h-32z" fill="#ff5d8f"/>
+              <circle cx="95" cy="40" r="12" fill="#f5c69b"/>
+              <path d="M83 56 q12 -6 24 0 v24 h-24z" fill="#ff8aab"/>
+            </svg>
+            <div class="comm-actions">
+              <a href="#" class="comm-btn"><span>👥</span> Join a Circle</a>
+              <a href="#" class="comm-btn"><span>📖</span> Read Stories</a>
+              <a href="#" class="comm-btn"><span>💬</span> Ask the Community</a>
+            </div>
+          </div>
+          <a href="#" class="pill-btn full">Go to Community ›</a>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="ico-tile pink">📅</span> Appointments &amp; Reminders</div>
+          <p class="card-sub">Stay on top of what matters</p>
+          <ul class="appt-list">
+            <li>
+              <span class="appt-ico">📤</span>
+              <div><strong>Upload latest blood test</strong><span>May 20, 2025</span></div>
+              <span class="badge upcoming">Upcoming</span>
+            </li>
+            <li>
+              <span class="appt-ico">🕒</span>
+              <div><strong>Check in with specialist</strong><span>May 26, 2025 • 10:00 AM</span></div>
+              <span class="badge upcoming">Upcoming</span>
+            </li>
+            <li>
+              <span class="appt-ico">📝</span>
+              <div><strong>Daily symptom log due</strong><span>Today</span></div>
+              <span class="badge due">Due Today</span>
+            </li>
+          </ul>
+          <a href="#" class="pill-btn full">View All Reminders ›</a>
+        </div>
+      </section>
+    </main>
+
+    <!-- RIGHT SIDEBAR -->
+    <aside class="dash-right">
+      <div class="card endopet-big">
+        <div class="card-head wide">
+          <span><span class="ico-tile pink">🐾</span> Your EndoPet</span>
+        </div>
+        <div class="ep-big-art">
+          <svg viewBox="0 0 200 200" width="100%" height="auto">
+            <ellipse cx="100" cy="180" rx="70" ry="10" fill="#ffd6e0" opacity=".5"/>
+            <ellipse cx="100" cy="135" rx="55" ry="48" fill="#ff9bb3"/>
+            <path d="M150 150 q34 -8 24 12 q-10 18 -26 4" fill="#ff9bb3"/>
+            <circle cx="100" cy="100" r="50" fill="#ffb6c8"/>
+            <polygon points="55,42 72,72 42,72" fill="#ff8aab"/>
+            <polygon points="145,42 128,72 158,72" fill="#ff8aab"/>
+            <polygon points="58,46 70,70 48,70" fill="#ffc4d2"/>
+            <polygon points="142,46 130,70 152,70" fill="#ffc4d2"/>
+            <circle cx="86" cy="100" r="6" fill="#2c1320"/><circle cx="88" cy="98" r="2" fill="#fff"/>
+            <circle cx="114" cy="100" r="6" fill="#2c1320"/><circle cx="116" cy="98" r="2" fill="#fff"/>
+            <path d="M100 114 l-3 4 h6 z" fill="#ff5d8f"/>
+            <path d="M95 120 q5 5 10 0" stroke="#2c1320" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <ellipse cx="76" cy="118" rx="7" ry="4" fill="#ff5d8f" opacity=".3"/>
+            <ellipse cx="124" cy="118" rx="7" ry="4" fill="#ff5d8f" opacity=".3"/>
+            <path d="M68 116 l-12 -3 M68 118 l-12 3 M132 116 l12 -3 M132 118 l12 3" stroke="#fff" stroke-width=".8"/>
+            <path d="M88 148 q12 8 24 0" stroke="#ff5d8f" stroke-width="2.5" fill="none"/>
+            <circle cx="100" cy="152" r="4" fill="#ff5d8f"/>
+            <!-- hearts -->
+            <path d="M30 90 q-3 -5 -7 0 q3 5 7 8 q4 -3 7 -8 q-4 -5 -7 0z" fill="#ff5d8f"/>
+            <path d="M170 110 q-3 -5 -7 0 q3 5 7 8 q4 -3 7 -8 q-4 -5 -7 0z" fill="#ff5d8f"/>
+          </svg>
+        </div>
+        <div class="ep-name">Luna <span class="edit-ico">✏️</span></div>
+        <div class="ep-row">
+          <span>Level 4</span>
+          <span class="happy-pill">Happy</span>
+        </div>
+        <div class="xp-bar">
+          <div class="xp-fill" style="width:52%"></div>
+        </div>
+        <div class="xp-text">420 / 800 XP</div>
+        <div class="unlockables">
+          <strong>Unlockables</strong>
+          <div class="unlock-grid">
+            <div class="unlock">
+              <div class="unlock-art">🎀</div>
+              <span>Ribbon Bow</span>
+              <em>Reach Level 5</em>
+            </div>
+            <div class="unlock">
+              <div class="unlock-art">👑</div>
+              <span>Golden Crown</span>
+              <em>Reach Level 6</em>
+            </div>
+          </div>
+        </div>
+        <button class="pill-btn full">🐾 Visit EndoPet</button>
+      </div>
+
+      <div class="card encourage-card">
+        <h4>You're doing great, Alex!</h4>
+        <p>Small steps today lead to stronger tomorrows.</p>
+        <div class="encourage-heart">💖</div>
+        <span class="encourage-foot">Keep going!</span>
+      </div>
+
+      <div class="card streak-card">
+        <div class="card-head"><span class="ico-tile peach">🔥</span> Streak</div>
+        <p class="card-sub">You've logged 7 days in a row!</p>
+        <div class="streak-week">
+          <div><span>M</span><span class="dot done">✓</span></div>
+          <div><span>T</span><span class="dot done">✓</span></div>
+          <div><span>W</span><span class="dot done">✓</span></div>
+          <div><span>T</span><span class="dot done">✓</span></div>
+          <div><span>F</span><span class="dot done">✓</span></div>
+          <div><span>S</span><span class="dot done">✓</span></div>
+          <div><span>S</span><span class="dot today">7</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="/dashboard.js" defer></script>
+</body>
+</html>
