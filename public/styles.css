@@ -87,7 +87,11 @@ p{margin:0 0 .6em}
 }
 .logo{display:flex;align-items:center;gap:10px;font-weight:700}
 .logo-text{font-size:22px;color:#ff4e8a;letter-spacing:.2px}
-.logo-mark{display:inline-block;border-radius:50%;box-shadow:0 4px 12px rgba(255,77,138,.25)}
+.logo-mark{
+  display:inline-block;border-radius:10px;
+  object-fit:cover;
+  box-shadow:0 4px 12px rgba(255,77,138,.22);
+}
 .nav-links{display:flex;gap:26px;font-size:14px;font-weight:500;color:#3a2330}
 .nav-links a:hover{color:#ff4e8a}
 .nav-cta{padding:10px 22px;font-size:14px}

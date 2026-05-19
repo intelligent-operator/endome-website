@@ -3,10 +3,18 @@
 
 /* TOP BAR */
 .dash-topbar{
-  display:grid;grid-template-columns:200px 1fr auto auto;
-  align-items:center;gap:20px;
-  padding:14px 28px;background:#fff;
-  border-bottom:1px solid #ffe2eb;position:sticky;top:0;z-index:20;
+  background:#fff;
+  border-bottom:1px solid #ffe2eb;
+  position:sticky;top:0;z-index:20;
+}
+.dash-topbar-inner{
+  max-width:1600px;
+  margin:0 auto;
+  padding:14px 28px;
+  display:grid;
+  grid-template-columns:200px minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:20px;
 }
 .dash-search{
   position:relative;max-width:340px;
@@ -320,7 +328,7 @@
   .dash-layout{grid-template-columns:1fr;padding:14px}
   .dash-sidebar,.dash-right{flex-direction:row;flex-wrap:wrap}
   .side-nav,.side-card,.endopet-big,.encourage-card,.streak-card{flex:1;min-width:240px}
-  .dash-topbar{grid-template-columns:auto 1fr auto;padding:12px 14px}
+  .dash-topbar-inner{grid-template-columns:auto 1fr auto;padding:12px 14px;gap:12px}
   .dash-topnav{display:none}
   .dash-search{display:none}
 }
