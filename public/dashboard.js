@@ -87,6 +87,26 @@ function render() {
   renderSymptomsTodayHint(symptoms?.length || 0);
   renderCycleSnapshot();
   renderTodaySymptoms();
+  renderStoryMini();
+}
+
+// --- Story mini ring (right rail) ----------------------------------------
+async function renderStoryMini() {
+  const ring = document.getElementById("mini-ring");
+  const pctEl = document.getElementById("mini-percent");
+  const fracEl = document.getElementById("mini-fraction");
+  if (!ring || !pctEl || !fracEl) return;
+  try {
+    const res = await fetch("/api/me/story", { credentials: "same-origin" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const pct = Math.max(0, Math.min(100, data.percent || 0));
+    const circ = 2 * Math.PI * 42;
+    ring.setAttribute("stroke-dasharray", String(circ));
+    ring.style.strokeDashoffset = String(circ * (1 - pct / 100));
+    pctEl.textContent = `${pct}%`;
+    fracEl.textContent = `${data.completed} of ${data.total}`;
+  } catch {}
 }
 
 // --- Cycle Snapshot card --------------------------------------------------

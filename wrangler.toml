@@ -15,7 +15,7 @@ run_worker_first = false
 # Public, non-secret config. Override per-environment as needed.
 [vars]
 SITE_URL = "https://endome.com"
-NEWSLETTER_FROM_EMAIL = "hello@endome.com"
+NEWSLETTER_FROM_EMAIL = "contact@endome.com"
 NEWSLETTER_FROM_NAME = "EndoMe"
 NOTIFY_EMAIL = "contact@endome.com"
 STRIPE_DNA_PRICE_ID = "price_replace_me"

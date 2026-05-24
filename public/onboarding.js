@@ -76,7 +76,7 @@
   if (buy) {
     buy.addEventListener("click", (e) => {
       e.preventDefault();
-      toast("EndoMap is launching soon — we'll email you when it's ready 🌸");
+      toast("EndoMe DNA is launching soon — we'll email you when it's ready 🌸");
       setTimeout(() => (location.href = "/dashboard"), 1800);
     });
   }

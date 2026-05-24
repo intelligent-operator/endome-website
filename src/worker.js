@@ -7,7 +7,7 @@
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
 const SESSION_COOKIE = "endome_session";
-const SESSION_TTL_SEC = 60 * 60 * 12;            // 12 hours
+const SESSION_TTL_SEC = 60 * 60 * 24 * 30;       // 30 days
 const LOGIN_FAIL_DELAY_MS = 300;                 // small constant-time-ish stall
 const MAX_USERNAME_LEN = 100;
 const MAX_PASSWORD_LEN = 500;
@@ -95,6 +95,15 @@ export default {
           if (url.pathname === "/api/me/pet" && request.method === "PUT") {
             return jsonHeaders(await putPet(request, env, user));
           }
+          if (url.pathname === "/api/me/story" && request.method === "GET") {
+            return jsonHeaders(await getStory(env, user));
+          }
+          if (url.pathname === "/api/me/story/check" && request.method === "POST") {
+            return jsonHeaders(await checkStory(request, env, user));
+          }
+          if (url.pathname === "/api/me/story/uncheck" && request.method === "POST") {
+            return jsonHeaders(await uncheckStory(request, env, user));
+          }
           const dismissMatch = url.pathname.match(/^\/api\/me\/notifications\/(\d+)\/dismiss$/);
           if (dismissMatch && request.method === "POST") {
             return jsonHeaders(await dismissNotification(env, user, +dismissMatch[1]));
@@ -111,8 +120,9 @@ export default {
 
     // --- Dashboard auth gate ------------------------------------------------
     if (
-      url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/") ||
-      url.pathname === "/onboarding" || url.pathname.startsWith("/onboarding/")
+      url.pathname === "/dashboard"   || url.pathname.startsWith("/dashboard/") ||
+      url.pathname === "/onboarding"  || url.pathname.startsWith("/onboarding/") ||
+      url.pathname === "/story"       || url.pathname.startsWith("/story/")
     ) {
       const session = await readSession(request, env);
       if (!session) {
@@ -446,6 +456,8 @@ async function issueOtpChallenge(env, userId, email) {
   return challenge;
 }
 
+const FROM_EMAIL_DEFAULT = "contact@endome.com";
+
 async function sendOtpEmail(env, email, code) {
   if (!env.MANDRILL_API_KEY) {
     console.error("OTP: MANDRILL_API_KEY missing — code would have been:", code);
@@ -456,18 +468,20 @@ async function sendOtpEmail(env, email, code) {
     preheader: `Your EndoMe sign-in code is ${code}. Expires in 10 minutes.`,
     headline: "Your sign-in code",
     body: `
-      <p style="margin:0 0 18px;font-size:15px;color:#3a2330;line-height:1.55">
-        Use this code to finish signing in to your EndoMe account:
+      <p style="margin:0 0 18px;font-size:15px;color:#3a2330;line-height:1.6">
+        Use this code to finish signing in to your EndoMe account.
       </p>
-      <div style="text-align:center;margin:0 0 22px">
-        <div style="display:inline-block;background:#fff5f8;border:2px dashed #ffd6e0;border-radius:16px;padding:18px 28px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:34px;font-weight:700;color:#ff4e8a;letter-spacing:10px">
-          ${code}
-        </div>
-      </div>
-      <p style="margin:0 0 8px;font-size:14px;color:#5a3a48;line-height:1.55">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 22px"><tr>
+        <td align="center">
+          <div style="display:inline-block;background-color:#fff5f8;border:2px dashed #ffaecb;border-radius:16px;padding:18px 30px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:34px;font-weight:700;color:#ff4e8a;letter-spacing:10px">
+            ${code}
+          </div>
+        </td>
+      </tr></table>
+      <p style="margin:0 0 8px;font-size:14px;color:#5a3a48;line-height:1.6">
         It expires in <strong>10 minutes</strong>.
       </p>
-      <p style="margin:0;font-size:13px;color:#7a5f6c;line-height:1.55">
+      <p style="margin:0;font-size:13px;color:#7a5f6c;line-height:1.6">
         Didn't try to sign in? You can safely ignore this email — your account stays locked.
       </p>`,
   });
@@ -479,9 +493,9 @@ async function sendOtpEmail(env, email, code) {
   await mandrillSend(env, {
     to: [{ email, type: "to" }],
     subject: `Your EndoMe sign-in code: ${code}`,
-    from_email: env.NEWSLETTER_FROM_EMAIL || "hello@endome.com",
+    from_email: env.NEWSLETTER_FROM_EMAIL || FROM_EMAIL_DEFAULT,
     from_name: env.NEWSLETTER_FROM_NAME || "EndoMe",
-    headers: { "Reply-To": env.NOTIFY_EMAIL || "contact@endome.com" },
+    headers: { "Reply-To": env.NOTIFY_EMAIL || FROM_EMAIL_DEFAULT },
     html, text,
   });
 }
@@ -496,71 +510,83 @@ async function sendWelcomeEmail(env, email, displayName) {
     "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
   })[c]);
 
+  // Reusable two-column row with a soft-pink emoji disk + body text.
+  const featureRow = (emoji, text) => `
+    <tr>
+      <td valign="top" width="56" style="padding:6px 0">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr><td align="center" bgcolor="#ffeaf2" width="40" height="40" style="background-color:#ffeaf2;width:40px;height:40px;border-radius:20px;font-size:20px;line-height:40px;vertical-align:middle">${emoji}</td></tr>
+        </table>
+      </td>
+      <td valign="middle" style="padding:6px 0 6px 14px;color:#3a2330;font-size:15px;line-height:1.55">${text}</td>
+    </tr>`;
+
   const html = renderEmail({
     siteUrl,
-    preheader: `Welcome to EndoMe, ${safeName} — your story starts here.`,
+    preheader: `Hi ${safeName}, you've just taken a brave first step — we're walking it with you.`,
     headline: `Welcome, ${safeName} 🌸`,
     body: `
-      <p style="margin:0 0 18px;color:#3a2330;font-size:16px;line-height:1.6">
-        We're so glad you're here. Your account is ready and your EndoPet
-        <strong style="color:#ff4e8a">Luna</strong> is waiting to grow alongside you.
+      <p style="margin:0 0 16px;color:#3a2330;font-size:16px;line-height:1.65">
+        You've just taken a brave first step. We're so glad you're here.
       </p>
-      <p style="margin:0 0 16px;color:#3a2330;font-size:15px;font-weight:600">From your dashboard you can:</p>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0">
-        <tr>
-          <td width="32" valign="top" align="center" style="padding:6px 0;font-size:20px;line-height:1.4">🌅</td>
-          <td style="padding:6px 0 6px 12px;color:#3a2330;font-size:15px;line-height:1.55">
-            Check in each <strong>morning</strong> — mood, energy, pain, cycle.
-          </td>
-        </tr>
-        <tr>
-          <td width="32" valign="top" align="center" style="padding:6px 0;font-size:20px;line-height:1.4">📝</td>
-          <td style="padding:6px 0 6px 12px;color:#3a2330;font-size:15px;line-height:1.55">
-            Quick-log <strong>symptoms</strong> as they happen.
-          </td>
-        </tr>
-        <tr>
-          <td width="32" valign="top" align="center" style="padding:6px 0;font-size:20px;line-height:1.4">🌙</td>
-          <td style="padding:6px 0 6px 12px;color:#3a2330;font-size:15px;line-height:1.55">
-            Wrap up the day with a short <strong>evening reflection</strong>.
-          </td>
-        </tr>
-        <tr>
-          <td width="32" valign="top" align="center" style="padding:6px 0;font-size:20px;line-height:1.4">🐾</td>
-          <td style="padding:6px 0 6px 12px;color:#3a2330;font-size:15px;line-height:1.55">
-            Watch <strong>Luna level up</strong> with every entry.
-          </td>
-        </tr>
+      <p style="margin:0 0 18px;color:#3a2330;font-size:16px;line-height:1.65">
+        EndoMe isn't just an app — it's your <strong style="color:#ff4e8a">personal companion</strong> through every part of your endometriosis journey. Whether you're learning to listen to your body, preparing for a doctor's visit, or just looking for someone who gets it — we're here. Always.
+      </p>
+
+      <!-- Pink callout / quote box -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:24px 0">
+        <tr><td bgcolor="#fff0f5" style="background-color:#fff0f5;border-left:4px solid #ff4e8a;padding:18px 22px;border-radius:0 12px 12px 0">
+          <p style="margin:0;color:#3a2330;font-size:16px;font-style:italic;line-height:1.55">
+            "This is your story. We'll walk it with you, one day at a time."
+          </p>
+        </td></tr>
       </table>
-      <p style="margin:24px 0 0;color:#7a5f6c;font-size:14px;line-height:1.6;text-align:center">
-        This is your space — track what feels right, skip what doesn't.
+
+      <p style="margin:0 0 16px;color:#3a2330;font-size:16px;line-height:1.65">
+        Your EndoPet <strong style="color:#ff4e8a">Luna</strong> is here too. Every time you check in, Luna grows alongside you — a gentle reminder that progress, however small, is still progress.
+      </p>
+
+      <p style="margin:24px 0 14px;color:#3a2330;font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">What's waiting for you</p>
+
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0">
+        ${featureRow("🌅", `<strong>Morning check-ins</strong> for the days you need to listen to your body — and the days you don't.`)}
+        ${featureRow("📝", `<strong>Quick-log symptoms</strong> when they happen. We'll spot the patterns over time so you don't have to.`)}
+        ${featureRow("🌙", `<strong>Evening reflections</strong> on your terms. A short moment, that's it.`)}
+        ${featureRow("🐾", `<strong>Watch Luna grow</strong> with every entry — because every step counts.`)}
+      </table>
+
+      <p style="margin:28px 0 0;color:#7a5f6c;font-size:14px;line-height:1.7;text-align:center">
+        Track what feels right. Skip what doesn't. We're here when you need us.
       </p>`,
     ctaText: "Open your dashboard",
     ctaUrl: `${siteUrl}/dashboard`,
   });
 
   const text =
-    `Welcome to EndoMe, ${displayName}\n\n` +
-    `Your account is ready and your EndoPet Luna is waiting.\n\n` +
-    `From your dashboard you can:\n` +
-    ` • Morning check-in — mood, energy, pain, cycle\n` +
-    ` • Quick-log symptoms as they happen\n` +
-    ` • Evening reflection to close the day\n` +
-    ` • Watch Luna level up with every entry\n\n` +
+    `Welcome, ${displayName} 🌸\n\n` +
+    `You've just taken a brave first step. We're so glad you're here.\n\n` +
+    `EndoMe is your personal companion through every part of your endometriosis journey — ` +
+    `learning to listen to your body, preparing for a doctor's visit, or just looking for someone who gets it.\n\n` +
+    `"This is your story. We'll walk it with you, one day at a time."\n\n` +
+    `Your EndoPet Luna is here too. Every check-in helps Luna grow alongside you.\n\n` +
+    `What's waiting for you:\n` +
+    ` • Morning check-ins for the days you need to listen to your body\n` +
+    ` • Quick-log symptoms when they happen\n` +
+    ` • Evening reflections on your terms\n` +
+    ` • Watch Luna grow with every entry\n\n` +
     `Open your dashboard: ${siteUrl}/dashboard\n\n` +
-    `This is your space — track what feels right, skip what doesn't.\n`;
+    `Track what feels right. Skip what doesn't. We're here when you need us.\n`;
 
   try {
     await mandrillSend(env, {
       to: [{ email, type: "to", name: displayName }],
       subject: `Welcome to EndoMe, ${displayName} 🌸`,
-      from_email: env.NEWSLETTER_FROM_EMAIL || "hello@endome.com",
+      from_email: env.NEWSLETTER_FROM_EMAIL || FROM_EMAIL_DEFAULT,
       from_name: env.NEWSLETTER_FROM_NAME || "EndoMe",
-      headers: { "Reply-To": env.NOTIFY_EMAIL || "contact@endome.com" },
+      headers: { "Reply-To": env.NOTIFY_EMAIL || FROM_EMAIL_DEFAULT },
       html, text,
     });
   } catch (err) {
-    // Don't fail registration if the welcome email bounces.
     console.error("welcome email failed:", err?.message || err);
   }
 }
@@ -953,6 +979,7 @@ async function getOrCreateUser(env, username) {
        VALUES (?, 'luna', 'Luna', 1, 0, 'happy', 0, ?)`
     ).bind(id, now),
   ]);
+  await markStoryStep(env, id, "welcome", "auto");
   return { id, username, display_name: display, timezone: "UTC" };
 }
 
@@ -1088,6 +1115,7 @@ async function postMorningCheckin(request, env, user) {
   ).run();
 
   const pet = await awardXp(env, user.id, pointsAwarded, date);
+  await markStoryStep(env, user.id, "first_morning", "auto");
   return json({ ok: true, pointsAwarded, fullDayBonus, pet });
 }
 
@@ -1187,6 +1215,7 @@ async function postSymptom(request, env, user) {
   ]);
 
   const pet = await awardXp(env, user.id, points, date);
+  await markStoryStep(env, user.id, "first_symptom", "auto");
   return json({ ok: true, pointsAwarded: points, pet });
 }
 
@@ -1246,7 +1275,95 @@ async function putPet(request, env, user) {
 
   const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
     .bind(user.id).first();
+  await markStoryStep(env, user.id, "pick_pet", "auto");
   return json({ ok: true, pet: petResponse(pet) });
+}
+
+// =============================================================================
+// YOUR STORY — milestone checklist with mixed auto + manual completion
+// =============================================================================
+const STORY_STEPS = [
+  // Phase 1: Pre-screening — getting to know yourself
+  { id: "welcome",        phase: "Pre-screening", title: "Welcome to EndoMe",         desc: "You've taken the first step by signing up.",                          icon: "🌸", auto: true },
+  { id: "pick_pet",       phase: "Pre-screening", title: "Choose your EndoPet",       desc: "Pick the companion who'll walk this journey with you.",              icon: "🐾", auto: true },
+  { id: "first_symptom",  phase: "Pre-screening", title: "Log your first symptom",    desc: "Capture what your body is telling you, as it happens.",              icon: "📝", auto: true },
+  { id: "first_morning",  phase: "Pre-screening", title: "Try a morning check-in",    desc: "Mood, energy, pain, cycle — a 30-second tune-in.",                    icon: "🌅", auto: true },
+  { id: "streak_7",       phase: "Pre-screening", title: "Build a 7-day streak",      desc: "A week of consistent tracking. Patterns start to surface.",          icon: "🔥", auto: true },
+
+  // Phase 2: Medical pathway — getting answers
+  { id: "talk_gp",        phase: "Diagnosis",     title: "Talk to your GP",           desc: "Take your symptom history to a doctor and start the conversation.",  icon: "👩‍⚕️", auto: false },
+  { id: "order_dna",      phase: "Diagnosis",     title: "Order your EndoMe DNA kit", desc: "Map the genetic markers most linked to endometriosis at home.",      icon: "🧬", auto: false },
+  { id: "see_specialist", phase: "Diagnosis",     title: "See a specialist",          desc: "Get referred to a gynaecologist who knows endometriosis.",            icon: "🏥", auto: false },
+  { id: "diagnosis",      phase: "Diagnosis",     title: "Receive your diagnosis",    desc: "Formal diagnosis (or rule-out) from your specialist.",                icon: "📋", auto: false },
+
+  // Phase 3: Living with endo — care + community
+  { id: "treatment",      phase: "Management",    title: "Start a treatment plan",    desc: "Agree a plan with your specialist — lifestyle, meds, or surgery.",   icon: "💊", auto: false },
+  { id: "habits",         phase: "Management",    title: "Build healthy habits",      desc: "Sleep, movement, nutrition — small daily wins compound.",             icon: "🌿", auto: false },
+  { id: "community",      phase: "Management",    title: "Connect with community",    desc: "You're not alone — share your story when you're ready.",              icon: "💖", auto: false },
+];
+const STORY_STEP_IDS = new Set(STORY_STEPS.map((s) => s.id));
+
+async function getStory(env, user) {
+  const rows = await env.DB.prepare(
+    "SELECT step_id, completed_at, completed_by FROM story_progress WHERE user_id = ?"
+  ).bind(user.id).all();
+  const done = new Map();
+  for (const r of rows.results || []) done.set(r.step_id, r);
+
+  const steps = STORY_STEPS.map((s) => {
+    const d = done.get(s.id);
+    return {
+      ...s,
+      completed:   !!d,
+      completedAt: d?.completed_at || null,
+      completedBy: d?.completed_by || null,
+    };
+  });
+
+  const completed = steps.filter((s) => s.completed).length;
+  return json({
+    steps,
+    completed,
+    total: STORY_STEPS.length,
+    percent: Math.round((completed / STORY_STEPS.length) * 100),
+  });
+}
+
+async function checkStory(request, env, user) {
+  const body = await readJsonSafe(request);
+  const stepId = typeof body?.stepId === "string" ? body.stepId : null;
+  if (!stepId || !STORY_STEP_IDS.has(stepId)) {
+    return json({ error: "Unknown step" }, 400);
+  }
+  await markStoryStep(env, user.id, stepId, "manual");
+  return getStory(env, user);
+}
+
+async function uncheckStory(request, env, user) {
+  const body = await readJsonSafe(request);
+  const stepId = typeof body?.stepId === "string" ? body.stepId : null;
+  if (!stepId || !STORY_STEP_IDS.has(stepId)) {
+    return json({ error: "Unknown step" }, 400);
+  }
+  await env.DB.prepare(
+    "DELETE FROM story_progress WHERE user_id = ? AND step_id = ?"
+  ).bind(user.id, stepId).run();
+  return getStory(env, user);
+}
+
+// Idempotent — first call sets the row, subsequent calls are no-ops.
+async function markStoryStep(env, userId, stepId, by = "auto") {
+  if (!STORY_STEP_IDS.has(stepId)) return;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO story_progress (user_id, step_id, completed_at, completed_by) " +
+      "VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT(user_id, step_id) DO NOTHING"
+    ).bind(userId, stepId, nowSec(), by).run();
+  } catch (err) {
+    // Don't ever break the calling handler — story progress is best-effort.
+    console.warn("markStoryStep failed:", err?.message || err);
+  }
 }
 
 async function awardXp(env, userId, points, logDate) {
@@ -1276,6 +1393,8 @@ async function awardXp(env, userId, points, logDate) {
   await env.DB.prepare(
     "UPDATE pets SET xp = ?, level = ?, mood = ?, streak_days = ?, last_log_date = ?, updated_at = ? WHERE user_id = ?"
   ).bind(xp, level, mood, streak, logDate, nowSec(), userId).run();
+
+  if (streak >= 7) await markStoryStep(env, userId, "streak_7", "auto");
 
   return { ...petResponse({ ...pet, xp, level, mood, streak_days: streak }), leveledUp };
 }

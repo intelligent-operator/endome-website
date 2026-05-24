@@ -46,6 +46,7 @@
     <aside class="dash-sidebar">
       <nav class="side-nav">
         <a class="active" href="/dashboard"><span class="ico">🏠</span> Overview</a>
+        <a href="/story"><span class="ico">📖</span> Your Story</a>
       </nav>
       <div class="side-card check-in">
         <div class="ci-head"><span>📅</span> <strong>Daily Check-in</strong></div>
@@ -221,8 +222,29 @@
         <button class="pill-btn full">🐾 Visit EndoPet</button>
       </div>
 
+      <a href="/story" class="card story-mini-card">
+        <div class="card-head"><span class="ico-tile pink">📖</span> Your Story</div>
+        <div class="story-mini-body">
+          <svg viewBox="0 0 100 100" width="86" height="86" class="story-mini-ring" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#ffd6e0" stroke-width="10"/>
+            <circle id="mini-ring" cx="50" cy="50" r="42" fill="none" stroke="url(#miniGrad)" stroke-width="10"
+              stroke-dasharray="263.9" stroke-dashoffset="263.9" stroke-linecap="round"
+              transform="rotate(-90 50 50)" style="transition:stroke-dashoffset .6s ease"/>
+            <defs><linearGradient id="miniGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ff4e8a"/><stop offset="100%" stop-color="#ffb380"/>
+            </linearGradient></defs>
+            <text id="mini-percent" x="50" y="54" text-anchor="middle" font-size="18" font-weight="700" fill="#ff4e8a" font-family="Poppins,sans-serif">0%</text>
+          </svg>
+          <div>
+            <strong id="mini-fraction">0 of 12</strong>
+            <p>milestones complete</p>
+          </div>
+        </div>
+        <span class="story-mini-cta">Continue your story →</span>
+      </a>
+
       <div class="card encourage-card">
-        <h4>You're doing great, Alex!</h4>
+        <h4>You're doing great, <span data-bind="displayName">friend</span>!</h4>
         <p>Small steps today lead to stronger tomorrows.</p>
         <div class="encourage-heart">💖</div>
         <span class="encourage-foot">Keep going!</span>
