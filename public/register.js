@@ -1,12 +1,37 @@
 (() => {
-  const form = document.getElementById("register-form");
-  const status = document.getElementById("register-status");
-  const button = document.getElementById("register-submit");
+  const $ = (id) => document.getElementById(id);
+  const form = $("register-form");
+  const status = $("register-status");
+  const button = $("register-submit");
+  const pwInput = $("reg-password");
+  const pwHint = $("pw-strength");
   if (!form || !status || !button) return;
 
   function setStatus(text, ok = false) {
     status.textContent = text;
     status.className = "form-status" + (ok ? " ok" : text ? " err" : "");
+  }
+
+  // Live password strength hint
+  function scorePassword(p) {
+    if (!p) return { label: "Use a long passphrase you don't reuse elsewhere.", level: 0 };
+    let score = 0;
+    if (p.length >= 10) score++;
+    if (p.length >= 14) score++;
+    if (/[a-z]/.test(p) && /[A-Z]/.test(p)) score++;
+    if (/\d/.test(p)) score++;
+    if (/[^A-Za-z0-9]/.test(p)) score++;
+    if (p.length < 10) return { label: `${p.length}/10 characters minimum.`, level: 0 };
+    if (score <= 2) return { label: "OK — longer is better.", level: 1 };
+    if (score === 3) return { label: "Good password.", level: 2 };
+    return { label: "Strong password.", level: 3 };
+  }
+  if (pwInput) {
+    pwInput.addEventListener("input", () => {
+      const { label, level } = scorePassword(pwInput.value);
+      pwHint.textContent = label;
+      pwHint.className = "field-hint strength-" + level;
+    });
   }
 
   form.addEventListener("submit", async (e) => {
@@ -16,12 +41,14 @@
     const displayName = form.displayName.value.trim();
     const email = form.email.value.trim().toLowerCase();
     const password = form.password.value;
-    const terms = form.terms.checked;
 
     if (!displayName) return setStatus("Please tell us what to call you.");
-    if (!email.includes("@") || !email.includes(".")) return setStatus("Please enter a valid email.");
-    if (password.length < 10) return setStatus("Password must be at least 10 characters.");
-    if (!terms) return setStatus("Please confirm the disclaimer to continue.");
+    if (!email.includes("@") || !email.includes(".")) {
+      return setStatus("Please enter a valid email.");
+    }
+    if (password.length < 10) {
+      return setStatus("Password must be at least 10 characters.");
+    }
     if (displayName.length > 60 || email.length > 200 || password.length > 500) {
       return setStatus("Input too long.");
     }

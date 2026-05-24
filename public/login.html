@@ -28,19 +28,19 @@
         <p class="login-sub" id="creds-sub">Sign in with your password — we'll email you a code to confirm.</p>
 
         <form id="creds-form" novalidate autocomplete="off">
-          <label class="field">
-            <span>Email or username</span>
+          <div class="field">
+            <label for="login-user">Email or username</label>
             <input
-              type="text" name="username" required maxlength="200"
+              id="login-user" type="text" name="username" required maxlength="200"
               autocomplete="username" spellcheck="false" autocapitalize="none" autocorrect="off"
-              inputmode="email" />
-          </label>
-          <label class="field" id="password-field">
-            <span>Password</span>
+              inputmode="email" placeholder="you@example.com" />
+          </div>
+          <div class="field" id="password-field">
+            <label for="login-pw">Password</label>
             <input
-              type="password" name="password" minlength="8" maxlength="500"
-              autocomplete="current-password" spellcheck="false" />
-          </label>
+              id="login-pw" type="password" name="password" minlength="8" maxlength="500"
+              autocomplete="current-password" spellcheck="false" placeholder="••••••••" />
+          </div>
           <button type="submit" class="btn btn-primary full" id="creds-submit">Continue</button>
           <p class="form-status" id="creds-status" role="status" aria-live="polite"></p>
         </form>
@@ -60,14 +60,14 @@
         </p>
 
         <form id="otp-form" novalidate autocomplete="off">
-          <label class="field otp-field">
-            <span>Sign-in code</span>
+          <div class="field otp-field">
+            <label for="otp-code">Sign-in code</label>
             <input
-              type="text" name="code" required
+              id="otp-code" type="text" name="code" required
               inputmode="numeric" autocomplete="one-time-code"
               pattern="\d{6}" maxlength="6"
               placeholder="000000" />
-          </label>
+          </div>
           <button type="submit" class="btn btn-primary full" id="otp-submit">Verify code</button>
           <p class="form-status" id="otp-status" role="status" aria-live="polite"></p>
         </form>

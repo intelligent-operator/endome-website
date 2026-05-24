@@ -351,6 +351,10 @@ async function handleRegister(request, env) {
     return json({ error: "Could not create account. Try again." }, 500);
   }
 
+  // Fire-and-forget welcome email. Failure here doesn't break signup —
+  // the user is already authenticated.
+  await sendWelcomeEmail(env, email, displayName);
+
   return mintSessionResponse(email, request, env, 201);
 }
 
@@ -441,19 +445,177 @@ async function sendOtpEmail(env, email, code) {
     console.error("OTP: MANDRILL_API_KEY missing — code would have been:", code);
     throw new Error("Email delivery is not configured. Contact support.");
   }
+  const html = renderEmail({
+    siteUrl: env.SITE_URL || "https://endome.com",
+    preheader: `Your EndoMe sign-in code is ${code}. Expires in 10 minutes.`,
+    headline: "Your sign-in code",
+    body: `
+      <p style="margin:0 0 18px;font-size:15px;color:#3a2330;line-height:1.55">
+        Use this code to finish signing in to your EndoMe account:
+      </p>
+      <div style="text-align:center;margin:0 0 22px">
+        <div style="display:inline-block;background:#fff5f8;border:2px dashed #ffd6e0;border-radius:16px;padding:18px 28px;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:34px;font-weight:700;color:#ff4e8a;letter-spacing:10px">
+          ${code}
+        </div>
+      </div>
+      <p style="margin:0 0 8px;font-size:14px;color:#5a3a48;line-height:1.55">
+        It expires in <strong>10 minutes</strong>.
+      </p>
+      <p style="margin:0;font-size:13px;color:#7a5f6c;line-height:1.55">
+        Didn't try to sign in? You can safely ignore this email — your account stays locked.
+      </p>`,
+  });
+  const text =
+    `Your EndoMe sign-in code: ${code}\n\n` +
+    `It expires in 10 minutes.\n\n` +
+    `If you didn't try to sign in, you can ignore this email — your account stays locked.`;
+
   await mandrillSend(env, {
     to: [{ email, type: "to" }],
-    subject: `EndoMe sign-in code: ${code}`,
+    subject: `Your EndoMe sign-in code: ${code}`,
     from_email: env.NEWSLETTER_FROM_EMAIL || "hello@endome.com",
     from_name: env.NEWSLETTER_FROM_NAME || "EndoMe",
-    html:
-      `<p style="font-size:15px;color:#3a2330;margin:0 0 12px">Your EndoMe sign-in code:</p>` +
-      `<p style="font-size:32px;font-weight:700;letter-spacing:8px;color:#ff4e8a;margin:0 0 16px;font-family:monospace">${code}</p>` +
-      `<p style="font-size:13px;color:#7a5f6c;margin:0">Expires in 10 minutes. If you didn't try to sign in, you can ignore this email.</p>`,
-    text:
-      `Your EndoMe sign-in code: ${code}\n\n` +
-      "Expires in 10 minutes. If you didn't try to sign in, you can ignore this email.",
+    headers: { "Reply-To": env.NOTIFY_EMAIL || "contact@endome.com" },
+    html, text,
   });
+}
+
+async function sendWelcomeEmail(env, email, displayName) {
+  if (!env.MANDRILL_API_KEY) {
+    console.warn("welcome email skipped — MANDRILL_API_KEY missing");
+    return;
+  }
+  const siteUrl = env.SITE_URL || "https://endome.com";
+  const safeName = (displayName || "").replace(/[<>&"']/g, (c) => ({
+    "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+
+  const html = renderEmail({
+    siteUrl,
+    preheader: `Welcome to EndoMe, ${safeName} — your story starts here.`,
+    headline: `Welcome to EndoMe, ${safeName}`,
+    body: `
+      <p style="margin:0 0 18px;font-size:16px;color:#3a2330;line-height:1.6">
+        Hi ${safeName} —
+      </p>
+      <p style="margin:0 0 18px;font-size:15px;color:#3a2330;line-height:1.6">
+        We're so glad you're here. Your account is ready and your EndoPet
+        <strong>Luna</strong> is waiting to grow alongside you.
+      </p>
+      <p style="margin:0 0 14px;font-size:15px;color:#3a2330;line-height:1.6">From your dashboard you can:</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 22px">
+        <tr>
+          <td style="padding:10px 14px;background:#fff5f8;border-radius:12px;font-size:14px;color:#3a2330;line-height:1.5">
+            <span style="display:inline-block;width:22px">🌅</span>
+            <strong>Morning check-in</strong> — mood, energy, pain, cycle
+          </td>
+        </tr>
+        <tr><td style="height:8px;line-height:8px;font-size:1px">&nbsp;</td></tr>
+        <tr>
+          <td style="padding:10px 14px;background:#fff5f8;border-radius:12px;font-size:14px;color:#3a2330;line-height:1.5">
+            <span style="display:inline-block;width:22px">📝</span>
+            <strong>Quick-log symptoms</strong> as they happen
+          </td>
+        </tr>
+        <tr><td style="height:8px;line-height:8px;font-size:1px">&nbsp;</td></tr>
+        <tr>
+          <td style="padding:10px 14px;background:#fff5f8;border-radius:12px;font-size:14px;color:#3a2330;line-height:1.5">
+            <span style="display:inline-block;width:22px">🌙</span>
+            <strong>Evening reflection</strong> to close the day
+          </td>
+        </tr>
+        <tr><td style="height:8px;line-height:8px;font-size:1px">&nbsp;</td></tr>
+        <tr>
+          <td style="padding:10px 14px;background:#fff5f8;border-radius:12px;font-size:14px;color:#3a2330;line-height:1.5">
+            <span style="display:inline-block;width:22px">🐾</span>
+            <strong>Watch Luna level up</strong> with every entry
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0;font-size:14px;color:#7a5f6c;line-height:1.6">
+        This is your space — track what feels right, skip what doesn't.
+        We're here when you need us.
+      </p>`,
+    ctaText: "Open your dashboard",
+    ctaUrl: `${siteUrl}/dashboard`,
+  });
+
+  const text =
+    `Welcome to EndoMe, ${displayName}\n\n` +
+    `Your account is ready and your EndoPet Luna is waiting.\n\n` +
+    `From your dashboard you can:\n` +
+    ` • Morning check-in — mood, energy, pain, cycle\n` +
+    ` • Quick-log symptoms as they happen\n` +
+    ` • Evening reflection to close the day\n` +
+    ` • Watch Luna level up with every entry\n\n` +
+    `Open your dashboard: ${siteUrl}/dashboard\n\n` +
+    `This is your space — track what feels right, skip what doesn't.\n`;
+
+  try {
+    await mandrillSend(env, {
+      to: [{ email, type: "to", name: displayName }],
+      subject: `Welcome to EndoMe, ${displayName} 🌸`,
+      from_email: env.NEWSLETTER_FROM_EMAIL || "hello@endome.com",
+      from_name: env.NEWSLETTER_FROM_NAME || "EndoMe",
+      headers: { "Reply-To": env.NOTIFY_EMAIL || "contact@endome.com" },
+      html, text,
+    });
+  } catch (err) {
+    // Don't fail registration if the welcome email bounces.
+    console.error("welcome email failed:", err?.message || err);
+  }
+}
+
+// Shared branded email layout. Bulletproof inline styles (tables, no flex
+// or grid) so it renders consistently in Gmail / Apple Mail / Outlook.
+function renderEmail({ siteUrl, preheader, headline, body, ctaText, ctaUrl }) {
+  const logoUrl = `${siteUrl}/logo-final.png`;
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>EndoMe</title>
+</head>
+<body style="margin:0;padding:0;background:#fff5f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#3a2330;-webkit-font-smoothing:antialiased">
+<div style="display:none;font-size:1px;color:#fff5f8;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">${preheader || ""}</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fff5f8;padding:32px 16px">
+  <tr>
+    <td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;width:100%;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 8px 24px rgba(255,77,138,.10)">
+        <tr>
+          <td style="background:linear-gradient(135deg,#ffb380 0%,#ff6a92 50%,#e8348a 100%);padding:32px 32px 28px;text-align:center" align="center">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td align="center">
+              <img src="${logoUrl}" alt="EndoMe" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:14px;border:0"/>
+            </td></tr></table>
+            <h1 style="margin:18px 0 0;color:#ffffff;font-size:24px;font-weight:700;line-height:1.3;letter-spacing:-.2px">${headline}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:30px 36px 8px">
+            ${body}
+            ${ctaText && ctaUrl ? `
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:26px auto 8px">
+                <tr><td style="border-radius:999px;background:#ff4e8a">
+                  <a href="${ctaUrl}" style="display:inline-block;padding:14px 30px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;font-family:inherit">${ctaText}</a>
+                </td></tr>
+              </table>` : ""}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:20px 36px 28px;border-top:1px solid #ffeaf2;text-align:center" align="center">
+            <p style="margin:0 0 4px;font-size:12px;color:#7a5f6c">EndoMe · Your story starts here.</p>
+            <p style="margin:0;font-size:12px;color:#a08596">
+              <a href="${siteUrl}" style="color:#ff4e8a;text-decoration:none">endome.com</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
 }
 
 async function hmacB64Url(secret, message) {
