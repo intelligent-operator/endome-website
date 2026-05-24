@@ -62,7 +62,7 @@ export default {
         if (url.pathname.startsWith("/api/me/")) {
           const session = await readSession(request, env);
           if (!session) return json({ error: "Unauthorized" }, 401);
-          if (!env.KV) return json({ error: "Storage not configured" }, 503);
+          if (!env.DB) return json({ error: "Storage not configured" }, 503);
           const user = await getOrCreateUser(env, session.u);
 
           if (url.pathname === "/api/me/today" && request.method === "GET") {
@@ -441,25 +441,19 @@ function timingSafeEqual(a, b) {
 }
 
 // =============================================================================
-// USER DATA (Workers KV) — daily logs, symptoms, pet, notifications
-// Keys:
-//   user:<username>                       account record
-//   pet:<userId>                          pet state
-//   day:<userId>:<YYYY-MM-DD>             {morning, evening, cycle, pointsTotal}
-//   sym:<userId>:<YYYY-MM-DD>:<ts>-<rnd>  one key per symptom event; the entry
-//                                          is stored as KV metadata for cheap
-//                                          list() reads with no fan-out fetches
-//   notifs:<userId>                       array of server-side notifications
+// USER DATA (D1) — daily logs, symptoms, pet, notifications
 // =============================================================================
 
 const POINTS_MORNING = 10;
 const POINTS_SYMPTOM = 5;
 const POINTS_EVENING = 15;
-const POINTS_FULL_DAY_BONUS = 20;
+const POINTS_FULL_DAY_BONUS = 20;     // awarded once both check-ins logged
 const XP_PER_LEVEL = 100;
 const ALLOWED_SYMPTOMS = new Set([
+  // generic
   "pain", "fatigue", "bloating", "nausea", "cramps",
   "headache", "mood", "sleep", "other",
+  // female-health / endo-aware
   "pelvic_pain", "back_pain", "breast_tender", "hot_flash",
   "painful_urination", "painful_bowel", "painful_sex",
   "spotting", "endo_belly", "dizziness",
@@ -473,68 +467,85 @@ const ALLOWED_INTIMACY = new Set(["none", "comfortable", "uncomfortable"]);
 const ALLOWED_TRIGGERS = new Set(["food","stress","exercise","intimacy","cold","hormones","travel","sleep","unknown"]);
 const ALLOWED_RELIEF   = new Set(["heat","rest","medication","hydration","movement","massage","bath","sleep","none"]);
 
-const KEY = {
-  user:    (username) => `user:${username}`,
-  pet:     (uid) => `pet:${uid}`,
-  day:     (uid, date) => `day:${uid}:${date}`,
-  symPrefix: (uid, date) => `sym:${uid}:${date}:`,
-  symKey:  (uid, date, ts) => `sym:${uid}:${date}:${String(ts).padStart(10, "0")}-${rand6()}`,
-  notifs:  (uid) => `notifs:${uid}`,
-};
-
-function rand6() {
-  return [...crypto.getRandomValues(new Uint8Array(3))]
-    .map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-// --- User -----------------------------------------------------------------
 async function getOrCreateUser(env, username) {
-  const existing = await env.KV.get(KEY.user(username), "json");
-  if (existing) return existing;
+  // Look up by username; create with deterministic id on first hit.
+  let row = await env.DB
+    .prepare("SELECT id, username, display_name, timezone FROM users WHERE username = ?")
+    .bind(username).first();
+  if (row) return row;
 
-  const id = `u_${username}`;
+  const id = `user_${username}`;
   const display = username.charAt(0).toUpperCase() + username.slice(1);
   const now = nowSec();
-  const user = { id, username, displayName: display, timezone: "UTC", createdAt: now };
-  const pet = {
-    type: "luna", name: "Luna", level: 1, xp: 0,
-    mood: "happy", streakDays: 0, lastLogDate: null, updatedAt: now,
-  };
-  await Promise.all([
-    env.KV.put(KEY.user(username), JSON.stringify(user)),
-    env.KV.put(KEY.pet(id), JSON.stringify(pet)),
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO users (id, username, display_name, timezone, created_at) VALUES (?, ?, ?, 'UTC', ?)"
+    ).bind(id, username, display, now),
+    env.DB.prepare(
+      `INSERT INTO pets (user_id, pet_type, pet_name, level, xp, mood, streak_days, updated_at)
+       VALUES (?, 'luna', 'Luna', 1, 0, 'happy', 0, ?)`
+    ).bind(id, now),
   ]);
-  return user;
+  return { id, username, display_name: display, timezone: "UTC" };
 }
 
-// --- /api/me/today --------------------------------------------------------
+// --- /api/me/today ---------------------------------------------------------
 async function getMeToday(request, env, user) {
   const url = new URL(request.url);
   const date = normaliseDate(url.searchParams.get("date"));
 
-  const [day, pet, notifs, symList] = await Promise.all([
-    env.KV.get(KEY.day(user.id, date), "json"),
-    env.KV.get(KEY.pet(user.id), "json"),
-    env.KV.get(KEY.notifs(user.id), "json"),
-    env.KV.list({ prefix: KEY.symPrefix(user.id, date), limit: 100 }),
+  const [daily, symptoms, pet, notifs] = await Promise.all([
+    env.DB.prepare("SELECT * FROM daily_logs WHERE user_id = ? AND log_date = ?")
+      .bind(user.id, date).first(),
+    env.DB.prepare(
+      "SELECT id, log_date, logged_at, symptom, severity, location, notes, points " +
+      "FROM symptoms WHERE user_id = ? AND log_date = ? ORDER BY logged_at DESC"
+    ).bind(user.id, date).all(),
+    env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(user.id).first(),
+    env.DB.prepare(
+      "SELECT id, type, title, body, action_url, created_at, read_at " +
+      "FROM notifications WHERE user_id = ? AND dismissed_at IS NULL " +
+      "ORDER BY created_at DESC LIMIT 20"
+    ).bind(user.id).all(),
   ]);
 
-  // Symptoms come straight out of list() metadata — no extra reads.
-  const symptoms = (symList.keys || [])
-    .map((k) => k.metadata)
-    .filter(Boolean)
-    .sort((a, b) => (b.loggedAt || 0) - (a.loggedAt || 0));
-
   return json({
-    user: { displayName: user.displayName, username: user.username },
+    user: { displayName: user.display_name, username: user.username },
     date,
-    morning: day?.morning || null,
-    evening: day?.evening || null,
-    cycle:   day?.cycle   || null,
-    symptoms,
-    pointsToday: day?.pointsTotal || 0,
-    pet: pet ? formatPet(pet) : null,
-    notifications: (notifs || []).filter((n) => !n.dismissedAt),
+    morning: daily?.morning_logged_at ? {
+      mood: daily.morning_mood,
+      energy: daily.morning_energy,
+      pain: daily.morning_pain,
+      sleepHours: daily.morning_sleep_hours,
+      sleepQuality: daily.morning_sleep_quality,
+      notes: daily.morning_notes,
+      loggedAt: daily.morning_logged_at,
+    } : null,
+    evening: daily?.evening_logged_at ? {
+      overall: daily.evening_overall,
+      reflection: daily.evening_reflection,
+      gratitude: daily.evening_gratitude,
+      waterGlasses: daily.water_glasses,
+      movementLevel: daily.movement_level,
+      bowelCount: daily.bowel_count,
+      bowelType: daily.bowel_type,
+      stressLevel: daily.stress_level,
+      intimacy: daily.intimacy,
+      medications: daily.medications,
+      loggedAt: daily.evening_logged_at,
+    } : null,
+    cycle: daily ? {
+      day: daily.cycle_day,
+      phase: daily.cycle_phase,
+      flow: daily.flow,
+      bbt: daily.bbt,
+      cervicalMucus: daily.cervical_mucus,
+      breastTenderness: daily.breast_tenderness,
+    } : null,
+    symptoms: symptoms.results || [],
+    pointsToday: daily?.points_total || 0,
+    pet: petResponse(pet),
+    notifications: notifs.results || [],
   });
 }
 
@@ -550,42 +561,66 @@ async function postMorningCheckin(request, env, user) {
     return json({ error: "mood, energy and pain are required (1–5)" }, 400);
   }
 
-  const morning = {
-    mood, energy, pain,
-    sleepHours:   body.sleepHours == null || body.sleepHours === "" ? null : clampFloat(body.sleepHours, 0, 24),
-    sleepQuality: clampInt(body.sleepQuality, 1, 5),
-    notes:        sanitizeText(body.notes, 1000),
-    loggedAt:     nowSec(),
-  };
-  const cyclePatch = {
-    day:              body.cycleDay == null || body.cycleDay === "" ? null : clampInt(body.cycleDay, 1, 60),
-    phase:            oneOf(body.cyclePhase, ALLOWED_PHASES),
-    flow:             oneOf(body.flow, ALLOWED_FLOW),
-    bbt:              body.bbt == null || body.bbt === "" ? null : clampFloat(body.bbt, 35, 40),
-    cervicalMucus:    oneOf(body.cervicalMucus, ALLOWED_MUCUS),
-    breastTenderness: clampInt(body.breastTenderness, 0, 5),
-  };
+  const sleepHours = body.sleepHours == null || body.sleepHours === ""
+    ? null : clampFloat(body.sleepHours, 0, 24);
+  const sleepQuality = clampInt(body.sleepQuality, 1, 5);
+  const notes = sanitizeText(body.notes, 1000);
+
+  // Cycle + body-awareness fields (all optional)
+  const cycleDay   = body.cycleDay == null || body.cycleDay === "" ? null : clampInt(body.cycleDay, 1, 60);
+  const cyclePhase = oneOf(body.cyclePhase, ALLOWED_PHASES);
+  const flow       = oneOf(body.flow, ALLOWED_FLOW);
+  const bbt        = body.bbt == null || body.bbt === "" ? null : clampFloat(body.bbt, 35, 40);
+  const mucus      = oneOf(body.cervicalMucus, ALLOWED_MUCUS);
+  const breastTender = clampInt(body.breastTenderness, 0, 5);
 
   const date = normaliseDate(body.date);
-  const existing = (await env.KV.get(KEY.day(user.id, date), "json")) || {};
+  const now = nowSec();
 
-  const firstTime = !existing.morning;
+  const existing = await env.DB
+    .prepare("SELECT morning_logged_at, evening_logged_at FROM daily_logs WHERE user_id = ? AND log_date = ?")
+    .bind(user.id, date).first();
+
+  const firstTime = !existing?.morning_logged_at;
   let pointsAwarded = firstTime ? POINTS_MORNING : 0;
   let fullDayBonus = false;
-  if (firstTime && existing.evening) {
+  if (firstTime && existing?.evening_logged_at) {
     pointsAwarded += POINTS_FULL_DAY_BONUS;
     fullDayBonus = true;
   }
 
-  const updated = {
-    ...existing,
-    morning,
-    cycle: mergeCycle(existing.cycle, cyclePatch),
-    pointsTotal: (existing.pointsTotal || 0) + pointsAwarded,
-  };
-  await env.KV.put(KEY.day(user.id, date), JSON.stringify(updated));
+  await env.DB.prepare(
+    `INSERT INTO daily_logs (
+       user_id, log_date,
+       morning_mood, morning_energy, morning_pain,
+       morning_sleep_hours, morning_sleep_quality, morning_notes, morning_logged_at,
+       cycle_day, cycle_phase, flow, bbt, cervical_mucus, breast_tenderness,
+       points_total)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+     ON CONFLICT(user_id, log_date) DO UPDATE SET
+       morning_mood          = excluded.morning_mood,
+       morning_energy        = excluded.morning_energy,
+       morning_pain          = excluded.morning_pain,
+       morning_sleep_hours   = excluded.morning_sleep_hours,
+       morning_sleep_quality = excluded.morning_sleep_quality,
+       morning_notes         = excluded.morning_notes,
+       morning_logged_at     = COALESCE(daily_logs.morning_logged_at, excluded.morning_logged_at),
+       cycle_day             = COALESCE(excluded.cycle_day,         daily_logs.cycle_day),
+       cycle_phase           = COALESCE(excluded.cycle_phase,       daily_logs.cycle_phase),
+       flow                  = COALESCE(excluded.flow,              daily_logs.flow),
+       bbt                   = COALESCE(excluded.bbt,               daily_logs.bbt),
+       cervical_mucus        = COALESCE(excluded.cervical_mucus,    daily_logs.cervical_mucus),
+       breast_tenderness     = COALESCE(excluded.breast_tenderness, daily_logs.breast_tenderness),
+       points_total          = daily_logs.points_total + ?16`
+  ).bind(
+    user.id, date,
+    mood, energy, pain,
+    sleepHours, sleepQuality, notes, now,
+    cycleDay, cyclePhase, flow, bbt, mucus, breastTender,
+    pointsAwarded
+  ).run();
 
-  const pet = await awardXp(env, user, pointsAwarded, date);
+  const pet = await awardXp(env, user.id, pointsAwarded, date);
   return json({ ok: true, pointsAwarded, fullDayBonus, pet });
 }
 
@@ -597,39 +632,61 @@ async function postEveningCheckin(request, env, user) {
   const overall = clampInt(body.overall, 1, 5);
   if (overall == null) return json({ error: "overall is required (1–5)" }, 400);
 
-  const evening = {
-    overall,
-    reflection:    sanitizeText(body.reflection, 2000),
-    gratitude:     sanitizeText(body.gratitude, 500),
-    waterGlasses:  body.waterGlasses == null ? null : clampInt(body.waterGlasses, 0, 30),
-    movementLevel: oneOf(body.movementLevel, ALLOWED_MOVEMENT),
-    bowelCount:    body.bowelCount == null ? null : clampInt(body.bowelCount, 0, 15),
-    bowelType:     oneOf(body.bowelType, ALLOWED_BOWEL),
-    stressLevel:   clampInt(body.stressLevel, 1, 5),
-    intimacy:      oneOf(body.intimacy, ALLOWED_INTIMACY),
-    medications:   sanitizeText(body.medications, 500),
-    loggedAt:      nowSec(),
-  };
+  const reflection = sanitizeText(body.reflection, 2000);
+  const gratitude  = sanitizeText(body.gratitude, 500);
+
+  // Body-care
+  const water     = body.waterGlasses == null ? null : clampInt(body.waterGlasses, 0, 30);
+  const movement  = oneOf(body.movementLevel, ALLOWED_MOVEMENT);
+  const bowelCnt  = body.bowelCount == null ? null : clampInt(body.bowelCount, 0, 15);
+  const bowelTyp  = oneOf(body.bowelType, ALLOWED_BOWEL);
+  const stress    = clampInt(body.stressLevel, 1, 5);
+  const intimacy  = oneOf(body.intimacy, ALLOWED_INTIMACY);
+  const meds      = sanitizeText(body.medications, 500);
 
   const date = normaliseDate(body.date);
-  const existing = (await env.KV.get(KEY.day(user.id, date), "json")) || {};
+  const now = nowSec();
 
-  const firstTime = !existing.evening;
+  const existing = await env.DB
+    .prepare("SELECT morning_logged_at, evening_logged_at FROM daily_logs WHERE user_id = ? AND log_date = ?")
+    .bind(user.id, date).first();
+
+  const firstTime = !existing?.evening_logged_at;
   let pointsAwarded = firstTime ? POINTS_EVENING : 0;
   let fullDayBonus = false;
-  if (firstTime && existing.morning) {
+  if (firstTime && existing?.morning_logged_at) {
     pointsAwarded += POINTS_FULL_DAY_BONUS;
     fullDayBonus = true;
   }
 
-  const updated = {
-    ...existing,
-    evening,
-    pointsTotal: (existing.pointsTotal || 0) + pointsAwarded,
-  };
-  await env.KV.put(KEY.day(user.id, date), JSON.stringify(updated));
+  await env.DB.prepare(
+    `INSERT INTO daily_logs (
+       user_id, log_date,
+       evening_overall, evening_reflection, evening_gratitude, evening_logged_at,
+       water_glasses, movement_level, bowel_count, bowel_type, stress_level, intimacy, medications,
+       points_total)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+     ON CONFLICT(user_id, log_date) DO UPDATE SET
+       evening_overall    = excluded.evening_overall,
+       evening_reflection = excluded.evening_reflection,
+       evening_gratitude  = excluded.evening_gratitude,
+       evening_logged_at  = COALESCE(daily_logs.evening_logged_at, excluded.evening_logged_at),
+       water_glasses      = COALESCE(excluded.water_glasses,  daily_logs.water_glasses),
+       movement_level     = COALESCE(excluded.movement_level, daily_logs.movement_level),
+       bowel_count        = COALESCE(excluded.bowel_count,    daily_logs.bowel_count),
+       bowel_type         = COALESCE(excluded.bowel_type,     daily_logs.bowel_type),
+       stress_level       = COALESCE(excluded.stress_level,   daily_logs.stress_level),
+       intimacy           = COALESCE(excluded.intimacy,       daily_logs.intimacy),
+       medications        = COALESCE(excluded.medications,    daily_logs.medications),
+       points_total       = daily_logs.points_total + ?14`
+  ).bind(
+    user.id, date,
+    overall, reflection, gratitude, now,
+    water, movement, bowelCnt, bowelTyp, stress, intimacy, meds,
+    pointsAwarded
+  ).run();
 
-  const pet = await awardXp(env, user, pointsAwarded, date);
+  const pet = await awardXp(env, user.id, pointsAwarded, date);
   return json({ ok: true, pointsAwarded, fullDayBonus, pet });
 }
 
@@ -638,90 +695,81 @@ async function postSymptom(request, env, user) {
   const body = await readJsonSafe(request);
   if (!body) return json({ error: "Invalid body" }, 400);
 
-  const symptom = oneOf(body.symptom, ALLOWED_SYMPTOMS);
-  if (!symptom) return json({ error: "Unknown symptom" }, 400);
+  const symptom = typeof body.symptom === "string" ? body.symptom.toLowerCase().trim() : "";
+  if (!ALLOWED_SYMPTOMS.has(symptom)) return json({ error: "Unknown symptom" }, 400);
   const severity = clampInt(body.severity, 1, 5);
   if (severity == null) return json({ error: "severity is required (1–5)" }, 400);
-
+  const location = sanitizeText(body.location, 60);
+  const notes    = sanitizeText(body.notes, 500);
+  const triggers = tagList(body.triggers, ALLOWED_TRIGGERS);
+  const relief   = tagList(body.relief, ALLOWED_RELIEF);
   const date = normaliseDate(body.date);
   const now = nowSec();
-  const entry = {
-    loggedAt: now,
-    symptom, severity,
-    location: sanitizeText(body.location, 60),
-    triggers: tagList(body.triggers, ALLOWED_TRIGGERS),
-    relief:   tagList(body.relief, ALLOWED_RELIEF),
-    notes:    sanitizeText(body.notes, 500),
-  };
+  const points = POINTS_SYMPTOM;
 
-  // Store the entry as KV metadata so list() returns it inline (no N+1 reads).
-  await env.KV.put(KEY.symKey(user.id, date, now), "", { metadata: entry });
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO symptoms (user_id, log_date, logged_at, symptom, severity, location, notes, triggers, relief, points) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(user.id, date, now, symptom, severity, location, notes, triggers, relief, points),
+    env.DB.prepare(
+      `INSERT INTO daily_logs (user_id, log_date, points_total)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id, log_date) DO UPDATE SET points_total = daily_logs.points_total + ?`
+    ).bind(user.id, date, points, points),
+  ]);
 
-  // Bump points on the day record.
-  const dayKey = KEY.day(user.id, date);
-  const day = (await env.KV.get(dayKey, "json")) || {};
-  day.pointsTotal = (day.pointsTotal || 0) + POINTS_SYMPTOM;
-  await env.KV.put(dayKey, JSON.stringify(day));
-
-  const pet = await awardXp(env, user, POINTS_SYMPTOM, date);
-  return json({ ok: true, pointsAwarded: POINTS_SYMPTOM, pet });
+  const pet = await awardXp(env, user.id, points, date);
+  return json({ ok: true, pointsAwarded: points, pet });
 }
 
-// --- /api/me/symptoms (GET) — range history -------------------------------
+// --- /api/me/symptoms (GET) -----------------------------------------------
 async function getSymptoms(request, env, user) {
   const url = new URL(request.url);
   const from = normaliseDate(url.searchParams.get("from"));
-  const to   = normaliseDate(url.searchParams.get("to") || url.searchParams.get("from"));
-
-  // Walk the date range, capped at 90 days, and list KV in parallel.
-  const dates = [];
-  let d = new Date(`${from}T00:00:00Z`);
-  const end = new Date(`${to}T00:00:00Z`);
-  while (d <= end && dates.length < 90) {
-    dates.push(d.toISOString().slice(0, 10));
-    d.setUTCDate(d.getUTCDate() + 1);
-  }
-  const lists = await Promise.all(
-    dates.map((dt) => env.KV.list({ prefix: KEY.symPrefix(user.id, dt), limit: 200 }))
-  );
-
-  const symptoms = [];
-  lists.forEach((l, i) => {
-    for (const k of l.keys || []) {
-      if (k.metadata) symptoms.push({ ...k.metadata, logDate: dates[i] });
-    }
-  });
-  symptoms.sort((a, b) => (b.loggedAt || 0) - (a.loggedAt || 0));
-  return json({ symptoms });
+  const to = normaliseDate(url.searchParams.get("to") || url.searchParams.get("from"));
+  const res = await env.DB
+    .prepare(
+      "SELECT id, log_date, logged_at, symptom, severity, location, notes " +
+      "FROM symptoms WHERE user_id = ? AND log_date BETWEEN ? AND ? " +
+      "ORDER BY logged_at DESC LIMIT 200"
+    )
+    .bind(user.id, from, to).all();
+  return json({ symptoms: res.results || [] });
 }
 
 // --- Notifications --------------------------------------------------------
 async function getNotifications(env, user) {
-  const list = (await env.KV.get(KEY.notifs(user.id), "json")) || [];
-  return json({ notifications: list.filter((n) => !n.dismissedAt) });
+  const res = await env.DB
+    .prepare(
+      "SELECT id, type, title, body, action_url, created_at, read_at " +
+      "FROM notifications WHERE user_id = ? AND dismissed_at IS NULL " +
+      "ORDER BY created_at DESC LIMIT 50"
+    )
+    .bind(user.id).all();
+  return json({ notifications: res.results || [] });
 }
 
 async function dismissNotification(env, user, id) {
-  const list = (await env.KV.get(KEY.notifs(user.id), "json")) || [];
-  const updated = list.map((n) => n.id === id ? { ...n, dismissedAt: nowSec() } : n);
-  await env.KV.put(KEY.notifs(user.id), JSON.stringify(updated));
+  await env.DB.prepare(
+    "UPDATE notifications SET dismissed_at = ? WHERE id = ? AND user_id = ?"
+  ).bind(nowSec(), id, user.id).run();
   return json({ ok: true });
 }
 
 // --- Gamification ---------------------------------------------------------
-async function awardXp(env, user, points, logDate) {
-  const petKey = KEY.pet(user.id);
-  const pet = await env.KV.get(petKey, "json");
+async function awardXp(env, userId, points, logDate) {
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(userId).first();
   if (!pet) return null;
-  if (points <= 0) return formatPet(pet);
+  if (points <= 0) return petResponse(pet);
 
   // Streak: bump only on first log of a new day; reset if a day was skipped.
-  let streak = pet.streakDays || 0;
-  if (pet.lastLogDate !== logDate) {
+  let streak = pet.streak_days;
+  if (pet.last_log_date !== logDate) {
     const prev = new Date(`${logDate}T00:00:00Z`);
     prev.setUTCDate(prev.getUTCDate() - 1);
     const prevDate = prev.toISOString().slice(0, 10);
-    streak = pet.lastLogDate === prevDate ? streak + 1 : 1;
+    streak = pet.last_log_date === prevDate ? streak + 1 : 1;
   }
 
   let xp = pet.xp + points;
@@ -733,37 +781,25 @@ async function awardXp(env, user, points, logDate) {
     leveledUp = true;
   }
 
-  const updated = {
-    ...pet,
-    xp, level,
-    mood: "happy",
-    streakDays: streak,
-    lastLogDate: logDate,
-    updatedAt: nowSec(),
-  };
-  await env.KV.put(petKey, JSON.stringify(updated));
-  return { ...formatPet(updated), leveledUp };
+  const mood = "happy";   // anything logged today keeps them happy
+  await env.DB.prepare(
+    "UPDATE pets SET xp = ?, level = ?, mood = ?, streak_days = ?, last_log_date = ?, updated_at = ? WHERE user_id = ?"
+  ).bind(xp, level, mood, streak, logDate, nowSec(), userId).run();
+
+  return { ...petResponse({ ...pet, xp, level, mood, streak_days: streak }), leveledUp };
 }
 
-function formatPet(p) {
+function petResponse(pet) {
+  if (!pet) return null;
   return {
-    name: p.name,
-    type: p.type,
-    level: p.level,
-    xp: p.xp,
-    xpForNext: p.level * XP_PER_LEVEL,
-    mood: p.mood,
-    streakDays: p.streakDays || 0,
+    name: pet.pet_name,
+    type: pet.pet_type,
+    level: pet.level,
+    xp: pet.xp,
+    xpForNext: pet.level * XP_PER_LEVEL,
+    mood: pet.mood,
+    streakDays: pet.streak_days,
   };
-}
-
-function mergeCycle(prev, patch) {
-  const base = prev || {};
-  const out = { ...base };
-  for (const [k, v] of Object.entries(patch)) {
-    if (v != null) out[k] = v;
-  }
-  return out;
 }
 
 // --- small validators ----------------------------------------------------
@@ -807,6 +843,7 @@ function sanitizeText(v, maxLen) {
 }
 function normaliseDate(s) {
   if (typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    // Reject anything more than ±2 days from now to stop date-spoofing.
     const sent = Date.parse(`${s}T00:00:00Z`);
     const now = Date.now();
     if (Math.abs(sent - now) <= 2 * 86400 * 1000) return s;

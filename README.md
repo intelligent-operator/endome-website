@@ -82,40 +82,52 @@ npm run deploy:preview    # preview env
    - Webhooks → *Add endpoint* → `https://endome.app/api/stripe-webhook`,
      subscribe to `checkout.session.completed`. Copy the signing secret.
 
-## Storage (Workers KV) — one-time setup
+## Storage (D1) — one-time setup
 
-The dashboard stores daily logs, symptoms, pet state and notifications in
-Cloudflare Workers KV. No schema, no migrations — just create the namespace
-once and paste its ID into `wrangler.toml`.
+EndoMe uses **Cloudflare D1** (managed serverless SQLite at the edge) for all
+user health data. D1 is the right fit because we need relational queries
+(JOINs across users, daily_logs, symptoms; aggregations for trend charts;
+date-range filters; future tables for medications, appointments, labs).
 
 ### Browser route (recommended)
 
-1. Cloudflare dashboard → **Workers & Pages** → **KV** tab → **Create namespace**.
-2. Name it `endome-kv` → **Add**.
-3. Copy the **Namespace ID** shown next to it.
-4. Open `wrangler.toml` and replace `REPLACE_WITH_YOUR_KV_NAMESPACE_ID`
-   under `[[kv_namespaces]]` with that id. Commit + push.
+1. Cloudflare dashboard → **Storage & Databases** → **D1** → **Create database**.
+2. Name it `endome-db` → **Create**.
+3. Copy the **Database ID** shown on the database page.
+4. Open `wrangler.toml`, replace `REPLACE_WITH_YOUR_DATABASE_ID` under
+   `[[d1_databases]]` with that id. Commit + push.
+5. Apply the schema:
+   - Open `migrations/0001_init.sql` on GitHub → **Raw** → copy everything.
+   - In the dashboard go to the new database → **Console** tab → paste → **Execute**.
+   - You should see "Success" and no errors.
 
-That's it. The next auto-deploy creates the `KV` binding automatically and
-the worker starts writing real data.
+That's it — Cloudflare's next auto-deploy creates the `DB` binding and the
+worker starts writing real data.
 
 ### CLI route
 
 ```sh
-wrangler kv namespace create endome-kv
-# copy the returned id into wrangler.toml
-git add wrangler.toml && git commit -m "wire KV namespace" && git push
+wrangler d1 create endome-db
+# copy the returned database_id into wrangler.toml under [[d1_databases]]
+
+git add wrangler.toml && git commit -m "wire D1 database" && git push
+
+wrangler d1 migrations apply endome-db --remote      # production
+wrangler d1 migrations apply endome-db --local       # local dev DB
 ```
 
-### Key layout
+### Schema layout
 
-| Key pattern                       | What it stores                                                  |
-| --------------------------------- | --------------------------------------------------------------- |
-| `user:<username>`                 | account record (id, displayName, timezone, createdAt)           |
-| `pet:<userId>`                    | pet state (type, name, level, xp, mood, streakDays, ...)        |
-| `day:<userId>:YYYY-MM-DD`         | morning + evening + cycle + pointsTotal for one day             |
-| `sym:<userId>:YYYY-MM-DD:<ts>-r`  | one key per symptom event; entry stored in KV metadata          |
-| `notifs:<userId>`                 | server-side notifications array                                 |
+| Table | Holds |
+|---|---|
+| `users`         | account records (id, username, display_name, timezone) |
+| `daily_logs`    | one row per (user, calendar day) — morning + evening + cycle + points |
+| `symptoms`      | individual symptom events; many per day per user |
+| `pets`          | EndoPet state per user (level, xp, mood, streak) |
+| `notifications` | server-generated notifications for the bell dropdown |
+
+The schema lives in `migrations/0001_init.sql`. To evolve it later, add
+`0002_*.sql`, `0003_*.sql` etc. and re-run `migrations apply`.
 
 ## Secrets
 

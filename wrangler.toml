@@ -44,15 +44,18 @@ STRIPE_DNA_PRICE_ID = "price_replace_me"
 enabled = true
 
 # ----------------------------------------------------------------------
-# Workers KV — primary storage (users, daily logs, symptoms, pets, notifs)
+# D1 — relational storage for users, daily logs, symptoms, pets, notifs.
 # One-time setup:
-#   Cloudflare dashboard → Workers & Pages → KV → Create namespace
-#   name it "endome-kv", copy the namespace id, paste below.
-# Or via CLI: wrangler kv namespace create endome-kv
+#   Cloudflare dashboard → Storage & databases → D1 → Create database
+#   name it "endome-db", copy the Database ID, paste below.
+# Or via CLI: wrangler d1 create endome-db
+# Then apply migrations (see README "Storage" section).
 # ----------------------------------------------------------------------
-[[kv_namespaces]]
-binding = "KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+[[d1_databases]]
+binding = "DB"
+database_name = "endome-db"
+database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+migrations_dir = "migrations"
 
 # Preview / staging environment used by CI on non-main branches.
 [env.preview]
