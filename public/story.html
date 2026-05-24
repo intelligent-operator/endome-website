@@ -49,31 +49,32 @@
     </aside>
 
     <main class="dash-main story-main">
-      <header class="story-header">
-        <div class="story-hero">
-          <h1>Your Story</h1>
-          <p class="story-lead">A guided path through endometriosis — from first symptoms to a treatment plan. We mark off what we can; you mark off the rest. Take it at your pace.</p>
+      <section class="story-hero-card">
+        <div class="story-hero-text">
+          <p class="story-eyebrow">Your story</p>
+          <h1>The journey to answers, your way.</h1>
+          <p class="story-lead">A practical, step-by-step path from first symptoms to a treatment plan that actually fits your life. We mark off what we can. You mark off the rest.</p>
         </div>
-        <div class="story-ring-wrap">
-          <svg viewBox="0 0 120 120" width="120" height="120" class="story-ring" aria-hidden="true">
-            <circle cx="60" cy="60" r="52" fill="none" stroke="#ffd6e0" stroke-width="12"/>
-            <circle id="ring-progress" cx="60" cy="60" r="52" fill="none" stroke="url(#ringGrad)" stroke-width="12"
-              stroke-dasharray="326.7" stroke-dashoffset="326.7" stroke-linecap="round"
-              transform="rotate(-90 60 60)" style="transition:stroke-dashoffset .6s ease"/>
+        <div class="story-hero-ring">
+          <svg viewBox="0 0 160 160" width="160" height="160" aria-hidden="true">
+            <circle cx="80" cy="80" r="68" fill="none" stroke="#ffe2eb" stroke-width="14"/>
+            <circle id="ring-progress" cx="80" cy="80" r="68" fill="none" stroke="url(#ringGrad)" stroke-width="14"
+              stroke-dasharray="427.3" stroke-dashoffset="427.3" stroke-linecap="round"
+              transform="rotate(-90 80 80)" style="transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1)"/>
             <defs>
               <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#ff4e8a"/>
+                <stop offset="0%"  stop-color="#ff4e8a"/>
                 <stop offset="100%" stop-color="#ffb380"/>
               </linearGradient>
             </defs>
-            <text id="ring-percent" x="60" y="58" text-anchor="middle" font-size="24" font-weight="700" fill="#ff4e8a" font-family="Poppins,sans-serif">0%</text>
-            <text id="ring-fraction" x="60" y="78" text-anchor="middle" font-size="11" fill="#7a5f6c" font-family="Poppins,sans-serif">0 of 12</text>
+            <text id="ring-percent"  x="80" y="78" text-anchor="middle" font-size="30" font-weight="700" fill="#ff4e8a" font-family="Poppins,sans-serif">0%</text>
+            <text id="ring-fraction" x="80" y="100" text-anchor="middle" font-size="12" font-weight="500" fill="#7a5f6c" font-family="Poppins,sans-serif">0 of 12 steps</text>
           </svg>
         </div>
-      </header>
+      </section>
 
       <div id="story-phases">
-        <p class="empty-state">Loading your story…</p>
+        <p class="story-empty">Loading your story…</p>
       </div>
     </main>
   </div>

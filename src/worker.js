@@ -104,6 +104,12 @@ export default {
           if (url.pathname === "/api/me/story/uncheck" && request.method === "POST") {
             return jsonHeaders(await uncheckStory(request, env, user));
           }
+          if (url.pathname === "/api/me/order/dna" && request.method === "POST") {
+            return jsonHeaders(await postDnaOrder(request, env, user));
+          }
+          if (url.pathname === "/api/me/results/dna" && request.method === "POST") {
+            return jsonHeaders(await postDnaResults(request, env, user));
+          }
           const dismissMatch = url.pathname.match(/^\/api\/me\/notifications\/(\d+)\/dismiss$/);
           if (dismissMatch && request.method === "POST") {
             return jsonHeaders(await dismissNotification(env, user, +dismissMatch[1]));
@@ -979,7 +985,6 @@ async function getOrCreateUser(env, username) {
        VALUES (?, 'luna', 'Luna', 1, 0, 'happy', 0, ?)`
     ).bind(id, now),
   ]);
-  await markStoryStep(env, id, "welcome", "auto");
   return { id, username, display_name: display, timezone: "UTC" };
 }
 
@@ -1115,7 +1120,6 @@ async function postMorningCheckin(request, env, user) {
   ).run();
 
   const pet = await awardXp(env, user.id, pointsAwarded, date);
-  await markStoryStep(env, user.id, "first_morning", "auto");
   return json({ ok: true, pointsAwarded, fullDayBonus, pet });
 }
 
@@ -1215,7 +1219,6 @@ async function postSymptom(request, env, user) {
   ]);
 
   const pet = await awardXp(env, user.id, points, date);
-  await markStoryStep(env, user.id, "first_symptom", "auto");
   return json({ ok: true, pointsAwarded: points, pet });
 }
 
@@ -1275,37 +1278,92 @@ async function putPet(request, env, user) {
 
   const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
     .bind(user.id).first();
-  await markStoryStep(env, user.id, "pick_pet", "auto");
   return json({ ok: true, pet: petResponse(pet) });
 }
 
 // =============================================================================
-// YOUR STORY — milestone checklist with mixed auto + manual completion
+// YOUR STORY — milestone checklist tied to real product actions.
+// Steps have one of three types:
+//   action  — has a CTA button on the right; can only be marked via the API
+//             endpoint listed in actionEndpoint (the user can't tick it off).
+//   auto    — completed by app activity (e.g. logging N days); rendered with
+//             a small progress hint and no checkbox.
+//   manual  — the user ticks it off themselves with a real checkbox.
+// A step can also list `requires: <other_step_id>` — until that step is
+// completed the step renders locked.
 // =============================================================================
 const STORY_STEPS = [
-  // Phase 1: Pre-screening — getting to know yourself
-  { id: "welcome",        phase: "Pre-screening", title: "Welcome to EndoMe",         desc: "You've taken the first step by signing up.",                          icon: "🌸", auto: true },
-  { id: "pick_pet",       phase: "Pre-screening", title: "Choose your EndoPet",       desc: "Pick the companion who'll walk this journey with you.",              icon: "🐾", auto: true },
-  { id: "first_symptom",  phase: "Pre-screening", title: "Log your first symptom",    desc: "Capture what your body is telling you, as it happens.",              icon: "📝", auto: true },
-  { id: "first_morning",  phase: "Pre-screening", title: "Try a morning check-in",    desc: "Mood, energy, pain, cycle — a 30-second tune-in.",                    icon: "🌅", auto: true },
-  { id: "streak_7",       phase: "Pre-screening", title: "Build a 7-day streak",      desc: "A week of consistent tracking. Patterns start to surface.",          icon: "🔥", auto: true },
+  // Phase 1 — Get insights from your body
+  { id: "order_dna", phase: "Get insights", phaseDesc: "Real data about what's happening inside.",
+    title: "Request your EndoMe DNA test",
+    desc: "Order the at-home DNA kit that maps the markers most linked to endometriosis.",
+    icon: "🧬", type: "action",
+    actionLabel: "Request EndoMe DNA test", actionEndpoint: "/api/me/order/dna" },
 
-  // Phase 2: Medical pathway — getting answers
-  { id: "talk_gp",        phase: "Diagnosis",     title: "Talk to your GP",           desc: "Take your symptom history to a doctor and start the conversation.",  icon: "👩‍⚕️", auto: false },
-  { id: "order_dna",      phase: "Diagnosis",     title: "Order your EndoMe DNA kit", desc: "Map the genetic markers most linked to endometriosis at home.",      icon: "🧬", auto: false },
-  { id: "see_specialist", phase: "Diagnosis",     title: "See a specialist",          desc: "Get referred to a gynaecologist who knows endometriosis.",            icon: "🏥", auto: false },
-  { id: "diagnosis",      phase: "Diagnosis",     title: "Receive your diagnosis",    desc: "Formal diagnosis (or rule-out) from your specialist.",                icon: "📋", auto: false },
+  { id: "dna_results", phase: "Get insights",
+    title: "Upload your DNA results",
+    desc: "Send back your sample, then upload your results here when they arrive (2–3 weeks).",
+    icon: "📊", type: "action", requires: "order_dna",
+    actionLabel: "Upload results", actionEndpoint: "/api/me/results/dna" },
 
-  // Phase 3: Living with endo — care + community
-  { id: "treatment",      phase: "Management",    title: "Start a treatment plan",    desc: "Agree a plan with your specialist — lifestyle, meds, or surgery.",   icon: "💊", auto: false },
-  { id: "habits",         phase: "Management",    title: "Build healthy habits",      desc: "Sleep, movement, nutrition — small daily wins compound.",             icon: "🌿", auto: false },
-  { id: "community",      phase: "Management",    title: "Connect with community",    desc: "You're not alone — share your story when you're ready.",              icon: "💖", auto: false },
+  { id: "log_14_days", phase: "Get insights",
+    title: "Log symptoms for 14 days",
+    desc: "Two weeks of consistent tracking is enough to start seeing patterns in your story.",
+    icon: "📈", type: "auto", autoLabel: "Tracks automatically" },
+
+  // Phase 2 — Talk to your doctor
+  { id: "prepare_gp", phase: "Talk to your doctor", phaseDesc: "Bring the receipts. The right preparation changes how this conversation goes.",
+    title: "Prepare for your GP visit",
+    desc: "Pull together your symptom history, your DNA results, and a list of questions.",
+    icon: "📝", type: "manual" },
+
+  { id: "talk_gp", phase: "Talk to your doctor",
+    title: "Talk to your GP about endometriosis",
+    desc: "Share what you've tracked. Be specific: pain, cycle, what you've already tried.",
+    icon: "👩‍⚕️", type: "manual" },
+
+  { id: "referral", phase: "Talk to your doctor",
+    title: "Get a specialist referral",
+    desc: "Ask for a gynaecologist who specifically works with endometriosis patients.",
+    icon: "📋", type: "manual" },
+
+  // Phase 3 — Diagnosis
+  { id: "specialist", phase: "Diagnosis", phaseDesc: "The path to answers — gather everything, then bring it together.",
+    title: "See an endo specialist",
+    desc: "Bring your records, your DNA results, and the questions you prepared.",
+    icon: "🏥", type: "manual" },
+
+  { id: "imaging", phase: "Diagnosis",
+    title: "Get pelvic imaging",
+    desc: "Pelvic ultrasound or MRI as recommended by your specialist.",
+    icon: "🔬", type: "manual" },
+
+  { id: "diagnosis", phase: "Diagnosis",
+    title: "Receive your diagnosis",
+    desc: "Formal diagnosis (or ruling out) from your specialist. Whatever it says, you're not alone.",
+    icon: "📜", type: "manual" },
+
+  // Phase 4 — Live well
+  { id: "treatment", phase: "Live well", phaseDesc: "Beyond diagnosis. This is the day-to-day work that adds up.",
+    title: "Agree a treatment plan",
+    desc: "Lifestyle, hormonal options, pain management, surgery — discuss the right mix with your specialist.",
+    icon: "💊", type: "manual" },
+
+  { id: "habits", phase: "Live well",
+    title: "Build daily habits that help",
+    desc: "Sleep, gentle movement, anti-inflammatory eating, stress care. Small things, repeated.",
+    icon: "🌿", type: "manual" },
+
+  { id: "community", phase: "Live well",
+    title: "Connect with the EndoMe community",
+    desc: "Share your story with others who get it — when you're ready.",
+    icon: "💖", type: "manual" },
 ];
 const STORY_STEP_IDS = new Set(STORY_STEPS.map((s) => s.id));
+const STORY_ACTION_TYPES = new Set(["action"]);
 
 async function getStory(env, user) {
-  // Tolerant of a missing table — if migration 0004 hasn't been applied yet,
-  // we still render the journey with zero progress instead of 500ing.
+  // Tolerant of a missing story_progress table.
   let rows = { results: [] };
   try {
     rows = await env.DB.prepare(
@@ -1314,16 +1372,30 @@ async function getStory(env, user) {
   } catch (err) {
     console.warn("story_progress query failed (table missing?):", err?.message || err);
   }
+
+  // Apply on-the-fly auto-completion for "log_14_days" without needing a cron.
+  // Also re-asserts the dna_* steps based on the users table, so even if the
+  // story_progress row got nuked the state remains consistent.
+  await reconcileAutoSteps(env, user);
+  // Re-fetch after the reconcile (cheap, single user).
+  try {
+    rows = await env.DB.prepare(
+      "SELECT step_id, completed_at, completed_by FROM story_progress WHERE user_id = ?"
+    ).bind(user.id).all();
+  } catch {}
+
   const done = new Map();
   for (const r of rows.results || []) done.set(r.step_id, r);
 
   const steps = STORY_STEPS.map((s) => {
     const d = done.get(s.id);
+    const locked = !!(s.requires && !done.has(s.requires));
     return {
       ...s,
       completed:   !!d,
       completedAt: d?.completed_at || null,
       completedBy: d?.completed_by || null,
+      locked,
     };
   });
 
@@ -1336,11 +1408,48 @@ async function getStory(env, user) {
   });
 }
 
+// Reasserts auto-completable steps based on the users + logs tables.
+// Cheap enough to run on each /api/me/story call for a single user.
+async function reconcileAutoSteps(env, user) {
+  // log_14_days: count distinct YYYY-MM-DD where the user logged anything.
+  try {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS days FROM (
+         SELECT log_date FROM symptoms WHERE user_id = ?
+         UNION
+         SELECT log_date FROM daily_logs
+           WHERE user_id = ?
+             AND (morning_logged_at IS NOT NULL OR evening_logged_at IS NOT NULL)
+       )`
+    ).bind(user.id, user.id).first();
+    if ((row?.days || 0) >= 14) {
+      await markStoryStep(env, user.id, "log_14_days", "auto");
+    }
+  } catch (err) {
+    console.warn("reconcile log_14_days failed:", err?.message || err);
+  }
+
+  // dna_ordered_at / dna_results_at: drive order_dna + dna_results steps.
+  try {
+    const u = await env.DB.prepare(
+      "SELECT dna_ordered_at, dna_results_at FROM users WHERE id = ?"
+    ).bind(user.id).first();
+    if (u?.dna_ordered_at) await markStoryStep(env, user.id, "order_dna", "auto");
+    if (u?.dna_results_at) await markStoryStep(env, user.id, "dna_results", "auto");
+  } catch (err) {
+    console.warn("reconcile DNA steps failed:", err?.message || err);
+  }
+}
+
 async function checkStory(request, env, user) {
   const body = await readJsonSafe(request);
   const stepId = typeof body?.stepId === "string" ? body.stepId : null;
   if (!stepId || !STORY_STEP_IDS.has(stepId)) {
     return json({ error: "Unknown step" }, 400);
+  }
+  const step = STORY_STEPS.find((s) => s.id === stepId);
+  if (step.type !== "manual") {
+    return json({ error: "This step is completed automatically — no need to tick it." }, 400);
   }
   await markStoryStep(env, user.id, stepId, "manual");
   return getStory(env, user);
@@ -1352,10 +1461,40 @@ async function uncheckStory(request, env, user) {
   if (!stepId || !STORY_STEP_IDS.has(stepId)) {
     return json({ error: "Unknown step" }, 400);
   }
+  const step = STORY_STEPS.find((s) => s.id === stepId);
+  if (step.type !== "manual") {
+    return json({ error: "Auto steps can't be unchecked manually." }, 400);
+  }
   await env.DB.prepare(
     "DELETE FROM story_progress WHERE user_id = ? AND step_id = ?"
   ).bind(user.id, stepId).run();
   return getStory(env, user);
+}
+
+// --- DNA test order + results upload --------------------------------------
+async function postDnaOrder(_request, env, user) {
+  const now = nowSec();
+  await env.DB.prepare(
+    "UPDATE users SET dna_ordered_at = COALESCE(dna_ordered_at, ?) WHERE id = ?"
+  ).bind(now, user.id).run();
+  await markStoryStep(env, user.id, "order_dna", "auto");
+  return json({ ok: true, dna_ordered_at: now });
+}
+
+async function postDnaResults(_request, env, user) {
+  // First require an order to exist.
+  const u = await env.DB.prepare(
+    "SELECT dna_ordered_at FROM users WHERE id = ?"
+  ).bind(user.id).first();
+  if (!u?.dna_ordered_at) {
+    return json({ error: "Order your EndoMe DNA test first." }, 400);
+  }
+  const now = nowSec();
+  await env.DB.prepare(
+    "UPDATE users SET dna_results_at = COALESCE(dna_results_at, ?) WHERE id = ?"
+  ).bind(now, user.id).run();
+  await markStoryStep(env, user.id, "dna_results", "auto");
+  return json({ ok: true, dna_results_at: now });
 }
 
 // Idempotent — first call sets the row, subsequent calls are no-ops.
@@ -1400,8 +1539,6 @@ async function awardXp(env, userId, points, logDate) {
   await env.DB.prepare(
     "UPDATE pets SET xp = ?, level = ?, mood = ?, streak_days = ?, last_log_date = ?, updated_at = ? WHERE user_id = ?"
   ).bind(xp, level, mood, streak, logDate, nowSec(), userId).run();
-
-  if (streak >= 7) await markStoryStep(env, userId, "streak_7", "auto");
 
   return { ...petResponse({ ...pet, xp, level, mood, streak_days: streak }), leveledUp };
 }

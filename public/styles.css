@@ -99,6 +99,12 @@ p{margin:0 0 .6em}
 .nav-signin{font-size:14px;font-weight:600;color:#ff4e8a;padding:6px 4px}
 .nav-signin:hover{color:#d83a72;text-decoration:underline}
 
+/* Auth-aware nav: default hides "signed-in" variants. When app.js confirms a
+   live session it sets <body class="is-signed-in"> which flips visibility. */
+.nav-when-in{display:none !important}
+body.is-signed-in .nav-when-in{display:inline-flex !important}
+body.is-signed-in .nav-when-out{display:none !important}
+
 .hero-inner{
   position:relative;z-index:2;
   max-width:1240px;margin:50px auto 0;padding:0 28px;
