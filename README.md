@@ -82,6 +82,26 @@ npm run deploy:preview    # preview env
    - Webhooks → *Add endpoint* → `https://endome.app/api/stripe-webhook`,
      subscribe to `checkout.session.completed`. Copy the signing secret.
 
+## Database (D1) — one-time setup
+
+The dashboard stores daily logs, symptoms, pet state and notifications in
+Cloudflare D1.
+
+```sh
+# 1. Create the database
+wrangler d1 create endome-db
+# copy the printed `database_id` into wrangler.toml under [[d1_databases]]
+
+# 2. Apply the schema (against your production DB)
+wrangler d1 migrations apply endome-db --remote
+
+# Local dev uses a separate sqlite file in .wrangler/state — apply locally too:
+wrangler d1 migrations apply endome-db --local
+```
+
+The schema lives in `migrations/0001_init.sql`. Add a new file with the next
+number (`0002_*.sql`) when you need to evolve it.
+
 ## Secrets
 
 Set in the Cloudflare dashboard (Worker → *Settings* → *Variables and Secrets*)

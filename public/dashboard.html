@@ -36,7 +36,7 @@
       <div class="dash-user">
         <button class="bell" aria-label="Notifications">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M6 19h12l-1.5-2V11a4.5 4.5 0 10-9 0v6L6 19z" stroke="#3a2330" stroke-width="2" stroke-linejoin="round"/><path d="M10 22h4" stroke="#3a2330" stroke-width="2" stroke-linecap="round"/></svg>
-          <span class="bell-dot">3</span>
+          <span class="bell-dot" data-bind="notifCount" hidden>0</span>
         </button>
         <div class="profile">
           <div class="avatar">
@@ -83,16 +83,19 @@
 
     <!-- MAIN -->
     <main class="dash-main">
+      <!-- Contextual reminder banner (rendered by JS, time-aware) -->
+      <div id="ctx-banner-slot"></div>
+
       <!-- Welcome banner -->
       <section class="welcome-banner">
         <div class="wb-copy">
-          <h1>Welcome back, Alex <span class="wave">👋</span></h1>
+          <h1>Welcome back, <span data-bind="displayName">Alex</span> <span class="wave">👋</span></h1>
           <p class="wb-lead">Your Story Starts here</p>
           <p class="wb-text">Track your symptoms, understand your body, and get the support you deserve. You're not alone — we're here with you.</p>
           <div class="wb-actions">
-            <a class="btn btn-primary" href="#"><span class="btn-ico">✏️</span> Log Today's Symptoms</a>
-            <a class="btn btn-ghost" href="#"><span class="btn-ico">⬆</span> Upload Test Results</a>
-            <a class="btn btn-ghost" href="#"><span class="btn-ico">🧪</span> Request DNA Test</a>
+            <a class="btn btn-primary" href="#" data-modal="symptom"><span class="btn-ico">✏️</span> Log Today's Symptoms</a>
+            <a class="btn btn-ghost" href="#" data-modal="morning"><span class="btn-ico">🌅</span> Morning Check-in</a>
+            <a class="btn btn-ghost" href="#" data-modal="evening"><span class="btn-ico">🌙</span> Evening Check-in</a>
           </div>
         </div>
         <div class="wb-art" aria-hidden="true">
@@ -191,9 +194,9 @@
               <svg viewBox="0 0 100 100" width="80" height="80"><ellipse cx="50" cy="68" rx="30" ry="22" fill="#ff9bb3"/><circle cx="50" cy="50" r="26" fill="#ffb6c8"/><polygon points="28,24 38,42 22,42" fill="#ff8aab"/><polygon points="72,24 62,42 78,42" fill="#ff8aab"/><circle cx="42" cy="52" r="3" fill="#2c1320"/><circle cx="58" cy="52" r="3" fill="#2c1320"/><path d="M45 60 q5 4 10 0" stroke="#2c1320" stroke-width="1.6" fill="none"/></svg>
             </div>
             <div>
-              <strong>Luna <span class="edit-ico">✏️</span></strong>
-              <div class="ep-level">Level 4</div>
-              <span class="happy-pill">Happy</span>
+              <strong><span data-bind="petName">Luna</span> <span class="edit-ico">✏️</span></strong>
+              <div class="ep-level">Level <span data-bind="petLevel">1</span></div>
+              <span class="happy-pill" data-bind="petMoodClass">Happy</span>
             </div>
           </div>
         </div>
@@ -397,15 +400,15 @@
             <path d="M170 110 q-3 -5 -7 0 q3 5 7 8 q4 -3 7 -8 q-4 -5 -7 0z" fill="#ff5d8f"/>
           </svg>
         </div>
-        <div class="ep-name">Luna <span class="edit-ico">✏️</span></div>
+        <div class="ep-name"><span data-bind="petName">Luna</span> <span class="edit-ico">✏️</span></div>
         <div class="ep-row">
-          <span>Level 4</span>
-          <span class="happy-pill">Happy</span>
+          <span>Level <span data-bind="petLevel">1</span></span>
+          <span class="happy-pill" data-bind="petMoodClass">Happy</span>
         </div>
         <div class="xp-bar">
-          <div class="xp-fill" style="width:52%"></div>
+          <div class="xp-fill" data-bind="petXpFill" style="width:0%"></div>
         </div>
-        <div class="xp-text">420 / 800 XP</div>
+        <div class="xp-text"><span data-bind="petXp">0</span> / <span data-bind="petXpForNext">100</span> XP</div>
         <div class="unlockables">
           <strong>Unlockables</strong>
           <div class="unlock-grid">
@@ -433,7 +436,7 @@
 
       <div class="card streak-card">
         <div class="card-head"><span class="ico-tile peach">🔥</span> Streak</div>
-        <p class="card-sub">You've logged 7 days in a row!</p>
+        <p class="card-sub">You've logged <span data-bind="streakDays">0</span> day<span data-bind="streakPlural">s</span> in a row!</p>
         <div class="streak-week">
           <div><span>M</span><span class="dot done">✓</span></div>
           <div><span>T</span><span class="dot done">✓</span></div>
@@ -445,6 +448,180 @@
         </div>
       </div>
     </aside>
+  </div>
+
+  <!-- Floating "Log Symptom" button -->
+  <button id="fab-log" class="fab" type="button" aria-label="Log a symptom" data-modal="symptom">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <span>Log symptom</span>
+  </button>
+
+  <!-- Notification dropdown (anchored to the bell) -->
+  <div id="notif-dropdown" class="notif-dropdown" hidden role="dialog" aria-label="Notifications">
+    <div class="notif-head">
+      <strong>Notifications</strong>
+      <button type="button" data-close-notif aria-label="Close">×</button>
+    </div>
+    <div id="notif-list" class="notif-list">
+      <p class="notif-empty">You're all caught up.</p>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- MODAL: Morning check-in -->
+  <div class="modal" id="modal-morning" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="morning-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card modal-wide">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🌅</span>
+        <h3 id="morning-title">Good morning</h3>
+        <p>Take 30 seconds to check in with yourself.</p>
+      </header>
+      <form id="form-morning" novalidate>
+        <fieldset class="field-group">
+          <legend>Mood</legend>
+          <div class="scale-pick" data-scale="mood">
+            <button type="button" data-val="1" title="Awful">😢</button>
+            <button type="button" data-val="2" title="Low">😟</button>
+            <button type="button" data-val="3" title="Okay">😐</button>
+            <button type="button" data-val="4" title="Good">🙂</button>
+            <button type="button" data-val="5" title="Great">😊</button>
+          </div>
+        </fieldset>
+        <fieldset class="field-group">
+          <legend>Energy</legend>
+          <div class="scale-bars" data-scale="energy">
+            <button type="button" data-val="1">Drained</button>
+            <button type="button" data-val="2">Low</button>
+            <button type="button" data-val="3">Okay</button>
+            <button type="button" data-val="4">Good</button>
+            <button type="button" data-val="5">High</button>
+          </div>
+        </fieldset>
+        <fieldset class="field-group">
+          <legend>Pain</legend>
+          <div class="scale-bars pain" data-scale="pain">
+            <button type="button" data-val="1">None</button>
+            <button type="button" data-val="2">Mild</button>
+            <button type="button" data-val="3">Moderate</button>
+            <button type="button" data-val="4">Strong</button>
+            <button type="button" data-val="5">Severe</button>
+          </div>
+        </fieldset>
+        <div class="field-grid-2">
+          <label class="field">
+            <span>Sleep hours <em>(optional)</em></span>
+            <input type="number" name="sleepHours" min="0" max="24" step="0.5" placeholder="e.g. 7.5" />
+          </label>
+          <label class="field">
+            <span>Notes <em>(optional)</em></span>
+            <input type="text" name="notes" maxlength="1000" placeholder="Anything on your mind…" />
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary full">Log morning check-in <em class="xp-badge">+10 XP</em></button>
+        <p class="form-status" role="status"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Log symptom -->
+  <div class="modal" id="modal-symptom" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="symptom-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card modal-wide">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">📝</span>
+        <h3 id="symptom-title">What are you feeling?</h3>
+        <p>Log it now and we'll spot the pattern later.</p>
+      </header>
+      <form id="form-symptom" novalidate>
+        <fieldset class="field-group">
+          <legend>Symptom</legend>
+          <div class="chip-pick" data-chip="symptom">
+            <button type="button" data-val="pain">🔥 Pain</button>
+            <button type="button" data-val="fatigue">😴 Fatigue</button>
+            <button type="button" data-val="bloating">💧 Bloating</button>
+            <button type="button" data-val="nausea">🤢 Nausea</button>
+            <button type="button" data-val="cramps">⚡ Cramps</button>
+            <button type="button" data-val="headache">🧠 Headache</button>
+            <button type="button" data-val="mood">💭 Mood</button>
+            <button type="button" data-val="sleep">🌙 Sleep</button>
+            <button type="button" data-val="other">＋ Other</button>
+          </div>
+        </fieldset>
+        <fieldset class="field-group">
+          <legend>Severity</legend>
+          <div class="scale-bars pain" data-scale="severity">
+            <button type="button" data-val="1">1</button>
+            <button type="button" data-val="2">2</button>
+            <button type="button" data-val="3">3</button>
+            <button type="button" data-val="4">4</button>
+            <button type="button" data-val="5">5</button>
+          </div>
+          <p class="scale-hint">1 = barely noticeable · 5 = severe</p>
+        </fieldset>
+        <div class="field-grid-2" id="symptom-extras">
+          <label class="field" data-show-when="pain">
+            <span>Location <em>(optional)</em></span>
+            <select name="location">
+              <option value="">—</option>
+              <option>Abdomen</option>
+              <option>Lower back</option>
+              <option>Pelvis</option>
+              <option>Legs</option>
+              <option>Chest</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label class="field span-2">
+            <span>Notes <em>(optional)</em></span>
+            <input type="text" name="notes" maxlength="500" placeholder="What were you doing? Triggers?" />
+          </label>
+        </div>
+        <button type="submit" class="btn btn-primary full">Log symptom <em class="xp-badge">+5 XP</em></button>
+        <p class="form-status" role="status"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Evening check-in -->
+  <div class="modal" id="modal-evening" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="evening-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card modal-wide">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🌙</span>
+        <h3 id="evening-title">How was your day?</h3>
+        <p>A short reflection helps EndoMe learn your patterns.</p>
+      </header>
+      <form id="form-evening" novalidate>
+        <fieldset class="field-group">
+          <legend>Overall</legend>
+          <div class="scale-pick" data-scale="overall">
+            <button type="button" data-val="1">😢</button>
+            <button type="button" data-val="2">😟</button>
+            <button type="button" data-val="3">😐</button>
+            <button type="button" data-val="4">🙂</button>
+            <button type="button" data-val="5">😊</button>
+          </div>
+        </fieldset>
+        <label class="field">
+          <span>Reflection <em>(optional)</em></span>
+          <textarea name="reflection" rows="3" maxlength="2000" placeholder="What stood out today?"></textarea>
+        </label>
+        <label class="field">
+          <span>One good thing <em>(optional)</em></span>
+          <input type="text" name="gratitude" maxlength="500" placeholder="…a small win, anything." />
+        </label>
+        <button type="submit" class="btn btn-primary full">Complete evening check-in <em class="xp-badge">+15 XP</em></button>
+        <p class="form-status" role="status"></p>
+      </form>
+    </div>
   </div>
 
   <script src="/dashboard.js" defer></script>
