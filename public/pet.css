@@ -1,0 +1,268 @@
+/* =====================================================================
+   EndoPet page — tamagotchi vibes.
+   ===================================================================== */
+.pet-layout{
+  display:grid;
+  grid-template-columns:230px minmax(0,1fr);
+  gap:24px;max-width:1600px;padding:24px 32px 48px;align-items:start;
+}
+@media (max-width:1080px){
+  .pet-layout{grid-template-columns:1fr;padding:16px 14px 40px}
+}
+.pet-main{display:flex;flex-direction:column;gap:18px;min-width:0}
+
+/* ---------- Stage ---------- */
+.pet-stage-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.pet-stage{
+  position:relative;width:100%;max-width:760px;height:340px;
+  background:
+    radial-gradient(circle at 30% 30%, #fff7fb 0%, transparent 60%),
+    linear-gradient(180deg,#ffeaf2 0%, #ffd6e0 100%);
+  border-radius:28px;
+  overflow:hidden;
+  box-shadow:inset 0 -10px 30px rgba(255,77,138,.12), 0 8px 24px rgba(255,77,138,.10);
+}
+
+/* Soft clouds drifting in the background */
+.pet-cloud{position:absolute;border-radius:50%;background:rgba(255,255,255,.55);filter:blur(6px)}
+.cloud-a{width:120px;height:40px;top:20px;left:-40px;animation:drift 28s linear infinite}
+.cloud-b{width:90px;height:32px;top:60px;left:-80px;animation:drift 36s linear infinite;animation-delay:-12s}
+.cloud-c{width:140px;height:48px;top:40px;left:-120px;animation:drift 44s linear infinite;animation-delay:-22s}
+@keyframes drift{from{transform:translateX(0)} to{transform:translateX(900px)}}
+
+.pet-floor{
+  position:absolute;left:0;right:0;bottom:0;height:60px;
+  background:linear-gradient(180deg,transparent,rgba(255,255,255,.4) 60%,rgba(255,180,200,.35));
+  border-radius:0 0 28px 28px;
+}
+
+.pet-empty{
+  text-align:center;color:#7a5f6c;font-size:14px;padding:60px 24px;margin:0;
+}
+
+/* ---------- Egg state ---------- */
+.egg-scene{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+}
+.egg-shadow{
+  position:absolute;bottom:60px;left:50%;transform:translateX(-50%);
+  width:120px;height:18px;border-radius:50%;
+  background:rgba(0,0,0,.10);filter:blur(4px);
+  animation:shadow-pulse 2s ease-in-out infinite;
+}
+@keyframes shadow-pulse{
+  0%,100%{transform:translateX(-50%) scaleX(1)}
+  50%{transform:translateX(-50%) scaleX(.85)}
+}
+.egg{
+  cursor:pointer;outline:none;
+  filter:hue-rotate(var(--color-shift, 0deg));
+  animation:egg-wiggle 3s ease-in-out infinite;
+  transform-origin:50% 90%;
+  user-select:none;-webkit-user-select:none;
+  position:relative;z-index:1;
+}
+.egg:focus-visible{filter:hue-rotate(var(--color-shift,0deg)) drop-shadow(0 0 6px #ff4e8a)}
+@keyframes egg-wiggle{
+  0%, 80%, 100%{transform:rotate(0deg) translateY(0)}
+  10%{transform:rotate(-3deg) translateY(-3px)}
+  25%{transform:rotate(3deg)}
+  40%{transform:rotate(-2deg)}
+}
+.egg.nudge{animation:egg-nudge .6s ease-out}
+@keyframes egg-nudge{
+  0%{transform:rotate(0)}
+  20%{transform:rotate(-8deg) translateY(-6px)}
+  60%{transform:rotate(8deg) translateY(-3px)}
+  100%{transform:rotate(0)}
+}
+.egg.cracking{animation:egg-crack .9s ease-in forwards}
+@keyframes egg-crack{
+  0%{transform:scale(1)}
+  30%{transform:scale(1.18) rotate(-6deg)}
+  55%{transform:scale(.9) rotate(6deg)}
+  80%{transform:scale(1.3);opacity:1}
+  100%{transform:scale(0);opacity:0}
+}
+.egg-hint{
+  margin:0;padding:8px 16px;background:rgba(255,255,255,.85);
+  border-radius:999px;color:#5a3a48;font-size:13px;font-weight:600;
+  position:relative;z-index:2;
+}
+
+/* ---------- Hatched pet scene ---------- */
+.pet-scene{position:absolute;inset:0}
+.pet{
+  position:absolute;left:0;bottom:46px;
+  width:120px;height:120px;
+  transform:translateX(var(--pet-x, 50%)) scaleX(var(--pet-flip, 1));
+  transition:transform 2.6s cubic-bezier(.4,0,.2,1);
+  filter:hue-rotate(var(--color-shift, 0deg));
+  cursor:pointer;
+  /* CSS variables for the SVG paint */
+  --pet-light:#ffb6c8;
+  --pet-mid:#ff9bb3;
+}
+.pet[data-pet="poppy"]{--pet-light:#f5c184;--pet-mid:#e8a86a}
+.pet[data-pet="mochi"]{--pet-light:#f0e6fb;--pet-mid:#dcd0f0}
+.pet[data-pet="sunny"]{--pet-light:#f08b3a;--pet-mid:#e8762a}
+.pet[data-pet="coco"]{--pet-light:#b5a7d8;--pet-mid:#9d8fc7}
+.pet[data-pet="kiki"]{--pet-light:#e8b985;--pet-mid:#d9a872}
+
+.pet-body{
+  width:100%;height:100%;
+  display:flex;align-items:flex-end;justify-content:center;
+  animation:bob 2.4s ease-in-out infinite;
+}
+.pet-svg{display:block}
+
+/* Shadow under the pet */
+.pet-shadow{
+  position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);
+  width:80px;height:10px;border-radius:50%;background:rgba(0,0,0,.15);filter:blur(3px);
+  animation:shadow-pulse 2.4s ease-in-out infinite;
+}
+
+/* Speech bubble */
+.pet-thought{
+  position:absolute;top:-26px;right:8px;
+  background:#fff;border-radius:16px 16px 16px 4px;
+  padding:6px 12px;font-size:20px;line-height:1;
+  box-shadow:0 6px 14px rgba(255,77,138,.18);
+  animation:thought-pop .25s ease-out;
+}
+@keyframes thought-pop{
+  from{transform:scale(.6) translateY(6px);opacity:0}
+  to{transform:scale(1) translateY(0);opacity:1}
+}
+
+/* Bobbing keyframes */
+@keyframes bob{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+/* Walk = quicker bob + lean */
+.pet[data-state="walk"] .pet-body{animation:walk 1s ease-in-out infinite}
+@keyframes walk{
+  0%,100%{transform:translateY(0) rotate(-2deg)}
+  50%{transform:translateY(-10px) rotate(2deg)}
+}
+/* Sad = slow droop */
+.pet[data-state="sad"] .pet-body{animation:droop 3s ease-in-out infinite}
+@keyframes droop{
+  0%,100%{transform:translateY(2px) rotate(-1deg)}
+  50%{transform:translateY(4px) rotate(1deg)}
+}
+/* Sleep / look — gentler */
+.pet[data-state="sleep"] .pet-body{animation:sleep 4.5s ease-in-out infinite}
+@keyframes sleep{
+  0%,100%{transform:translateY(0) rotate(-1deg)}
+  50%{transform:translateY(-2px) rotate(1deg)}
+}
+.pet[data-state="hungry"] .pet-body{animation:hungry 1.4s ease-in-out infinite}
+@keyframes hungry{
+  0%,100%{transform:translateY(0)}
+  20%{transform:translateY(-4px) rotate(-2deg)}
+  40%{transform:translateY(0) rotate(2deg)}
+}
+/* Action-triggered animations */
+.pet[data-action="bounce"] .pet-body{animation:bounce .45s cubic-bezier(.4,1.5,.6,1)}
+@keyframes bounce{
+  0%{transform:translateY(0)}
+  40%{transform:translateY(-30px)}
+  100%{transform:translateY(0)}
+}
+.pet[data-action="eat"] .pet-body{animation:eat .45s ease-in-out 2}
+@keyframes eat{
+  0%,100%{transform:scaleY(1)}
+  50%{transform:scaleY(.9)}
+}
+.pet[data-action="wiggle"] .pet-body{animation:wiggle .5s ease-in-out}
+@keyframes wiggle{
+  0%,100%{transform:rotate(0)}
+  25%{transform:rotate(-8deg)}
+  75%{transform:rotate(8deg)}
+}
+
+/* Blinking eyes */
+.pet-eye{animation:blink 4.8s ease-in-out infinite}
+.pet-eye.right{animation-delay:.1s}
+@keyframes blink{
+  0%,46%,54%,100%{transform:scaleY(1)}
+  48%,52%{transform:scaleY(.05)}
+}
+
+/* ---------- Name + level row ---------- */
+.pet-name-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:6px}
+#pet-name{font-size:30px;margin:0;letter-spacing:-.4px;color:#2b1922}
+.pet-level-badge{
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.04em;
+  box-shadow:0 4px 12px rgba(255,77,138,.3);
+}
+.pet-mood-badge{padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700}
+.pet-mood-badge.mood-happy{background:#dff7e2;color:#3a9b4b}
+.pet-mood-badge.mood-neutral{background:#fff0d6;color:#c2811a}
+.pet-mood-badge.mood-sad{background:#fee2e6;color:#c8295e}
+
+/* ---------- Stats ---------- */
+.pet-stats{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;
+  background:#fff;border-radius:18px;padding:18px 20px;
+  box-shadow:0 4px 14px rgba(255,77,138,.06);
+}
+.stat-head{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;color:#3a2330}
+.stat-label{font-weight:600}
+.stat-value{font-weight:600;color:#7a5f6c;font-variant-numeric:tabular-nums}
+.stat-bar{height:8px;background:#ffe2eb;border-radius:8px;overflow:hidden}
+.stat-fill{height:100%;border-radius:8px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.stat-fill-xp{background:linear-gradient(90deg,#ff4e8a,#ff7aa6)}
+.stat-fill-happy{background:linear-gradient(90deg,#5cc77c,#3a9b4b)}
+.stat-fill-happy[data-tone="okay"]{background:linear-gradient(90deg,#f5c542,#f59042)}
+.stat-fill-happy[data-tone="bad"] {background:linear-gradient(90deg,#f59042,#e8344a)}
+.stat-fill-hunger{background:linear-gradient(90deg,#5cc77c,#a8d063)}
+.stat-fill-hunger[data-tone="okay"]{background:linear-gradient(90deg,#f5c542,#f59042)}
+.stat-fill-hunger[data-tone="bad"] {background:linear-gradient(90deg,#f59042,#e8344a)}
+
+/* ---------- Actions ---------- */
+.pet-actions{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+}
+.pet-action{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:18px;
+  padding:18px 14px;cursor:pointer;font-family:inherit;
+  transition:transform .12s, box-shadow .15s, border-color .15s, background .15s;
+}
+.pet-action:hover{
+  transform:translateY(-2px);border-color:#ff4e8a;
+  box-shadow:0 12px 26px rgba(255,77,138,.16);
+}
+.pet-action:active{transform:translateY(0)}
+.pet-action:disabled{opacity:.6;cursor:wait}
+.pet-action-emoji{font-size:30px;line-height:1}
+.pet-action > span:nth-child(2){font-size:15px;font-weight:600;color:#3a2330}
+.pet-action-hint{font-size:11px;color:#7a5f6c;font-weight:500}
+
+/* ---------- Info card ---------- */
+.pet-info-card{
+  display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;
+  background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+  border-radius:18px;padding:20px 24px;
+}
+.pet-info-icon{
+  width:48px;height:48px;border-radius:14px;background:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:22px;
+  box-shadow:0 4px 12px rgba(255,77,138,.15);
+}
+.pet-info-card h3{font-size:15px;margin:0 0 4px;color:#2b1922}
+.pet-info-card p{font-size:13px;color:#5a3a48;line-height:1.55;margin:0}
+
+@media (max-width:640px){
+  .pet-stage{height:280px}
+  .pet-actions{grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .pet-action{padding:12px 8px}
+  .pet-action-emoji{font-size:24px}
+  .pet-action > span:nth-child(2){font-size:13px}
+}

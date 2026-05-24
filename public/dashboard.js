@@ -48,6 +48,8 @@ async function refresh() {
   } catch (err) {
     console.warn("dashboard refresh failed:", err.message);
     toast("Could not load latest data. Check connection.", "err");
+  } finally {
+    document.getElementById("page-loader")?.classList.add("is-hidden");
   }
 }
 

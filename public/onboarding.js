@@ -14,7 +14,10 @@
         el.textContent = data.user.displayName || data.user.username || "friend";
       });
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => {
+      document.getElementById("page-loader")?.classList.add("is-hidden");
+    });
 
   // --- Step nav ----------------------------------------------------------
   function showStep(n) {

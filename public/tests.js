@@ -8,7 +8,10 @@
       });
       paint(data?.tests || {});
     })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => {
+      document.getElementById("page-loader")?.classList.add("is-hidden");
+    });
 
   function paint(tests) {
     for (const [testId, state] of Object.entries(tests)) {

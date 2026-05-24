@@ -10,7 +10,11 @@ directory = "./public"
 binding = "ASSETS"
 not_found_handling = "404-page"
 html_handling = "auto-trailing-slash"
-run_worker_first = false
+# Worker runs before assets so the auth gate fires for /dashboard, /story,
+# /tests, /pet, /onboarding *before* the HTML is ever served. With the
+# default (false) the assets binding short-circuits the worker for any URL
+# that maps to a file, which caused the brief flash of protected pages.
+run_worker_first = true
 
 # Public, non-secret config. Override per-environment as needed.
 [vars]

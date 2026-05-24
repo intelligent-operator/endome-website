@@ -633,3 +633,36 @@ body.modal-open{overflow:hidden}
   text-indent:7px;
 }
 .otp-field input::placeholder{color:#ffd6e0;letter-spacing:14px}
+
+/* ============ Global page loader (account pages) ============ */
+.page-loader{
+  position:fixed;inset:0;z-index:9999;
+  background:radial-gradient(circle at 30% 20%, #fff5f8 0%, #ffeaf2 60%, #ffd6e0 100%);
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .35s ease-out, visibility 0s linear .35s;
+}
+.page-loader.is-hidden{opacity:0;visibility:hidden;pointer-events:none}
+.page-loader-content{display:flex;flex-direction:column;align-items:center;gap:18px}
+.page-loader-logo{
+  width:72px;height:72px;border-radius:18px;
+  box-shadow:0 12px 28px rgba(255,77,138,.25);
+  animation:loader-pulse 1.6s ease-in-out infinite;
+}
+@keyframes loader-pulse{
+  0%,100%{transform:scale(1) translateY(0)}
+  50%{transform:scale(1.05) translateY(-3px)}
+}
+.page-loader-bar{
+  width:140px;height:4px;background:rgba(255,77,138,.18);border-radius:4px;overflow:hidden;
+  position:relative;
+}
+.page-loader-bar::after{
+  content:"";position:absolute;inset:0;width:40%;
+  background:linear-gradient(90deg,#ff4e8a,#ff7aa6);border-radius:4px;
+  animation:loader-bar 1.2s ease-in-out infinite;
+}
+@keyframes loader-bar{
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(350%)}
+}
+.page-loader-text{font-size:13px;color:#7a5f6c;font-weight:600;letter-spacing:.03em}

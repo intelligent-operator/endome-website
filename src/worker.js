@@ -92,8 +92,23 @@ export default {
           if (url.pathname === "/api/me/notifications" && request.method === "GET") {
             return jsonHeaders(await getNotifications(env, user));
           }
+          if (url.pathname === "/api/me/pet" && request.method === "GET") {
+            return jsonHeaders(await getMePet(env, user));
+          }
           if (url.pathname === "/api/me/pet" && request.method === "PUT") {
             return jsonHeaders(await putPet(request, env, user));
+          }
+          if (url.pathname === "/api/me/pet/hatch" && request.method === "POST") {
+            return jsonHeaders(await postPetHatch(env, user));
+          }
+          if (url.pathname === "/api/me/pet/feed" && request.method === "POST") {
+            return jsonHeaders(await postPetFeed(env, user));
+          }
+          if (url.pathname === "/api/me/pet/play" && request.method === "POST") {
+            return jsonHeaders(await postPetPlay(env, user));
+          }
+          if (url.pathname === "/api/me/pet/pat" && request.method === "POST") {
+            return jsonHeaders(await postPetPat(env, user));
           }
           if (url.pathname === "/api/me/story" && request.method === "GET") {
             return jsonHeaders(await getStory(env, user));
@@ -141,7 +156,8 @@ export default {
       url.pathname === "/dashboard"   || url.pathname.startsWith("/dashboard/") ||
       url.pathname === "/onboarding"  || url.pathname.startsWith("/onboarding/") ||
       url.pathname === "/story"       || url.pathname.startsWith("/story/") ||
-      url.pathname === "/tests"       || url.pathname.startsWith("/tests/")
+      url.pathname === "/tests"       || url.pathname.startsWith("/tests/") ||
+      url.pathname === "/pet"         || url.pathname.startsWith("/pet/")
     ) {
       const session = await readSession(request, env);
       if (!session) {
@@ -994,8 +1010,8 @@ async function getOrCreateUser(env, username) {
       "INSERT INTO users (id, username, display_name, timezone, created_at) VALUES (?, ?, ?, 'UTC', ?)"
     ).bind(id, username, display, now),
     env.DB.prepare(
-      `INSERT INTO pets (user_id, pet_type, pet_name, level, xp, mood, streak_days, updated_at)
-       VALUES (?, 'luna', 'Luna', 1, 0, 'happy', 0, ?)`
+      `INSERT INTO pets (user_id, pet_type, pet_name, level, xp, mood, streak_days, color_seed, hunger, happiness, updated_at)
+       VALUES (?, 'luna', 'Luna', 1, 0, 'happy', 0, ABS(RANDOM() % 360), 0, 100, ?)`
     ).bind(id, now),
   ]);
   return { id, username, display_name: display, timezone: "UTC" };
@@ -1307,6 +1323,112 @@ async function putPet(request, env, user) {
   const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
     .bind(user.id).first();
   return json({ ok: true, pet: petResponse(pet) });
+}
+
+// =============================================================================
+// PET — Tamagotchi-style state: hatching, hunger, happiness, actions.
+// =============================================================================
+
+// Per-hour decay/growth (so the pet feels alive between sessions).
+const HUNGER_PER_HOUR    = 4;
+const HAPPINESS_PER_HOUR = 3;
+
+async function getMePet(env, user) {
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
+    .bind(user.id).first();
+  return json({ pet: petFullResponse(pet) });
+}
+
+async function postPetHatch(env, user) {
+  const now = nowSec();
+  await env.DB.prepare(
+    "UPDATE pets SET hatched_at = COALESCE(hatched_at, ?), updated_at = ?, " +
+    "last_fed_at = COALESCE(last_fed_at, ?), last_played_at = COALESCE(last_played_at, ?) " +
+    "WHERE user_id = ?"
+  ).bind(now, now, now, now, user.id).run();
+  return getMePet(env, user);
+}
+
+async function postPetFeed(env, user) {
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
+    .bind(user.id).first();
+  if (!pet?.hatched_at) return json({ error: "Hatch your pet first" }, 400);
+  const live = liveStats(pet);
+  const hunger = Math.max(0, live.hunger - 45);
+  const happiness = Math.min(100, live.happiness + 8);
+  const now = nowSec();
+  await env.DB.prepare(
+    "UPDATE pets SET hunger = ?, happiness = ?, last_fed_at = ?, updated_at = ? WHERE user_id = ?"
+  ).bind(hunger, happiness, now, now, user.id).run();
+  return getMePet(env, user);
+}
+
+async function postPetPlay(env, user) {
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
+    .bind(user.id).first();
+  if (!pet?.hatched_at) return json({ error: "Hatch your pet first" }, 400);
+  const live = liveStats(pet);
+  const happiness = Math.min(100, live.happiness + 25);
+  const hunger = Math.min(100, live.hunger + 10);   // playing burns energy
+  const now = nowSec();
+  // Small XP reward for playing.
+  let xp = (pet.xp || 0) + 3;
+  let level = pet.level || 1;
+  let leveledUp = false;
+  while (xp >= level * 100) { xp -= level * 100; level += 1; leveledUp = true; }
+  await env.DB.prepare(
+    "UPDATE pets SET happiness = ?, hunger = ?, xp = ?, level = ?, last_played_at = ?, updated_at = ? WHERE user_id = ?"
+  ).bind(happiness, hunger, xp, level, now, now, user.id).run();
+  const res = await getMePet(env, user);
+  const data = JSON.parse(await res.clone().text());
+  if (leveledUp) data.leveledUp = true;
+  return json(data);
+}
+
+async function postPetPat(env, user) {
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
+    .bind(user.id).first();
+  if (!pet?.hatched_at) return json({ error: "Hatch your pet first" }, 400);
+  const live = liveStats(pet);
+  const happiness = Math.min(100, live.happiness + 8);
+  const now = nowSec();
+  await env.DB.prepare(
+    "UPDATE pets SET happiness = ?, last_played_at = COALESCE(last_played_at, ?), updated_at = ? WHERE user_id = ?"
+  ).bind(happiness, now, now, user.id).run();
+  return getMePet(env, user);
+}
+
+// Apply time-based decay so hunger/happiness reflect how long it's been.
+function liveStats(pet) {
+  const now = nowSec();
+  const hoursFed   = pet.last_fed_at    ? Math.max(0, (now - pet.last_fed_at)    / 3600) : 0;
+  const hoursPlay  = pet.last_played_at ? Math.max(0, (now - pet.last_played_at) / 3600) : 0;
+  const hunger     = Math.max(0, Math.min(100, (pet.hunger || 0)    + Math.floor(hoursFed  * HUNGER_PER_HOUR)));
+  const happiness  = Math.max(0, Math.min(100, (pet.happiness || 100) - Math.floor(hoursPlay * HAPPINESS_PER_HOUR)));
+  return { hunger, happiness };
+}
+
+function petFullResponse(pet) {
+  if (!pet) return null;
+  const live = liveStats(pet);
+  const xpForNext = (pet.level || 1) * 100;
+  const mood = live.happiness >= 70 ? "happy" : live.happiness >= 35 ? "neutral" : "sad";
+  return {
+    type:        pet.pet_type,
+    name:        pet.pet_name,
+    level:       pet.level || 1,
+    xp:          pet.xp || 0,
+    xpForNext,
+    mood,
+    streakDays:  pet.streak_days || 0,
+    hatchedAt:   pet.hatched_at || null,
+    isHatched:   !!pet.hatched_at,
+    colorSeed:   pet.color_seed || 0,
+    hunger:      live.hunger,
+    happiness:   live.happiness,
+    lastFedAt:   pet.last_fed_at || null,
+    lastPlayedAt: pet.last_played_at || null,
+  };
 }
 
 // =============================================================================

@@ -27,6 +27,8 @@
       render(data);
     } catch {
       phasesEl.innerHTML = `<p class="story-empty">Couldn't load your story. Refresh to try again.</p>`;
+    } finally {
+      document.getElementById("page-loader")?.classList.add("is-hidden");
     }
   }
 

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EndoPet – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/dashboard.css" />
+  <link rel="stylesheet" href="/pet.css" />
+</head>
+<body class="dash-body">
+  <!-- Page loader (hidden once data lands) -->
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-content">
+      <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
+      <div class="page-loader-bar"></div>
+      <p class="page-loader-text">Loading your EndoPet…</p>
+    </div>
+  </div>
+
+  <header class="dash-topbar">
+    <div class="dash-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <div class="dash-spacer"></div>
+      <div class="dash-user">
+        <button class="bell" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M6 19h12l-1.5-2V11a4.5 4.5 0 10-9 0v6L6 19z" stroke="#3a2330" stroke-width="2" stroke-linejoin="round"/><path d="M10 22h4" stroke="#3a2330" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <div class="profile">
+          <div class="avatar">
+            <svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/><circle cx="20" cy="16" r="7" fill="#8a4a2a"/><path d="M6 36c2-8 8-12 14-12s12 4 14 12" fill="#f5c69b"/><circle cx="20" cy="16" r="6" fill="#f5c69b"/></svg>
+          </div>
+          <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
+        </div>
+        <a href="/api/logout" class="signout" title="Sign out" aria-label="Sign out">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" stroke="#7a5f6c" stroke-width="2" stroke-linecap="round"/><path d="M10 17l5-5-5-5M15 12H3" stroke="#7a5f6c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-layout pet-layout">
+    <aside class="dash-sidebar">
+      <nav class="side-nav">
+        <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
+        <a href="/story"><span class="ico">📖</span> Your Story</a>
+        <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a class="active" href="/pet"><span class="ico">🐾</span> EndoPet</a>
+      </nav>
+    </aside>
+
+    <main class="dash-main pet-main">
+      <!-- The stage (egg state or hatched pet) -->
+      <section class="pet-stage-wrap">
+        <div id="pet-stage" class="pet-stage" data-state="loading">
+          <!-- rendered by pet.js -->
+        </div>
+        <div id="pet-name-row" class="pet-name-row" hidden>
+          <h1 id="pet-name">Luna</h1>
+          <span id="pet-level" class="pet-level-badge">Level 1</span>
+          <span id="pet-mood" class="pet-mood-badge mood-happy">Happy</span>
+        </div>
+      </section>
+
+      <!-- Stat bars -->
+      <section id="pet-stats" class="pet-stats" hidden>
+        <div class="stat">
+          <div class="stat-head">
+            <span class="stat-label">⭐ XP</span>
+            <span class="stat-value" id="stat-xp-text">0 / 100</span>
+          </div>
+          <div class="stat-bar"><div id="stat-xp-fill" class="stat-fill stat-fill-xp" style="width:0%"></div></div>
+        </div>
+        <div class="stat">
+          <div class="stat-head">
+            <span class="stat-label">💖 Happiness</span>
+            <span class="stat-value" id="stat-happy-text">100%</span>
+          </div>
+          <div class="stat-bar"><div id="stat-happy-fill" class="stat-fill stat-fill-happy" style="width:100%"></div></div>
+        </div>
+        <div class="stat">
+          <div class="stat-head">
+            <span class="stat-label">🍎 Hunger</span>
+            <span class="stat-value" id="stat-hunger-text">0%</span>
+          </div>
+          <div class="stat-bar"><div id="stat-hunger-fill" class="stat-fill stat-fill-hunger" style="width:0%"></div></div>
+        </div>
+      </section>
+
+      <!-- Action buttons -->
+      <section id="pet-actions" class="pet-actions" hidden>
+        <button class="pet-action" data-action="feed" type="button">
+          <span class="pet-action-emoji">🍎</span>
+          <span>Feed</span>
+          <span class="pet-action-hint">-45 hunger</span>
+        </button>
+        <button class="pet-action" data-action="play" type="button">
+          <span class="pet-action-emoji">🎾</span>
+          <span>Play</span>
+          <span class="pet-action-hint">+25 happy · +3 XP</span>
+        </button>
+        <button class="pet-action" data-action="pat" type="button">
+          <span class="pet-action-emoji">🤲</span>
+          <span>Pet</span>
+          <span class="pet-action-hint">+8 happy</span>
+        </button>
+      </section>
+
+      <!-- Info card -->
+      <section class="pet-info-card">
+        <div class="pet-info-icon">🐾</div>
+        <div>
+          <h3>How your EndoPet grows</h3>
+          <p>Every check-in, symptom log, and reflection helps your EndoPet thrive. Feed them when they're hungry, play when they're glum — and they'll level up alongside your own story.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="/pet.js" defer></script>
+</body>
+</html>

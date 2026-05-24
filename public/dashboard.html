@@ -13,6 +13,13 @@
   <link rel="stylesheet" href="/dashboard.css" />
 </head>
 <body class="dash-body">
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-content">
+      <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
+      <div class="page-loader-bar"></div>
+      <p class="page-loader-text">Loading your dashboard…</p>
+    </div>
+  </div>
 
   <!-- TOP BAR -->
   <header class="dash-topbar">
@@ -48,6 +55,7 @@
         <a class="active" href="/dashboard"><span class="ico">🏠</span> Overview</a>
         <a href="/story"><span class="ico">📖</span> Your Story</a>
         <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
       </nav>
       <div class="side-card check-in">
         <div class="ci-head"><span>📅</span> <strong>Daily Check-in</strong></div>
@@ -220,7 +228,7 @@
             </div>
           </div>
         </div>
-        <button class="pill-btn full">🐾 Visit EndoPet</button>
+        <a class="pill-btn full" href="/pet" style="text-align:center;display:block;text-decoration:none">🐾 Visit EndoPet</a>
       </div>
 
       <a href="/story" class="card story-mini-card">
