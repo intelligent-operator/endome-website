@@ -1,10 +1,10 @@
 // Newsletter signup -> /api/subscribe
-const form = document.getElementById("newsletter-form");
-if (form) {
+const newsletterForm = document.getElementById("newsletter-form");
+if (newsletterForm) {
   const status = document.getElementById("newsletter-status");
-  form.addEventListener("submit", async (e) => {
+  newsletterForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const email = form.email.value.trim();
+    const email = newsletterForm.email.value.trim();
     if (!email) return;
     status.textContent = "Subscribing…";
     try {
@@ -14,7 +14,7 @@ if (form) {
         body: JSON.stringify({ email }),
       });
       if (!res.ok) throw new Error("subscribe failed");
-      form.reset();
+      newsletterForm.reset();
       status.textContent = "Thanks — check your inbox.";
     } catch {
       status.textContent = "Something went wrong. Try again.";
@@ -54,58 +54,7 @@ if (params.get("checkout") === "success") {
   alert("Checkout cancelled. You can try again whenever you're ready.");
 }
 
-// --- Login modal ---------------------------------------------------------
-const loginModal = document.getElementById("login-modal");
-function openLogin() {
-  loginModal.classList.add("open");
-  loginModal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
-  setTimeout(() => loginModal.querySelector('input[name="email"]')?.focus(), 50);
-}
-function closeLogin() {
-  loginModal.classList.remove("open");
-  loginModal.setAttribute("aria-hidden", "true");
-  document.body.classList.remove("modal-open");
-}
-document.querySelectorAll("[data-open-login]").forEach((el) =>
-  el.addEventListener("click", (e) => { e.preventDefault(); openLogin(); })
-);
-document.querySelectorAll("[data-close-login]").forEach((el) =>
-  el.addEventListener("click", (e) => { e.preventDefault(); closeLogin(); })
-);
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && loginModal.classList.contains("open")) closeLogin();
-});
-
-const loginForm = document.getElementById("login-form");
-if (loginForm) {
-  const status = document.getElementById("login-status");
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const email = loginForm.email.value.trim();
-    const password = loginForm.password.value;
-    if (!email || !password) return;
-    status.textContent = "Signing in…";
-    try {
-      const res = await fetch("/api/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        status.textContent = "Welcome back — redirecting…";
-        if (data.redirect) location.href = data.redirect;
-      } else {
-        status.textContent = data.error || "Customer portal coming soon.";
-      }
-    } catch {
-      status.textContent = "Network error. Try again.";
-    }
-  });
-}
-
-// --- EndoPet selection (visual only; persisted on signup) ---------------
+// EndoPet selection (visual only)
 document.querySelectorAll(".pet-card").forEach((card) => {
   card.addEventListener("click", () => {
     document.querySelectorAll(".pet-card").forEach((c) => {

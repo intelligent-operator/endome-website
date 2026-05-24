@@ -46,6 +46,8 @@
   box-shadow:0 2px 6px rgba(255,77,138,.2);
 }
 .profile-name{font-size:14px;font-weight:600}
+.signout{display:inline-flex;align-items:center;padding:6px;border-radius:8px}
+.signout:hover{background:#fff5f8}
 
 /* LAYOUT */
 .dash-layout{

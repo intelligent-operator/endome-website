@@ -32,7 +32,7 @@
         <li><a href="#community">Community</a></li>
       </ul>
       <div class="nav-actions">
-        <a href="#" class="nav-signin" data-open-login>Sign In</a>
+        <a href="/login" class="nav-signin">Sign In</a>
         <a href="/dashboard" class="btn btn-primary nav-cta">Get Started</a>
       </div>
     </nav>
@@ -658,36 +658,6 @@
     </div>
     <div class="footer-bottom">© 2026 EndoMe. All rights reserved.</div>
   </footer>
-
-  <!-- =========================== LOGIN MODAL =========================== -->
-  <div class="modal" id="login-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="login-title">
-    <div class="modal-backdrop" data-close-login></div>
-    <div class="modal-card">
-      <button class="modal-close" data-close-login aria-label="Close">×</button>
-      <div class="modal-logo">
-        <img src="/logo-final.png" alt="" width="56" height="56" />
-      </div>
-      <h3 id="login-title">Welcome back</h3>
-      <p class="modal-sub">Sign in to your EndoMe account.</p>
-      <form id="login-form" novalidate>
-        <label class="field">
-          <span>Email</span>
-          <input type="email" name="email" autocomplete="email" placeholder="you@example.com" required />
-        </label>
-        <label class="field">
-          <span>Password</span>
-          <input type="password" name="password" autocomplete="current-password" placeholder="••••••••" required minlength="6" />
-        </label>
-        <div class="field-row">
-          <label class="check"><input type="checkbox" name="remember" /> <span>Remember me</span></label>
-          <a href="#" class="link-arrow small">Forgot password?</a>
-        </div>
-        <button type="submit" class="btn btn-primary full">Sign In</button>
-        <p id="login-status" class="form-status" aria-live="polite"></p>
-      </form>
-      <p class="modal-foot">New here? <a href="#cta">Create an account</a></p>
-    </div>
-  </div>
 
   <script src="/app.js" defer></script>
 </body>

@@ -547,3 +547,35 @@ p{margin:0 0 .6em}
 .modal-foot{margin-top:16px;font-size:13px;color:#7a5f6c}
 .modal-foot a{color:#ff4e8a;font-weight:600}
 body.modal-open{overflow:hidden}
+
+/* ============ Login Page ============ */
+.login-body{
+  margin:0;font-family:'Poppins',system-ui,sans-serif;color:#3a2330;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 28% 18%, #ffb380, #ff6a92 40%, #e8348a 85%);
+  position:relative;overflow:hidden;padding:24px;
+}
+.login-bg{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:
+    radial-gradient(circle at 10% 22%, rgba(255,255,255,.22) 0 2px, transparent 3px),
+    radial-gradient(circle at 88% 18%, rgba(255,255,255,.22) 0 2px, transparent 3px),
+    radial-gradient(circle at 22% 84%, rgba(255,255,255,.22) 0 2px, transparent 3px),
+    radial-gradient(circle at 78% 88%, rgba(255,255,255,.22) 0 2px, transparent 3px);
+  background-size:180px 180px,210px 210px,160px 160px,200px 200px;
+}
+.login-wrap{position:relative;z-index:1;width:100%;max-width:420px}
+.login-card{
+  background:#fff;border-radius:24px;padding:36px 32px 28px;
+  box-shadow:0 30px 70px rgba(58,29,43,.35);
+  text-align:center;
+}
+.login-logo{display:inline-flex;justify-content:center;margin-bottom:14px}
+.login-logo img{border-radius:18px;box-shadow:0 8px 18px rgba(255,77,138,.25)}
+.login-card h1{font-size:26px;margin-bottom:6px}
+.login-sub{color:#7a5f6c;font-size:14px;margin-bottom:22px}
+.form-status.ok{color:#3a9b4b}
+.form-status.err{color:#c8295e}
+.login-foot{margin-top:18px;font-size:13px}
+.login-foot a{color:#7a5f6c}
+.login-foot a:hover{color:#ff4e8a}

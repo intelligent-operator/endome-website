@@ -4,3 +4,8 @@
 STRIPE_SECRET_KEY="sk_test_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 MANDRILL_API_KEY="md-..."
+
+# Dashboard auth — single hardcoded user
+AUTH_USERNAME="endome"
+AUTH_PASSWORD="set-a-strong-password-here"
+SESSION_SECRET="generate-with-openssl-rand-base64-48"

@@ -27,6 +27,11 @@ STRIPE_DNA_PRICE_ID = "price_replace_me"
 #   STRIPE_SECRET_KEY      sk_live_...   (or sk_test_... in preview)
 #   STRIPE_WEBHOOK_SECRET  whsec_...     (Stripe -> Webhooks)
 #   MANDRILL_API_KEY       md-...        (Mailchimp Transactional)
+#
+#   AUTH_USERNAME          dashboard login username
+#   AUTH_PASSWORD          dashboard login password
+#   SESSION_SECRET         random 32+ byte string, signs session cookies
+#                          (generate: `openssl rand -base64 48`)
 # ----------------------------------------------------------------------
 
 # Custom domain routing. Add the zone in the Cloudflare dashboard first.
