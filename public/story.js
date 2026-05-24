@@ -3,7 +3,7 @@
   const ringProgress = document.getElementById("ring-progress");
   const ringPercent  = document.getElementById("ring-percent");
   const ringFraction = document.getElementById("ring-fraction");
-  const RING_CIRC    = 2 * Math.PI * 68;
+  const RING_CIRC    = 2 * Math.PI * 76;
 
   // Display name in the topbar — consistent across pages.
   fetch("/api/me/today", { credentials: "same-origin" })
@@ -59,13 +59,14 @@
       html += `
         <section class="phase">
           <header class="phase-head">
-            <div>
-              <p class="phase-eyebrow">${escapeHtml(phaseName)}</p>
+            <div class="phase-head-text">
+              <p class="phase-eyebrow">Phase ${order.indexOf(phaseName) + 1}</p>
+              <h2>${escapeHtml(phaseName)}</h2>
               ${phaseDesc ? `<p class="phase-desc">${escapeHtml(phaseDesc)}</p>` : ""}
             </div>
             <span class="phase-pill ${phaseDone === group.length ? "complete" : ""}">${phaseDone}/${group.length}</span>
           </header>
-          <div class="phase-steps">
+          <div class="step-grid">
             ${group.map((s) => stepCard(s, ++stepNum)).join("")}
           </div>
         </section>`;
@@ -77,8 +78,10 @@
     const stateClass = s.completed ? "is-done" : s.locked ? "is-locked" : "is-todo";
     return `
       <article class="step ${stateClass}" data-step-id="${s.id}">
-        <div class="step-num">${n.toString().padStart(2, "0")}</div>
-        <div class="step-icon">${s.icon || "•"}</div>
+        <div class="step-top">
+          <div class="step-icon">${s.icon || "•"}</div>
+          <div class="step-num">${n.toString().padStart(2, "0")}</div>
+        </div>
         <div class="step-body">
           <h3>${escapeHtml(s.title)}</h3>
           <p>${escapeHtml(s.desc)}</p>

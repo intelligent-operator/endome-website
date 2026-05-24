@@ -1,73 +1,101 @@
 /* =====================================================================
-   Your Story page — modern, spacious, clean
+   Your Story — full-bleed responsive layout, cards in an auto-fit grid.
+   No more skinny single-column stack.
    ===================================================================== */
-.story-layout{grid-template-columns:230px minmax(0,1fr);align-items:start}
-@media (max-width:1080px){.story-layout{grid-template-columns:1fr}}
 
-.story-main{display:flex;flex-direction:column;gap:28px;min-width:0}
+/* Override the dash-layout so the page spans wider on big screens, and the
+   sidebar collapses smoothly. */
+.story-layout{
+  display:grid;
+  grid-template-columns:230px minmax(0,1fr);
+  gap:24px;
+  max-width:1600px;
+  padding:24px 32px 48px;
+  align-items:start;
+}
+@media (max-width:1080px){
+  .story-layout{grid-template-columns:1fr;padding:16px 14px 40px}
+}
 
-/* Hero card ----------------------------------------------------------- */
+.story-main{display:flex;flex-direction:column;gap:32px;min-width:0}
+
+/* ---------- Hero card ---------- */
 .story-hero-card{
   background:linear-gradient(135deg,#fff5f8 0%, #ffe7ee 50%, #ffd6e0 100%);
-  border-radius:28px;padding:36px 40px;
-  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:center;
+  border-radius:28px;
+  padding:40px 48px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:32px;align-items:center;
   box-shadow:0 6px 24px rgba(255,77,138,.08);
   position:relative;overflow:hidden;
 }
 .story-hero-card::before{
-  content:"";position:absolute;inset:auto -60px -60px auto;
-  width:240px;height:240px;border-radius:50%;
+  content:"";position:absolute;inset:auto -80px -80px auto;
+  width:280px;height:280px;border-radius:50%;
   background:radial-gradient(circle,rgba(255,255,255,.6),transparent 70%);
   pointer-events:none;
 }
 .story-eyebrow{
-  margin:0 0 8px;font-size:12px;font-weight:700;color:#ff4e8a;
-  text-transform:uppercase;letter-spacing:.12em;
+  margin:0 0 10px;font-size:12px;font-weight:700;color:#ff4e8a;
+  text-transform:uppercase;letter-spacing:.14em;
 }
 .story-hero-card h1{
-  font-size:34px;line-height:1.15;letter-spacing:-.6px;margin:0 0 14px;color:#2b1922;
+  font-size:38px;line-height:1.1;letter-spacing:-.8px;margin:0 0 14px;color:#2b1922;
   font-weight:700;
 }
 .story-lead{
-  font-size:16px;line-height:1.6;color:#5a3a48;margin:0;max-width:560px;
+  font-size:17px;line-height:1.6;color:#5a3a48;margin:0;max-width:620px;
 }
 .story-hero-ring{flex-shrink:0;position:relative;z-index:1}
 
-/* Phase sections ------------------------------------------------------ */
-.phase{display:flex;flex-direction:column;gap:14px}
-.phase-head{
-  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
-  padding:0 4px 6px;
+/* ---------- Phase section ---------- */
+.phase{
+  display:flex;flex-direction:column;gap:18px;
 }
+.phase-head{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:0 4px;
+}
+.phase-head-text{min-width:0;flex:1}
 .phase-eyebrow{
-  margin:0 0 6px;font-size:14px;font-weight:700;color:#3a2330;
-  text-transform:uppercase;letter-spacing:.08em;
+  margin:0 0 4px;font-size:11px;font-weight:700;color:#ff4e8a;
+  text-transform:uppercase;letter-spacing:.14em;
+}
+.phase-head h2{
+  margin:0 0 6px;font-size:22px;font-weight:700;color:#2b1922;letter-spacing:-.3px;
 }
 .phase-desc{
-  margin:0;font-size:14px;color:#7a5f6c;line-height:1.55;max-width:580px;
+  margin:0;font-size:14px;color:#7a5f6c;line-height:1.55;max-width:680px;
 }
 .phase-pill{
   flex-shrink:0;
   font-size:13px;font-weight:700;color:#ff4e8a;
   background:#fff;border:1px solid #ffd6e0;
-  padding:6px 14px;border-radius:999px;white-space:nowrap;
-  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 16px;border-radius:999px;white-space:nowrap;
 }
 .phase-pill.complete{
   background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border-color:transparent;
   box-shadow:0 4px 12px rgba(255,77,138,.25);
 }
 
-.phase-steps{display:flex;flex-direction:column;gap:12px}
-
-/* Step card ----------------------------------------------------------- */
-.step{
+/* ---------- The grid that spans the page ---------- */
+.step-grid{
   display:grid;
-  grid-template-columns:44px 60px minmax(0,1fr) auto;
-  gap:18px;align-items:center;
-  background:#fff;border-radius:18px;
-  padding:20px 24px;
+  grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
+  gap:16px;
+}
+
+/* ---------- Step card (compact, vertical) ---------- */
+.step{
+  background:#fff;
+  border-radius:18px;
+  padding:22px;
   border:1px solid #ffeaf2;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  min-height:200px;
   transition:transform .14s, box-shadow .14s, border-color .14s, background .2s;
   position:relative;overflow:hidden;
 }
@@ -79,7 +107,7 @@
 .step.is-locked{opacity:.55}
 .step.is-locked:hover{transform:none;box-shadow:none}
 .step.is-done{
-  background:linear-gradient(135deg,#fff 0%, #fff5f8 100%);
+  background:linear-gradient(160deg,#fff 0%, #fff5f8 100%);
   border-color:#ffd6e0;
 }
 .step.is-done::before{
@@ -87,38 +115,38 @@
   background:linear-gradient(180deg,#ff4e8a,#ffb380);
 }
 
-.step-num{
-  font-size:13px;font-weight:700;color:#a08596;font-variant-numeric:tabular-nums;
-  letter-spacing:.04em;
-}
-.step.is-done .step-num{color:#ff4e8a}
-
+.step-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .step-icon{
-  width:60px;height:60px;border-radius:16px;
+  width:52px;height:52px;border-radius:14px;
   background:linear-gradient(135deg,#fff5f8,#ffeaf2);
   display:flex;align-items:center;justify-content:center;
-  font-size:26px;flex-shrink:0;
+  font-size:24px;flex-shrink:0;
 }
 .step.is-done .step-icon{
   background:linear-gradient(135deg,#ffeaf2,#ffd6e0);
 }
+.step-num{
+  font-size:11px;font-weight:700;color:#a08596;font-variant-numeric:tabular-nums;
+  letter-spacing:.06em;line-height:1;padding:6px 0;
+}
+.step.is-done .step-num{color:#ff4e8a}
 
-.step-body{min-width:0}
+.step-body{display:flex;flex-direction:column;gap:6px;flex:1}
 .step-body h3{
-  font-size:17px;font-weight:600;margin:0 0 4px;color:#2b1922;line-height:1.3;
+  font-size:16px;font-weight:600;margin:0;color:#2b1922;line-height:1.3;
 }
 .step-body p{
-  margin:0;font-size:14px;color:#7a5f6c;line-height:1.55;
+  margin:0;font-size:13px;color:#7a5f6c;line-height:1.5;
 }
 
 .step-tail{
-  display:flex;align-items:center;justify-content:flex-end;
-  flex-shrink:0;
+  margin-top:auto;padding-top:6px;
+  display:flex;align-items:center;justify-content:flex-start;
 }
 
-/* Manual checkbox (empty + checked) ---------------------------------- */
+/* Manual checkbox (empty / checked) */
 .step-check{
-  width:38px;height:38px;border-radius:50%;
+  width:36px;height:36px;border-radius:50%;
   border:2px solid #ffd6e0;background:#fff;
   cursor:pointer;flex-shrink:0;
   display:inline-flex;align-items:center;justify-content:center;
@@ -134,82 +162,62 @@
   box-shadow:0 4px 12px rgba(255,77,138,.3);
 }
 
-/* Action button (e.g. "Request EndoMe DNA test") --------------------- */
+/* Action button (test order / upload) */
 .step-action{
   display:inline-flex;align-items:center;gap:6px;
-  padding:12px 22px;
+  padding:11px 18px;
   background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
   border:none;border-radius:999px;
-  font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;
   box-shadow:0 6px 16px rgba(255,77,138,.28);
   transition:transform .14s, box-shadow .14s, opacity .15s;
   white-space:nowrap;
 }
 .step-action:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(255,77,138,.4)}
-.step-action:disabled{opacity:.65;cursor:wait;transform:none;box-shadow:0 6px 16px rgba(255,77,138,.28)}
+.step-action:disabled{opacity:.65;cursor:wait;transform:none}
 
-/* Auto-tracked state ------------------------------------------------- */
+/* Auto state */
 .step-auto-state{
   display:inline-flex;align-items:center;gap:8px;
-  padding:8px 14px;border-radius:999px;
+  padding:7px 14px;border-radius:999px;
   background:#fff5f8;color:#7a5f6c;
   font-size:12px;font-weight:600;
-  white-space:nowrap;
 }
 .step-auto-state::before{
   content:"";width:8px;height:8px;border-radius:50%;
   background:#a08596;animation:pulse-dot 2.4s ease-in-out infinite;
 }
-@keyframes pulse-dot{
-  0%,100%{opacity:.4}
-  50%{opacity:1}
-}
+@keyframes pulse-dot{0%,100%{opacity:.4}50%{opacity:1}}
 
-/* Locked state ------------------------------------------------------- */
+/* Locked state */
 .step-locked-state{
   display:inline-flex;align-items:center;gap:6px;
-  padding:8px 14px;border-radius:999px;
+  padding:7px 14px;border-radius:999px;
   background:#f5e9ef;color:#9a7889;
-  font-size:12px;font-weight:600;white-space:nowrap;
+  font-size:12px;font-weight:600;
 }
 
-/* Done state -------------------------------------------------------- */
-.step-done-state{
-  display:inline-flex;align-items:center;gap:10px;
-  white-space:nowrap;
-}
-.step-done-meta{
-  font-size:12px;color:#5a3a48;font-weight:600;
-}
+/* Done state */
+.step-done-state{display:inline-flex;align-items:center;gap:10px}
+.step-done-state .step-check.checked{width:30px;height:30px}
+.step-done-meta{font-size:12px;color:#5a3a48;font-weight:600}
 
-/* Empty / loading ---------------------------------------------------- */
+/* Empty / loading */
 .story-empty{
   text-align:center;color:#7a5f6c;font-size:14px;
   padding:48px 16px;margin:0;
   background:#fff;border-radius:18px;border:1px dashed #ffd6e0;
 }
 
-/* Responsive --------------------------------------------------------- */
+/* Responsive */
 @media (max-width:720px){
   .story-hero-card{
-    grid-template-columns:1fr;text-align:center;padding:28px;
+    grid-template-columns:1fr;text-align:center;padding:28px 22px;
   }
   .story-hero-card h1{font-size:26px}
-  .story-lead{margin:0 auto;font-size:15px}
+  .story-lead{margin:0 auto;font-size:14px}
   .story-hero-ring{margin:0 auto}
   .story-hero-ring svg{width:130px;height:130px}
-
-  .step{
-    grid-template-columns:48px minmax(0,1fr);
-    grid-template-rows:auto auto;
-    gap:12px;padding:16px 18px;
-  }
-  .step-num{display:none}
-  .step-icon{grid-column:1;grid-row:1 / 3;width:48px;height:48px;font-size:22px;border-radius:12px}
-  .step-body{grid-column:2;grid-row:1}
-  .step-body h3{font-size:15px}
-  .step-body p{font-size:13px}
-  .step-tail{grid-column:2;grid-row:2;justify-content:flex-start}
-  .step-action{width:100%;justify-content:center}
-  .phase-head{flex-wrap:wrap}
+  .step-grid{grid-template-columns:1fr}
+  .phase-head h2{font-size:18px}
 }

@@ -105,10 +105,22 @@ export default {
             return jsonHeaders(await uncheckStory(request, env, user));
           }
           if (url.pathname === "/api/me/order/dna" && request.method === "POST") {
-            return jsonHeaders(await postDnaOrder(request, env, user));
+            return jsonHeaders(await postTestOrder(request, env, user, "dna"));
+          }
+          if (url.pathname === "/api/me/order/bloods" && request.method === "POST") {
+            return jsonHeaders(await postTestOrder(request, env, user, "bloods"));
+          }
+          if (url.pathname === "/api/me/order/map" && request.method === "POST") {
+            return jsonHeaders(await postTestOrder(request, env, user, "map"));
           }
           if (url.pathname === "/api/me/results/dna" && request.method === "POST") {
-            return jsonHeaders(await postDnaResults(request, env, user));
+            return jsonHeaders(await postTestResults(request, env, user, "dna"));
+          }
+          if (url.pathname === "/api/me/results/bloods" && request.method === "POST") {
+            return jsonHeaders(await postTestResults(request, env, user, "bloods"));
+          }
+          if (url.pathname === "/api/me/results/map" && request.method === "POST") {
+            return jsonHeaders(await postTestResults(request, env, user, "map"));
           }
           const dismissMatch = url.pathname.match(/^\/api\/me\/notifications\/(\d+)\/dismiss$/);
           if (dismissMatch && request.method === "POST") {
@@ -128,7 +140,8 @@ export default {
     if (
       url.pathname === "/dashboard"   || url.pathname.startsWith("/dashboard/") ||
       url.pathname === "/onboarding"  || url.pathname.startsWith("/onboarding/") ||
-      url.pathname === "/story"       || url.pathname.startsWith("/story/")
+      url.pathname === "/story"       || url.pathname.startsWith("/story/") ||
+      url.pathname === "/tests"       || url.pathname.startsWith("/tests/")
     ) {
       const session = await readSession(request, env);
       if (!session) {
@@ -993,7 +1006,7 @@ async function getMeToday(request, env, user) {
   const url = new URL(request.url);
   const date = normaliseDate(url.searchParams.get("date"));
 
-  const [daily, symptoms, pet, notifs] = await Promise.all([
+  const [daily, symptoms, pet, notifs, userRow] = await Promise.all([
     env.DB.prepare("SELECT * FROM daily_logs WHERE user_id = ? AND log_date = ?")
       .bind(user.id, date).first(),
     env.DB.prepare(
@@ -1006,7 +1019,21 @@ async function getMeToday(request, env, user) {
       "FROM notifications WHERE user_id = ? AND dismissed_at IS NULL " +
       "ORDER BY created_at DESC LIMIT 20"
     ).bind(user.id).all(),
+    env.DB.prepare(
+      "SELECT dna_ordered_at, dna_results_at, bloods_ordered_at, bloods_results_at, " +
+      "map_ordered_at, map_results_at FROM users WHERE id = ?"
+    ).bind(user.id).first().catch(() => null),
   ]);
+
+  const tests = {};
+  if (userRow) {
+    for (const [id, t] of Object.entries(TESTS)) {
+      tests[id] = {
+        orderedAt: userRow[t.orderedCol] || null,
+        resultsAt: userRow[t.resultsCol] || null,
+      };
+    }
+  }
 
   return json({
     user: { displayName: user.display_name, username: user.username },
@@ -1044,6 +1071,7 @@ async function getMeToday(request, env, user) {
     symptoms: symptoms.results || [],
     pointsToday: daily?.points_total || 0,
     pet: petResponse(pet),
+    tests,
     notifications: notifs.results || [],
   });
 }
@@ -1292,23 +1320,51 @@ async function putPet(request, env, user) {
 // A step can also list `requires: <other_step_id>` — until that step is
 // completed the step renders locked.
 // =============================================================================
+const TESTS = {
+  dna:    { name: "EndoMe DNA",    icon: "🧬", orderedCol: "dna_ordered_at",    resultsCol: "dna_results_at" },
+  bloods: { name: "EndoMe Bloods", icon: "🩸", orderedCol: "bloods_ordered_at", resultsCol: "bloods_results_at" },
+  map:    { name: "EndoMe Map",    icon: "🗺️", orderedCol: "map_ordered_at",    resultsCol: "map_results_at" },
+};
+const TEST_IDS = new Set(Object.keys(TESTS));
+
 const STORY_STEPS = [
   // Phase 1 — Get insights from your body
   { id: "order_dna", phase: "Get insights", phaseDesc: "Real data about what's happening inside.",
     title: "Request your EndoMe DNA test",
-    desc: "Order the at-home DNA kit that maps the markers most linked to endometriosis.",
+    desc: "An at-home DNA kit that maps the markers most linked to endometriosis.",
     icon: "🧬", type: "action",
-    actionLabel: "Request EndoMe DNA test", actionEndpoint: "/api/me/order/dna" },
-
+    actionLabel: "Request EndoMe DNA", actionEndpoint: "/api/me/order/dna" },
   { id: "dna_results", phase: "Get insights",
     title: "Upload your DNA results",
-    desc: "Send back your sample, then upload your results here when they arrive (2–3 weeks).",
+    desc: "Send back your sample, then upload your results when they arrive.",
     icon: "📊", type: "action", requires: "order_dna",
     actionLabel: "Upload results", actionEndpoint: "/api/me/results/dna" },
 
+  { id: "order_bloods", phase: "Get insights",
+    title: "Request your EndoMe Bloods test",
+    desc: "A blood panel covering inflammation, hormones, and key deficiencies.",
+    icon: "🩸", type: "action",
+    actionLabel: "Request EndoMe Bloods", actionEndpoint: "/api/me/order/bloods" },
+  { id: "bloods_results", phase: "Get insights",
+    title: "Upload your Bloods results",
+    desc: "Get your blood draw done and upload the report here.",
+    icon: "📊", type: "action", requires: "order_bloods",
+    actionLabel: "Upload results", actionEndpoint: "/api/me/results/bloods" },
+
+  { id: "order_map", phase: "Get insights",
+    title: "Request your EndoMe Map test",
+    desc: "An at-home urine test that maps your hormone pathways end-to-end.",
+    icon: "🗺️", type: "action",
+    actionLabel: "Request EndoMe Map", actionEndpoint: "/api/me/order/map" },
+  { id: "map_results", phase: "Get insights",
+    title: "Upload your Map results",
+    desc: "Collect your sample at home, post it back, then upload the report here.",
+    icon: "📊", type: "action", requires: "order_map",
+    actionLabel: "Upload results", actionEndpoint: "/api/me/results/map" },
+
   { id: "log_14_days", phase: "Get insights",
     title: "Log symptoms for 14 days",
-    desc: "Two weeks of consistent tracking is enough to start seeing patterns in your story.",
+    desc: "Two weeks of patterns is enough to start seeing your story.",
     icon: "📈", type: "auto", autoLabel: "Tracks automatically" },
 
   // Phase 2 — Talk to your doctor
@@ -1429,15 +1485,18 @@ async function reconcileAutoSteps(env, user) {
     console.warn("reconcile log_14_days failed:", err?.message || err);
   }
 
-  // dna_ordered_at / dna_results_at: drive order_dna + dna_results steps.
+  // Test orders + results — drive each order_* and *_results story step.
   try {
+    const cols = Object.values(TESTS).flatMap((t) => [t.orderedCol, t.resultsCol]);
     const u = await env.DB.prepare(
-      "SELECT dna_ordered_at, dna_results_at FROM users WHERE id = ?"
+      `SELECT ${cols.join(", ")} FROM users WHERE id = ?`
     ).bind(user.id).first();
-    if (u?.dna_ordered_at) await markStoryStep(env, user.id, "order_dna", "auto");
-    if (u?.dna_results_at) await markStoryStep(env, user.id, "dna_results", "auto");
+    for (const [id, t] of Object.entries(TESTS)) {
+      if (u?.[t.orderedCol]) await markStoryStep(env, user.id, `order_${id}`,   "auto");
+      if (u?.[t.resultsCol]) await markStoryStep(env, user.id, `${id}_results`, "auto");
+    }
   } catch (err) {
-    console.warn("reconcile DNA steps failed:", err?.message || err);
+    console.warn("reconcile test steps failed:", err?.message || err);
   }
 }
 
@@ -1471,30 +1530,33 @@ async function uncheckStory(request, env, user) {
   return getStory(env, user);
 }
 
-// --- DNA test order + results upload --------------------------------------
-async function postDnaOrder(_request, env, user) {
+// --- Test order + results upload (generic across DNA / Bloods / Map) -----
+async function postTestOrder(_request, env, user, testId) {
+  if (!TEST_IDS.has(testId)) return json({ error: "Unknown test" }, 400);
+  const t = TESTS[testId];
   const now = nowSec();
   await env.DB.prepare(
-    "UPDATE users SET dna_ordered_at = COALESCE(dna_ordered_at, ?) WHERE id = ?"
+    `UPDATE users SET ${t.orderedCol} = COALESCE(${t.orderedCol}, ?) WHERE id = ?`
   ).bind(now, user.id).run();
-  await markStoryStep(env, user.id, "order_dna", "auto");
-  return json({ ok: true, dna_ordered_at: now });
+  await markStoryStep(env, user.id, `order_${testId}`, "auto");
+  return json({ ok: true, test: testId, ordered_at: now });
 }
 
-async function postDnaResults(_request, env, user) {
-  // First require an order to exist.
+async function postTestResults(_request, env, user, testId) {
+  if (!TEST_IDS.has(testId)) return json({ error: "Unknown test" }, 400);
+  const t = TESTS[testId];
   const u = await env.DB.prepare(
-    "SELECT dna_ordered_at FROM users WHERE id = ?"
+    `SELECT ${t.orderedCol} AS ordered_at FROM users WHERE id = ?`
   ).bind(user.id).first();
-  if (!u?.dna_ordered_at) {
-    return json({ error: "Order your EndoMe DNA test first." }, 400);
+  if (!u?.ordered_at) {
+    return json({ error: `Order your ${t.name} test first.` }, 400);
   }
   const now = nowSec();
   await env.DB.prepare(
-    "UPDATE users SET dna_results_at = COALESCE(dna_results_at, ?) WHERE id = ?"
+    `UPDATE users SET ${t.resultsCol} = COALESCE(${t.resultsCol}, ?) WHERE id = ?`
   ).bind(now, user.id).run();
-  await markStoryStep(env, user.id, "dna_results", "auto");
-  return json({ ok: true, dna_results_at: now });
+  await markStoryStep(env, user.id, `${testId}_results`, "auto");
+  return json({ ok: true, test: testId, results_at: now });
 }
 
 // Idempotent — first call sets the row, subsequent calls are no-ops.
