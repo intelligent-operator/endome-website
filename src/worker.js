@@ -92,6 +92,9 @@ export default {
           if (url.pathname === "/api/me/notifications" && request.method === "GET") {
             return jsonHeaders(await getNotifications(env, user));
           }
+          if (url.pathname === "/api/me/pet" && request.method === "PUT") {
+            return jsonHeaders(await putPet(request, env, user));
+          }
           const dismissMatch = url.pathname.match(/^\/api\/me\/notifications\/(\d+)\/dismiss$/);
           if (dismissMatch && request.method === "POST") {
             return jsonHeaders(await dismissNotification(env, user, +dismissMatch[1]));
@@ -107,7 +110,10 @@ export default {
     }
 
     // --- Dashboard auth gate ------------------------------------------------
-    if (url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/")) {
+    if (
+      url.pathname === "/dashboard" || url.pathname.startsWith("/dashboard/") ||
+      url.pathname === "/onboarding" || url.pathname.startsWith("/onboarding/")
+    ) {
       const session = await readSession(request, env);
       if (!session) {
         return Response.redirect(new URL("/login", request.url).toString(), 302);
@@ -355,18 +361,18 @@ async function handleRegister(request, env) {
   // the user is already authenticated.
   await sendWelcomeEmail(env, email, displayName);
 
-  return mintSessionResponse(email, request, env, 201);
+  return mintSessionResponse(email, request, env, 201, "/onboarding");
 }
 
 // Shared: signs a session, sets the cookie, returns the JSON redirect response.
-async function mintSessionResponse(username, request, env, status = 200) {
+async function mintSessionResponse(username, request, env, status = 200, redirect = "/dashboard") {
   const token = await signSession(
     { u: username, iat: nowSec(), exp: nowSec() + SESSION_TTL_SEC },
     env.SESSION_SECRET
   );
   const headers = new Headers(JSON_HEADERS);
   headers.append("Set-Cookie", buildCookie(SESSION_COOKIE, token, request, SESSION_TTL_SEC));
-  return new Response(JSON.stringify({ ok: true, redirect: "/dashboard" }), { status, headers });
+  return new Response(JSON.stringify({ ok: true, redirect }), { status, headers });
 }
 
 // --- Password hashing (PBKDF2-SHA256, per-user salt) ---------------------
@@ -493,48 +499,41 @@ async function sendWelcomeEmail(env, email, displayName) {
   const html = renderEmail({
     siteUrl,
     preheader: `Welcome to EndoMe, ${safeName} — your story starts here.`,
-    headline: `Welcome to EndoMe, ${safeName}`,
+    headline: `Welcome, ${safeName} 🌸`,
     body: `
-      <p style="margin:0 0 18px;font-size:16px;color:#3a2330;line-height:1.6">
-        Hi ${safeName} —
-      </p>
-      <p style="margin:0 0 18px;font-size:15px;color:#3a2330;line-height:1.6">
+      <p style="margin:0 0 18px;color:#3a2330;font-size:16px;line-height:1.6">
         We're so glad you're here. Your account is ready and your EndoPet
-        <strong>Luna</strong> is waiting to grow alongside you.
+        <strong style="color:#ff4e8a">Luna</strong> is waiting to grow alongside you.
       </p>
-      <p style="margin:0 0 14px;font-size:15px;color:#3a2330;line-height:1.6">From your dashboard you can:</p>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 22px">
+      <p style="margin:0 0 16px;color:#3a2330;font-size:15px;font-weight:600">From your dashboard you can:</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0">
         <tr>
-          <td style="padding:10px 14px;background:#fff5f8;border-radius:12px;font-size:14px;color:#3a2330;line-height:1.5">
-            <span style="display:inline-block;width:22px">🌅</span>
-            <strong>Morning check-in</strong> — mood, energy, pain, cycle
+          <td width="32" valign="top" align="center" style="padding:6px 0;font-size:20px;line-height:1.4">🌅</td>
+          <td style="padding:6px 0 6px 12px;color:#3a2330;font-size:15px;line-height:1.55">
+            Check in each <strong>morning</strong> — mood, energy, pain, cycle.
           </td>
         </tr>
-        <tr><td style="height:8px;line-height:8px;font-size:1px">&nbsp;</td></tr>
         <tr>
-          <td style="padding:10px 14px;background:#fff5f8;border-radius:12px;font-size:14px;color:#3a2330;line-height:1.5">
-            <span style="display:inline-block;width:22px">📝</span>
-            <strong>Quick-log symptoms</strong> as they happen
+          <td width="32" valign="top" align="center" style="padding:6px 0;font-size:20px;line-height:1.4">📝</td>
+          <td style="padding:6px 0 6px 12px;color:#3a2330;font-size:15px;line-height:1.55">
+            Quick-log <strong>symptoms</strong> as they happen.
           </td>
         </tr>
-        <tr><td style="height:8px;line-height:8px;font-size:1px">&nbsp;</td></tr>
         <tr>
-          <td style="padding:10px 14px;background:#fff5f8;border-radius:12px;font-size:14px;color:#3a2330;line-height:1.5">
-            <span style="display:inline-block;width:22px">🌙</span>
-            <strong>Evening reflection</strong> to close the day
+          <td width="32" valign="top" align="center" style="padding:6px 0;font-size:20px;line-height:1.4">🌙</td>
+          <td style="padding:6px 0 6px 12px;color:#3a2330;font-size:15px;line-height:1.55">
+            Wrap up the day with a short <strong>evening reflection</strong>.
           </td>
         </tr>
-        <tr><td style="height:8px;line-height:8px;font-size:1px">&nbsp;</td></tr>
         <tr>
-          <td style="padding:10px 14px;background:#fff5f8;border-radius:12px;font-size:14px;color:#3a2330;line-height:1.5">
-            <span style="display:inline-block;width:22px">🐾</span>
-            <strong>Watch Luna level up</strong> with every entry
+          <td width="32" valign="top" align="center" style="padding:6px 0;font-size:20px;line-height:1.4">🐾</td>
+          <td style="padding:6px 0 6px 12px;color:#3a2330;font-size:15px;line-height:1.55">
+            Watch <strong>Luna level up</strong> with every entry.
           </td>
         </tr>
       </table>
-      <p style="margin:0;font-size:14px;color:#7a5f6c;line-height:1.6">
+      <p style="margin:24px 0 0;color:#7a5f6c;font-size:14px;line-height:1.6;text-align:center">
         This is your space — track what feels right, skip what doesn't.
-        We're here when you need us.
       </p>`,
     ctaText: "Open your dashboard",
     ctaUrl: `${siteUrl}/dashboard`,
@@ -566,10 +565,11 @@ async function sendWelcomeEmail(env, email, displayName) {
   }
 }
 
-// Shared branded email layout. Bulletproof inline styles (tables, no flex
-// or grid) so it renders consistently in Gmail / Apple Mail / Outlook.
+// Shared branded email layout. Bulletproof inline styles, table-based,
+// bgcolor attrs alongside style for max client compat (Outlook needs both).
 function renderEmail({ siteUrl, preheader, headline, body, ctaText, ctaUrl }) {
   const logoUrl = `${siteUrl}/logo-final.png`;
+  const ff = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
   return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head>
@@ -577,42 +577,41 @@ function renderEmail({ siteUrl, preheader, headline, body, ctaText, ctaUrl }) {
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>EndoMe</title>
 </head>
-<body style="margin:0;padding:0;background:#fff5f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#3a2330;-webkit-font-smoothing:antialiased">
+<body style="margin:0;padding:0;background-color:#fff5f8;font-family:${ff};color:#3a2330;-webkit-font-smoothing:antialiased">
 <div style="display:none;font-size:1px;color:#fff5f8;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">${preheader || ""}</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fff5f8;padding:32px 16px">
-  <tr>
-    <td align="center">
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="max-width:560px;width:100%;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 8px 24px rgba(255,77,138,.10)">
-        <tr>
-          <td style="background:linear-gradient(135deg,#ffb380 0%,#ff6a92 50%,#e8348a 100%);padding:32px 32px 28px;text-align:center" align="center">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td align="center">
-              <img src="${logoUrl}" alt="EndoMe" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:14px;border:0"/>
-            </td></tr></table>
-            <h1 style="margin:18px 0 0;color:#ffffff;font-size:24px;font-weight:700;line-height:1.3;letter-spacing:-.2px">${headline}</h1>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:30px 36px 8px">
-            ${body}
-            ${ctaText && ctaUrl ? `
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:26px auto 8px">
-                <tr><td style="border-radius:999px;background:#ff4e8a">
-                  <a href="${ctaUrl}" style="display:inline-block;padding:14px 30px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;font-family:inherit">${ctaText}</a>
-                </td></tr>
-              </table>` : ""}
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:20px 36px 28px;border-top:1px solid #ffeaf2;text-align:center" align="center">
-            <p style="margin:0 0 4px;font-size:12px;color:#7a5f6c">EndoMe · Your story starts here.</p>
-            <p style="margin:0;font-size:12px;color:#a08596">
-              <a href="${siteUrl}" style="color:#ff4e8a;text-decoration:none">endome.com</a>
-            </p>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#fff5f8" style="background-color:#fff5f8;padding:40px 16px">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" bgcolor="#ffffff" style="max-width:560px;width:100%;background-color:#ffffff;border-radius:20px;overflow:hidden">
+      <!-- Gradient header (solid bg fallback for Outlook) -->
+      <tr>
+        <td bgcolor="#ff4e8a" align="center" style="background-color:#ff4e8a;background-image:linear-gradient(135deg,#ffb380 0%,#ff6a92 50%,#e8348a 100%);padding:36px 32px">
+          <img src="${logoUrl}" alt="EndoMe" width="64" height="64" style="display:block;margin:0 auto;border:0;border-radius:16px"/>
+        </td>
+      </tr>
+      <!-- Body -->
+      <tr>
+        <td style="padding:36px 36px 28px;color:#3a2330;font-family:${ff}">
+          <h1 style="margin:0 0 18px;color:#3a2330;font-size:24px;font-weight:700;line-height:1.3;text-align:left">${headline}</h1>
+          ${body}
+          ${ctaText && ctaUrl ? `
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:28px auto 6px">
+              <tr><td align="center" bgcolor="#ff4e8a" style="background-color:#ff4e8a;border-radius:999px">
+                <a href="${ctaUrl}" style="display:inline-block;padding:14px 32px;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;font-family:${ff}">${ctaText} &rarr;</a>
+              </td></tr>
+            </table>` : ""}
+        </td>
+      </tr>
+      <!-- Footer -->
+      <tr>
+        <td bgcolor="#fff5f8" align="center" style="background-color:#fff5f8;padding:24px 36px;border-top:1px solid #ffeaf2;font-family:${ff}">
+          <p style="margin:0 0 6px;color:#7a5f6c;font-size:13px;font-weight:600">EndoMe</p>
+          <p style="margin:0;color:#a08596;font-size:12px;line-height:1.5">
+            Your story starts here · <a href="${siteUrl}" style="color:#ff4e8a;text-decoration:none">endome.com</a>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
 </table>
 </body>
 </html>`;
@@ -1226,6 +1225,30 @@ async function dismissNotification(env, user, id) {
 }
 
 // --- Gamification ---------------------------------------------------------
+const ALLOWED_PET_TYPES = new Set(["luna", "poppy", "mochi", "sunny", "coco", "kiki"]);
+const DEFAULT_PET_NAME = {
+  luna: "Luna", poppy: "Poppy", mochi: "Mochi",
+  sunny: "Sunny", coco: "Coco", kiki: "Kiki",
+};
+
+async function putPet(request, env, user) {
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const type = oneOf(body.type, ALLOWED_PET_TYPES);
+  if (!type) return json({ error: "Unknown pet" }, 400);
+  let name = sanitizeText(body.name, 30) || DEFAULT_PET_NAME[type];
+  // Strip any control chars and cap silly lengths.
+  name = name.replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 30) || DEFAULT_PET_NAME[type];
+
+  await env.DB.prepare(
+    "UPDATE pets SET pet_type = ?, pet_name = ?, updated_at = ? WHERE user_id = ?"
+  ).bind(type, name, nowSec(), user.id).run();
+
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
+    .bind(user.id).first();
+  return json({ ok: true, pet: petResponse(pet) });
+}
+
 async function awardXp(env, userId, points, logDate) {
   const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(userId).first();
   if (!pet) return null;

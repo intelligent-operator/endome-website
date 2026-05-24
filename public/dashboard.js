@@ -85,6 +85,126 @@ function render() {
   renderBanner();
   renderNotifBadge();
   renderSymptomsTodayHint(symptoms?.length || 0);
+  renderCycleSnapshot();
+  renderTodaySymptoms();
+}
+
+// --- Cycle Snapshot card --------------------------------------------------
+const PHASE_LABEL = {
+  menstrual:  { label: "Menstrual",  icon: "🌑" },
+  follicular: { label: "Follicular", icon: "🌒" },
+  ovulation:  { label: "Ovulation",  icon: "🌕" },
+  luteal:     { label: "Luteal",     icon: "🌘" },
+};
+function dotsHtml(n) {
+  let out = '<span class="dots">';
+  for (let i = 1; i <= 5; i++) out += `<i class="${i <= n ? "" : "o"}"></i>`;
+  return out + "</span>";
+}
+function painLabel(n) { return ["", "None", "Mild", "Moderate", "Strong", "Severe"][n] || "—"; }
+function levelLabel(n) { return ["", "Low", "Low", "Okay", "Good", "High"][n] || "—"; }
+function moodLabel(n) { return ["", "Low", "Low", "Okay", "Good", "Great"][n] || "—"; }
+
+function renderCycleSnapshot() {
+  const el = document.getElementById("cycle-snapshot");
+  if (!el) return;
+  const cycle = state.cycle || {};
+  const m = state.morning;
+
+  if (!m && !cycle.day && !cycle.phase) {
+    el.innerHTML = `<p class="empty-state">Log this morning's check-in to see your cycle overview.</p>
+      <button class="pill-btn full" data-modal="morning">Morning check-in</button>`;
+    return;
+  }
+
+  const phase = cycle.phase ? PHASE_LABEL[cycle.phase] : null;
+  const dayLine = cycle.day
+    ? `<div class="cycle-day">Day ${cycle.day}</div>`
+    : `<div class="cycle-day">—</div>`;
+  const phaseLine = phase
+    ? `<div class="cycle-phase">${phase.icon} ${phase.label} Phase</div>`
+    : `<div class="cycle-phase">Phase not set</div>`;
+
+  let statsHtml = "";
+  if (m) {
+    statsHtml = `<ul class="cycle-stats">
+      <li><span class="cs-ico">🔥</span><span>Pain</span>${dotsHtml(m.pain)}<span class="cs-val">${painLabel(m.pain)}</span></li>
+      <li><span class="cs-ico">⚡</span><span>Energy</span>${dotsHtml(m.energy)}<span class="cs-val">${levelLabel(m.energy)}</span></li>
+      <li><span class="cs-ico">🙂</span><span>Mood</span>${dotsHtml(m.mood)}<span class="cs-val">${moodLabel(m.mood)}</span></li>
+      ${m.sleepQuality ? `<li><span class="cs-ico">🌙</span><span>Sleep</span>${dotsHtml(m.sleepQuality)}<span class="cs-val">${levelLabel(m.sleepQuality)}</span></li>` : ""}
+    </ul>`;
+  } else {
+    statsHtml = `<p class="empty-state small">Add a morning check-in for today's mood, energy, and pain.</p>`;
+  }
+
+  el.innerHTML = dayLine + phaseLine + statsHtml;
+}
+
+// --- Today's Symptoms list ------------------------------------------------
+const SYMPTOM_META = {
+  pain:              { icon: "💢", label: "Pain" },
+  pelvic_pain:       { icon: "⚡", label: "Pelvic pain" },
+  back_pain:         { icon: "🦴", label: "Lower back" },
+  cramps:            { icon: "🔥", label: "Cramps" },
+  endo_belly:        { icon: "🎈", label: "Endo belly" },
+  bloating:          { icon: "💧", label: "Bloating" },
+  nausea:            { icon: "🤢", label: "Nausea" },
+  fatigue:           { icon: "😴", label: "Fatigue" },
+  headache:          { icon: "🧠", label: "Headache" },
+  breast_tender:     { icon: "💗", label: "Breast tender" },
+  hot_flash:         { icon: "🥵", label: "Hot flash" },
+  dizziness:         { icon: "💫", label: "Dizziness" },
+  spotting:          { icon: "🩸", label: "Spotting" },
+  painful_urination: { icon: "🚽", label: "Painful peeing" },
+  painful_bowel:     { icon: "💩", label: "Painful BM" },
+  painful_sex:       { icon: "💔", label: "Painful sex" },
+  mood:              { icon: "💭", label: "Mood swing" },
+  sleep:             { icon: "🌙", label: "Sleep issue" },
+  other:             { icon: "＋", label: "Other" },
+};
+function relTime(unixSec) {
+  const diff = Math.floor(Date.now() / 1000) - unixSec;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  const d = new Date(unixSec * 1000);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderTodaySymptoms() {
+  const list = document.getElementById("today-symptoms-list");
+  const count = document.getElementById("sym-count");
+  if (!list) return;
+  const items = state.symptoms || [];
+
+  count.textContent = items.length ? `· ${items.length}` : "";
+
+  if (items.length === 0) {
+    list.innerHTML = `<p class="empty-state">Nothing logged today. Tap "+ Log symptom" when something comes up.</p>`;
+    return;
+  }
+
+  list.innerHTML = `<ul class="sym-list">` + items.map((s) => {
+    const meta = SYMPTOM_META[s.symptom] || { icon: "•", label: s.symptom };
+    const tags = [];
+    if (s.location) tags.push(`📍 ${s.location}`);
+    if (s.triggers) tags.push(...String(s.triggers).split(",").map((t) => `· ${t}`));
+    return `<li class="sym-row">
+      <div class="sym-ico" title="${meta.label}">${meta.icon}</div>
+      <div class="sym-main">
+        <div class="sym-top"><strong>${meta.label}</strong> <span class="sev sev-${s.severity}">${s.severity}/5</span></div>
+        ${s.notes ? `<p class="sym-notes">${escapeHtml(s.notes)}</p>` : ""}
+        ${tags.length ? `<div class="sym-tags">${tags.map(escapeHtml).join(" ")}</div>` : ""}
+      </div>
+      <div class="sym-time">${relTime(s.loggedAt)}</div>
+    </li>`;
+  }).join("") + `</ul>`;
+}
+
+function escapeHtml(s) {
+  return String(s || "").replace(/[<>&"']/g, (c) => ({
+    "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
+  })[c]);
 }
 
 function renderBanner() {

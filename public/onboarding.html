@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/onboarding.css" />
+</head>
+<body class="ob-body">
+  <div class="ob-bg" aria-hidden="true"></div>
+
+  <main class="ob-shell">
+    <header class="ob-header">
+      <a href="/" class="ob-logo" aria-label="EndoMe home">
+        <img src="/logo-final.png" alt="" width="44" height="44" />
+        <span>EndoMe</span>
+      </a>
+      <div class="ob-progress">
+        <span class="ob-dot on" data-dot="1"></span>
+        <span class="ob-dot" data-dot="2"></span>
+        <span class="ob-dot" data-dot="3"></span>
+      </div>
+      <a href="/dashboard" class="ob-skip">Skip for now</a>
+    </header>
+
+    <!-- STEP 1: welcome -->
+    <section class="ob-step" data-step="1">
+      <div class="ob-hero">
+        <div class="ob-emoji">🌸</div>
+        <h1>Welcome, <span data-bind="displayName">friend</span>!</h1>
+        <p class="ob-lead">Let's set up your space — takes 60 seconds.</p>
+      </div>
+      <ul class="ob-pillars">
+        <li><span>🧬</span><div><strong>Understand</strong><p>DNA + symptoms + cycle, in one place.</p></div></li>
+        <li><span>🐾</span><div><strong>Companion</strong><p>Your EndoPet grows with every check-in.</p></div></li>
+        <li><span>💖</span><div><strong>Support</strong><p>You're not alone — we're here, every step.</p></div></li>
+      </ul>
+      <div class="ob-actions">
+        <button class="btn btn-primary" data-next>Let's go →</button>
+      </div>
+    </section>
+
+    <!-- STEP 2: pick a pet -->
+    <section class="ob-step" data-step="2" hidden>
+      <header class="ob-step-h">
+        <h1>Pick your EndoPet</h1>
+        <p class="ob-lead">Your little companion on this journey. They grow with every entry.</p>
+      </header>
+
+      <div class="ob-pets" data-chip="pet">
+        <button type="button" class="ob-pet on" data-val="luna">
+          <div class="ob-pet-art">
+            <svg viewBox="0 0 140 140" width="100%" height="auto"><ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/><path d="M40 60 L26 30 L48 46 Z" fill="#ff8aab"/><path d="M100 60 L114 30 L92 46 Z" fill="#ff8aab"/><ellipse cx="70" cy="92" rx="34" ry="26" fill="#ff9bb3"/><circle cx="70" cy="72" r="32" fill="#ffb6c8"/><circle cx="59" cy="74" r="4.5" fill="#2c1320"/><circle cx="81" cy="74" r="4.5" fill="#2c1320"/><path d="M67 86 q3 3 6 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+          </div>
+          <span class="ob-pet-name">Luna</span>
+          <span class="ob-pet-tag">Cat</span>
+        </button>
+        <button type="button" class="ob-pet" data-val="poppy">
+          <div class="ob-pet-art">
+            <svg viewBox="0 0 140 140" width="100%" height="auto"><ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/><ellipse cx="44" cy="80" rx="14" ry="20" fill="#e8a86a"/><ellipse cx="96" cy="80" rx="14" ry="20" fill="#e8a86a"/><circle cx="70" cy="72" r="32" fill="#f5c184"/><circle cx="59" cy="72" r="4.5" fill="#2c1320"/><circle cx="81" cy="72" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="84" rx="3.5" ry="2.5" fill="#2c1320"/><path d="M66 90 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none"/></svg>
+          </div>
+          <span class="ob-pet-name">Poppy</span>
+          <span class="ob-pet-tag">Puppy</span>
+        </button>
+        <button type="button" class="ob-pet" data-val="mochi">
+          <div class="ob-pet-art">
+            <svg viewBox="0 0 140 140" width="100%" height="auto"><ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/><ellipse cx="52" cy="34" rx="9" ry="22" fill="#dcd0f0"/><ellipse cx="88" cy="34" rx="9" ry="22" fill="#dcd0f0"/><circle cx="70" cy="72" r="30" fill="#f0e6fb"/><circle cx="60" cy="74" r="4.5" fill="#2c1320"/><circle cx="80" cy="74" r="4.5" fill="#2c1320"/><path d="M68 84 l2 2 l2 -2 z" fill="#ff7a99"/></svg>
+          </div>
+          <span class="ob-pet-name">Mochi</span>
+          <span class="ob-pet-tag">Bunny</span>
+        </button>
+        <button type="button" class="ob-pet" data-val="sunny">
+          <div class="ob-pet-art">
+            <svg viewBox="0 0 140 140" width="100%" height="auto"><ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/><path d="M40 38 L52 60 L34 56 Z" fill="#e8762a"/><path d="M100 38 L88 60 L106 56 Z" fill="#e8762a"/><circle cx="70" cy="72" r="32" fill="#f08b3a"/><path d="M70 60 Q50 72 56 92 Q70 86 70 86 Q70 86 84 92 Q90 72 70 60 Z" fill="#fff"/><circle cx="60" cy="72" r="4.5" fill="#2c1320"/><circle cx="80" cy="72" r="4.5" fill="#2c1320"/></svg>
+          </div>
+          <span class="ob-pet-name">Sunny</span>
+          <span class="ob-pet-tag">Fox</span>
+        </button>
+        <button type="button" class="ob-pet" data-val="coco">
+          <div class="ob-pet-art">
+            <svg viewBox="0 0 140 140" width="100%" height="auto"><ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/><circle cx="34" cy="58" r="16" fill="#9d8fc7"/><circle cx="106" cy="58" r="16" fill="#9d8fc7"/><circle cx="70" cy="68" r="30" fill="#b5a7d8"/><circle cx="60" cy="68" r="4.5" fill="#2c1320"/><circle cx="80" cy="68" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="82" rx="9" ry="7" fill="#2c1320"/></svg>
+          </div>
+          <span class="ob-pet-name">Coco</span>
+          <span class="ob-pet-tag">Koala</span>
+        </button>
+        <button type="button" class="ob-pet" data-val="kiki">
+          <div class="ob-pet-art">
+            <svg viewBox="0 0 140 140" width="100%" height="auto"><ellipse cx="70" cy="120" rx="46" ry="6" fill="#ffd6e0" opacity=".7"/><ellipse cx="56" cy="34" rx="6" ry="20" fill="#d9a872"/><ellipse cx="84" cy="34" rx="6" ry="20" fill="#d9a872"/><ellipse cx="70" cy="70" rx="28" ry="26" fill="#e8b985"/><circle cx="60" cy="68" r="4.5" fill="#2c1320"/><circle cx="80" cy="68" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="80" rx="3.5" ry="2.5" fill="#2c1320"/></svg>
+          </div>
+          <span class="ob-pet-name">Kiki</span>
+          <span class="ob-pet-tag">Kangaroo</span>
+        </button>
+      </div>
+
+      <div class="ob-name-row">
+        <label for="pet-name">Give them a name <em>(optional)</em></label>
+        <input id="pet-name" type="text" maxlength="30" placeholder="Luna" />
+      </div>
+
+      <div class="ob-actions split">
+        <button class="btn btn-ghost" data-prev>← Back</button>
+        <button class="btn btn-primary" data-next id="pet-continue">Continue →</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: EndoMap pitch -->
+    <section class="ob-step" data-step="3" hidden>
+      <header class="ob-step-h">
+        <h1>Meet <span class="brand-em">EndoMap</span></h1>
+        <p class="ob-lead">A simple at-home DNA test that maps the markers most linked to endometriosis.</p>
+      </header>
+
+      <div class="em-card">
+        <div class="em-art" aria-hidden="true">
+          <svg viewBox="0 0 200 160" width="200" height="160">
+            <ellipse cx="100" cy="146" rx="60" ry="8" fill="#ffd6e0" opacity=".6"/>
+            <!-- box -->
+            <rect x="40" y="60" width="120" height="68" rx="8" fill="#fff5f8" stroke="#ffd6e0" stroke-width="2"/>
+            <rect x="40" y="60" width="120" height="18" rx="8" fill="#ff9bb3"/>
+            <text x="100" y="73" text-anchor="middle" font-size="9" font-weight="700" fill="#fff" font-family="sans-serif">ENDOMAP</text>
+            <!-- DNA helix -->
+            <g transform="translate(70 84)">
+              <path d="M0 0 Q30 12 60 0 Q30 -12 0 0 Z" fill="none" stroke="#ff5d8f" stroke-width="2"/>
+              <path d="M0 20 Q30 32 60 20 Q30 8 0 20 Z" fill="none" stroke="#ff5d8f" stroke-width="2"/>
+              <path d="M0 40 Q30 28 60 40" fill="none" stroke="#ff5d8f" stroke-width="2"/>
+              <line x1="10" y1="6" x2="10" y2="34" stroke="#ffb168" stroke-width="1.5"/>
+              <line x1="30" y1="0" x2="30" y2="40" stroke="#ffb168" stroke-width="1.5"/>
+              <line x1="50" y1="6" x2="50" y2="34" stroke="#ffb168" stroke-width="1.5"/>
+            </g>
+            <!-- ribbon -->
+            <path d="M155 40 q-5 8 0 16 q5 -8 0 -16z" fill="#ff5d8f"/>
+            <circle cx="35" cy="35" r="3" fill="#ff9bb3"/>
+            <circle cx="170" cy="100" r="3" fill="#ff9bb3"/>
+          </svg>
+        </div>
+        <div class="em-copy">
+          <ul class="em-list">
+            <li><span class="em-check">✓</span> Posted to your door in a discreet kit</li>
+            <li><span class="em-check">✓</span> Painless cheek swab — 30 seconds</li>
+            <li><span class="em-check">✓</span> Results in 2–3 weeks, integrated into your EndoMe insights</li>
+            <li><span class="em-check">✓</span> Designed to support — not replace — a clinician's diagnosis</li>
+          </ul>
+          <p class="em-price"><strong>£149</strong> <span>one-time · free shipping</span></p>
+        </div>
+      </div>
+
+      <div class="ob-actions split">
+        <button class="btn btn-ghost" data-prev>← Back</button>
+        <div class="ob-actions-right">
+          <a href="/dashboard" class="ob-link">Maybe later</a>
+          <button class="btn btn-primary" id="buy-endomap">Order EndoMap</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast for "coming soon" notice on Buy click -->
+  <div id="ob-toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="/onboarding.js" defer></script>
+</body>
+</html>

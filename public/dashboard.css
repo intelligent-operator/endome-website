@@ -11,11 +11,11 @@
   max-width:1600px;
   margin:0 auto;
   padding:14px 28px;
-  display:grid;
-  grid-template-columns:200px minmax(0,1fr) auto auto;
+  display:flex;
   align-items:center;
   gap:20px;
 }
+.dash-spacer{flex:1}
 .dash-search{
   position:relative;max-width:340px;
   display:flex;align-items:center;gap:8px;
@@ -125,6 +125,38 @@
 
 /* STAT ROW */
 .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.stat-row-2{grid-template-columns:1fr 1fr}
+.pill-btn.small{padding:7px 14px;font-size:12px}
+.muted{color:#a08596;font-weight:500;font-size:13px}
+.empty-state{
+  text-align:center;color:#7a5f6c;font-size:13px;
+  padding:14px 8px;margin:0;
+}
+.empty-state.small{padding:8px 4px;font-size:12px}
+.today-symptoms .card-head{margin-bottom:14px}
+.sym-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+.sym-row{
+  display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center;
+  padding:12px;background:#fff5f8;border-radius:12px;
+}
+.sym-ico{
+  width:42px;height:42px;border-radius:10px;background:#ffeaf2;
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+}
+.sym-main{min-width:0}
+.sym-top{display:flex;align-items:center;gap:8px;font-size:14px;color:#3a2330}
+.sev{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;color:#fff;
+}
+.sev-1{background:#5cc77c}
+.sev-2{background:#a8d063}
+.sev-3{background:#f5c542}
+.sev-4{background:#f59042}
+.sev-5{background:#e8344a}
+.sym-notes{margin:2px 0 0;font-size:12px;color:#5a3a48;line-height:1.4}
+.sym-tags{margin-top:4px;font-size:11px;color:#7a5f6c}
+.sym-time{font-size:11px;color:#7a5f6c;white-space:nowrap}
 .stat-card{display:flex;flex-direction:column;min-height:200px}
 
 .mini-gauge{position:relative;text-align:center;margin:4px 0}
