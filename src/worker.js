@@ -444,7 +444,7 @@ async function sendOtpEmail(env, email, code) {
   await mandrillSend(env, {
     to: [{ email, type: "to" }],
     subject: `EndoMe sign-in code: ${code}`,
-    from_email: env.NEWSLETTER_FROM_EMAIL || "no-reply@endome.app",
+    from_email: env.NEWSLETTER_FROM_EMAIL || "hello@endome.com",
     from_name: env.NEWSLETTER_FROM_NAME || "EndoMe",
     html:
       `<p style="font-size:15px;color:#3a2330;margin:0 0 12px">Your EndoMe sign-in code:</p>` +
