@@ -54,6 +54,9 @@ export default {
         if (url.pathname === "/api/login" && request.method === "POST") {
           return await handleLogin(request, env);
         }
+        if (url.pathname === "/api/register" && request.method === "POST") {
+          return await handleRegister(request, env);
+        }
         if (url.pathname === "/api/logout") {
           return await handleLogout(request, env);
         }
@@ -124,47 +127,163 @@ async function handleLogin(request, env) {
 
   let body;
   try { body = await request.json(); } catch { body = null; }
-  const username = typeof body?.username === "string" ? body.username : "";
+  const usernameRaw = typeof body?.username === "string" ? body.username : "";
   const password = typeof body?.password === "string" ? body.password : "";
 
   // Strict input validation. Reject anything weird before touching secrets.
   if (
-    username.length === 0 ||
-    username.length > MAX_USERNAME_LEN ||
+    usernameRaw.length === 0 ||
+    usernameRaw.length > MAX_USERNAME_LEN ||
     password.length === 0 ||
     password.length > MAX_PASSWORD_LEN ||
-    /[\x00-\x1f\x7f]/.test(username)
+    /[\x00-\x1f\x7f]/.test(usernameRaw)
   ) {
     await sleep(LOGIN_FAIL_DELAY_MS);
     return json({ error: "Invalid credentials" }, 401);
   }
 
-  const cfgUser = env.AUTH_USERNAME || "";
-  const cfgPass = env.AUTH_PASSWORD || "";
   const sessionSecret = env.SESSION_SECRET || "";
-  if (!cfgUser || !cfgPass || !sessionSecret) {
-    console.error("auth: missing AUTH_USERNAME / AUTH_PASSWORD / SESSION_SECRET");
+  if (!sessionSecret) {
+    console.error("auth: missing SESSION_SECRET");
     return json({ error: "Authentication not configured" }, 503);
   }
 
-  const userOk = timingSafeEqual(username, cfgUser);
-  const passOk = timingSafeEqual(password, cfgPass);
-  if (!userOk || !passOk) {
-    await sleep(LOGIN_FAIL_DELAY_MS);
-    return json({ error: "Invalid credentials" }, 401);
+  const username = usernameRaw.toLowerCase();
+
+  // 1. Registered user lookup (D1). Matches against username OR email so
+  //    new users can sign in with either.
+  if (env.DB) {
+    const row = await env.DB.prepare(
+      "SELECT username, password_hash, password_salt FROM users " +
+      "WHERE username = ? OR email = ? LIMIT 1"
+    ).bind(username, username).first();
+    if (row?.password_hash && row?.password_salt) {
+      const ok = await verifyPassword(password, row.password_hash, row.password_salt);
+      if (ok) return mintSessionResponse(row.username, request, env);
+      await sleep(LOGIN_FAIL_DELAY_MS);
+      return json({ error: "Invalid credentials" }, 401);
+    }
   }
 
-  const token = await signSession(
-    { u: cfgUser, iat: nowSec(), exp: nowSec() + SESSION_TTL_SEC },
-    sessionSecret
-  );
+  // 2. Fallback: hardcoded env-var account (the "endome" admin login).
+  const cfgUser = (env.AUTH_USERNAME || "").toLowerCase();
+  const cfgPass = env.AUTH_PASSWORD || "";
+  if (cfgUser && cfgPass) {
+    const userOk = timingSafeEqual(username, cfgUser);
+    const passOk = timingSafeEqual(password, cfgPass);
+    if (userOk && passOk) return mintSessionResponse(cfgUser, request, env);
+  }
 
+  await sleep(LOGIN_FAIL_DELAY_MS);
+  return json({ error: "Invalid credentials" }, 401);
+}
+
+// --- Registration ---------------------------------------------------------
+async function handleRegister(request, env) {
+  if (!env.DB) return json({ error: "Storage not configured" }, 503);
+  if (!env.SESSION_SECRET) return json({ error: "Authentication not configured" }, 503);
+
+  const ct = request.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) return json({ error: "Invalid request" }, 400);
+
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const email = typeof body?.email === "string" ? body.email.toLowerCase().trim() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+  const displayName = sanitizeText(body?.displayName, 60);
+
+  // Validation
+  if (!isEmail(email) || email.length > 200) {
+    return json({ error: "Please enter a valid email address." }, 400);
+  }
+  if (/[\x00-\x1f\x7f]/.test(email)) {
+    return json({ error: "Invalid email." }, 400);
+  }
+  if (password.length < 10) {
+    return json({ error: "Password must be at least 10 characters." }, 400);
+  }
+  if (password.length > MAX_PASSWORD_LEN) {
+    return json({ error: "Password too long." }, 400);
+  }
+  if (!displayName) {
+    return json({ error: "Please enter a display name." }, 400);
+  }
+
+  // Quietly slow down duplicate-email probing without leaking existence on
+  // happy path.
+  const existing = await env.DB.prepare(
+    "SELECT 1 FROM users WHERE username = ? OR email = ? LIMIT 1"
+  ).bind(email, email).first();
+  if (existing) {
+    await sleep(LOGIN_FAIL_DELAY_MS);
+    return json({ error: "An account with that email already exists." }, 409);
+  }
+
+  const { hash, salt } = await hashPassword(password);
+  const id = `u_${b64url(crypto.getRandomValues(new Uint8Array(8)))}`;
+  const now = nowSec();
+
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO users (id, username, email, display_name, password_hash, password_salt, timezone, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, 'UTC', ?)"
+      ).bind(id, email, email, displayName, hash, salt, now),
+      env.DB.prepare(
+        "INSERT INTO pets (user_id, pet_type, pet_name, level, xp, mood, streak_days, updated_at) " +
+        "VALUES (?, 'luna', 'Luna', 1, 0, 'happy', 0, ?)"
+      ).bind(id, now),
+    ]);
+  } catch (err) {
+    console.error("register failed:", err);
+    return json({ error: "Could not create account. Try again." }, 500);
+  }
+
+  return mintSessionResponse(email, request, env, 201);
+}
+
+// Shared: signs a session, sets the cookie, returns the JSON redirect response.
+async function mintSessionResponse(username, request, env, status = 200) {
+  const token = await signSession(
+    { u: username, iat: nowSec(), exp: nowSec() + SESSION_TTL_SEC },
+    env.SESSION_SECRET
+  );
   const headers = new Headers(JSON_HEADERS);
   headers.append("Set-Cookie", buildCookie(SESSION_COOKIE, token, request, SESSION_TTL_SEC));
-  return new Response(JSON.stringify({ ok: true, redirect: "/dashboard" }), {
-    status: 200,
-    headers,
-  });
+  return new Response(JSON.stringify({ ok: true, redirect: "/dashboard" }), { status, headers });
+}
+
+// --- Password hashing (PBKDF2-SHA256, per-user salt) ---------------------
+const PBKDF2_ITERATIONS = 100_000;
+const SALT_BYTES = 16;
+const HASH_BYTES = 32;
+
+async function hashPassword(password, existingSaltB64) {
+  let saltBytes;
+  if (existingSaltB64) {
+    saltBytes = b64urlDecode(existingSaltB64);
+  } else {
+    saltBytes = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  }
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(password),
+    { name: "PBKDF2" }, false, ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: saltBytes, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    key, HASH_BYTES * 8
+  );
+  return { hash: b64url(new Uint8Array(bits)), salt: b64url(saltBytes) };
+}
+
+async function verifyPassword(password, storedHashB64, storedSaltB64) {
+  try {
+    const { hash } = await hashPassword(password, storedSaltB64);
+    return timingSafeEqual(hash, storedHashB64);
+  } catch {
+    return false;
+  }
 }
 
 async function handleLogout(request, _env) {

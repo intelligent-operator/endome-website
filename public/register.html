@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create your account – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="login-body">
+  <div class="login-bg" aria-hidden="true"></div>
+
+  <main class="login-wrap">
+    <div class="login-card">
+      <a href="/" class="login-logo" aria-label="EndoMe home">
+        <img src="/logo-final.png" alt="" width="72" height="72" />
+      </a>
+      <h1>Create your account</h1>
+      <p class="login-sub">Start tracking your story today.</p>
+
+      <form id="register-form" method="post" action="/api/register" novalidate autocomplete="off">
+        <label class="field">
+          <span>Your name</span>
+          <input
+            type="text" name="displayName" autocomplete="given-name"
+            required maxlength="60" placeholder="Alex"
+            spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input
+            type="email" name="email" autocomplete="email"
+            required maxlength="200" placeholder="you@example.com"
+            spellcheck="false" autocapitalize="none" autocorrect="off" inputmode="email" />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input
+            type="password" name="password" autocomplete="new-password"
+            required minlength="10" maxlength="500"
+            placeholder="At least 10 characters" />
+          <em class="hint">Use a long passphrase you don't reuse anywhere else.</em>
+        </label>
+        <label class="check terms">
+          <input type="checkbox" name="terms" required />
+          <span>I'm 16+ and understand EndoMe supports — but doesn't replace — medical care.</span>
+        </label>
+        <button type="submit" class="btn btn-primary full" id="register-submit">Create account</button>
+        <p id="register-status" class="form-status" role="status" aria-live="polite"></p>
+      </form>
+
+      <p class="login-foot">Already have an account? <a href="/login">Sign in</a></p>
+    </div>
+  </main>
+
+  <script src="/register.js" defer></script>
+</body>
+</html>
