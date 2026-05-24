@@ -484,9 +484,135 @@
 }
 .field select:focus,.field textarea:focus{border-color:#ff4e8a;background:#fff}
 
+/* ============ Upgraded modals: sections, segmented sliders, counters ============ */
+.modal-xl{max-width:580px;width:100%;text-align:left;padding:28px 28px 22px;max-height:90vh;overflow-y:auto}
+.modal-section{
+  padding:14px 0;border-top:1px solid #ffeaf2;margin-top:14px;
+}
+.modal-section:first-of-type{border-top:none;margin-top:0;padding-top:0}
+.section-title{
+  font-size:12px;font-weight:700;color:#3a2330;
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;
+}
+.section-title .sec-hint{
+  font-size:11px;font-weight:500;color:#a08596;text-transform:none;letter-spacing:0;margin-left:6px;
+}
+.seg-field{margin-bottom:12px}
+.seg-field:last-child{margin-bottom:0}
+.seg-field > label{
+  display:block;font-size:12px;font-weight:600;color:#5a3a48;margin-bottom:6px;
+}
+
+/* Segmented slider — feels like a slider, behaves like radios */
+.seg-slider{
+  display:grid;grid-template-columns:repeat(5,1fr);gap:4px;
+  background:#fff5f8;border-radius:14px;padding:5px;
+  box-shadow:inset 0 1px 3px rgba(255,77,138,.06);
+}
+.seg-slider.mini{padding:4px;gap:3px}
+.seg-slider button{
+  background:transparent;border:none;cursor:pointer;font-family:inherit;
+  padding:10px 4px;border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  transition:transform .14s ease, background .15s, color .15s, box-shadow .15s;
+  color:#7a5f6c;
+}
+.seg-slider button:hover{background:#ffeaf2;color:#ff4e8a}
+.seg-slider button.on{
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  box-shadow:0 6px 14px rgba(255,77,138,.32);transform:translateY(-1px) scale(1.02);
+}
+.seg-icon{font-size:22px;line-height:1}
+.seg-label{font-size:11px;font-weight:600}
+.seg-sublabel{font-size:9px;font-weight:500;opacity:.7}
+.seg-slider.mini button{padding:8px 2px}
+.seg-slider.mini .seg-label{font-size:14px}
+
+/* Pain/severity heat colours on selection */
+.seg-slider.pain button.on[data-val="1"]{background:linear-gradient(135deg,#5cc77c,#7ad99b);box-shadow:0 6px 14px rgba(92,199,124,.3)}
+.seg-slider.pain button.on[data-val="2"]{background:linear-gradient(135deg,#a8d063,#c2dc7b);box-shadow:0 6px 14px rgba(168,208,99,.3)}
+.seg-slider.pain button.on[data-val="3"]{background:linear-gradient(135deg,#f5c542,#f7d36b);box-shadow:0 6px 14px rgba(245,197,66,.3)}
+.seg-slider.pain button.on[data-val="4"]{background:linear-gradient(135deg,#f59042,#f7a766);box-shadow:0 6px 14px rgba(245,144,66,.3)}
+.seg-slider.pain button.on[data-val="5"]{background:linear-gradient(135deg,#e8344a,#ff4e8a);box-shadow:0 6px 14px rgba(232,52,74,.35)}
+
+/* Chip variants */
+.chip-pick.wrap{display:flex;flex-wrap:wrap;gap:6px}
+.chip-pick.multi button{position:relative}
+.chip-pick.multi button.on::after{
+  content:"";position:absolute;top:-4px;right:-4px;
+  width:14px;height:14px;border-radius:50%;
+  background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12l4 4L19 6' stroke='%23ff4e8a' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/10px no-repeat;
+  box-shadow:0 2px 4px rgba(0,0,0,.15);
+}
+
+/* Counter (+/-) */
+.counter-field > label{display:block;font-size:12px;font-weight:600;color:#5a3a48;margin-bottom:6px}
+.counter{
+  display:grid;grid-template-columns:44px 1fr 44px;align-items:stretch;
+  background:#fff5f8;border:1px solid #ffe2eb;border-radius:14px;overflow:hidden;
+}
+.counter button{
+  background:transparent;border:none;cursor:pointer;
+  font-size:20px;font-weight:600;color:#ff4e8a;font-family:inherit;
+  transition:background .15s;
+}
+.counter button:hover{background:#ffeaf2}
+.counter input{
+  border:none;background:transparent;outline:none;
+  text-align:center;font-family:inherit;font-size:16px;font-weight:600;color:#3a2330;
+  -moz-appearance:textfield;
+}
+.counter input::-webkit-outer-spin-button,
+.counter input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+/* Flow indicator */
+.flow-pick{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.flow-pick button{
+  background:#fff5f8;border:1px solid #ffe2eb;border-radius:12px;
+  padding:10px 6px;cursor:pointer;font-family:inherit;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  font-size:11px;font-weight:600;color:#7a5f6c;
+  transition:background .15s, border-color .15s, color .15s, transform .12s;
+}
+.flow-pick button:hover{background:#ffeaf2;color:#ff4e8a}
+.flow-pick button.on{
+  background:#ffeaf2;border-color:#ff4e8a;color:#ff4e8a;transform:translateY(-1px);
+}
+.flow-ico{display:flex;align-items:flex-end;gap:2px;height:18px}
+.flow-ico .drop{
+  width:8px;height:14px;background:#e8344a;
+  border-radius:50% 50% 50% 50% / 70% 70% 30% 30%;
+  transform:rotate(180deg);
+}
+.flow-ico .drop.xs{width:5px;height:8px}
+.flow-ico .ring{
+  width:14px;height:14px;border:2px solid #c0a0b0;border-radius:50%;
+}
+
+/* Advanced (collapsible) section */
+.modal-section.advanced{padding:0;border-top:1px solid #ffeaf2;margin-top:14px}
+.modal-section.advanced summary{
+  list-style:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:12px 0;font-size:13px;font-weight:600;color:#3a2330;
+}
+.modal-section.advanced summary::-webkit-details-marker{display:none}
+.modal-section.advanced summary::after{
+  content:"+";color:#ff4e8a;font-size:18px;font-weight:600;line-height:1;
+  transition:transform .2s;
+}
+.modal-section.advanced[open] summary::after{transform:rotate(45deg)}
+.modal-section.advanced summary em{font-style:normal;font-weight:400;color:#a08596;font-size:12px}
+.modal-section.advanced[open]{padding-bottom:6px}
+
 @media (max-width:640px){
   .field-grid-2{grid-template-columns:1fr}
   .scale-bars button{font-size:11px;padding:8px 2px}
+  .seg-slider button{padding:8px 2px}
+  .seg-icon{font-size:18px}
+  .flow-pick{grid-template-columns:repeat(5,1fr)}
+  .flow-pick button{padding:8px 2px;font-size:10px}
   .notif-dropdown{right:14px}
   .fab span{display:none}
+  .modal-xl{padding:22px 18px 18px;border-radius:18px}
 }

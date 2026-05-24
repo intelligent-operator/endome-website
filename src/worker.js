@@ -450,9 +450,22 @@ const POINTS_EVENING = 15;
 const POINTS_FULL_DAY_BONUS = 20;     // awarded once both check-ins logged
 const XP_PER_LEVEL = 100;
 const ALLOWED_SYMPTOMS = new Set([
+  // generic
   "pain", "fatigue", "bloating", "nausea", "cramps",
   "headache", "mood", "sleep", "other",
+  // female-health / endo-aware
+  "pelvic_pain", "back_pain", "breast_tender", "hot_flash",
+  "painful_urination", "painful_bowel", "painful_sex",
+  "spotting", "endo_belly", "dizziness",
 ]);
+const ALLOWED_PHASES   = new Set(["menstrual", "follicular", "ovulation", "luteal"]);
+const ALLOWED_FLOW     = new Set(["none", "spotting", "light", "medium", "heavy"]);
+const ALLOWED_MUCUS    = new Set(["dry", "sticky", "creamy", "watery", "eggwhite"]);
+const ALLOWED_MOVEMENT = new Set(["none", "light", "moderate", "vigorous"]);
+const ALLOWED_BOWEL    = new Set(["constipated", "normal", "loose"]);
+const ALLOWED_INTIMACY = new Set(["none", "comfortable", "uncomfortable"]);
+const ALLOWED_TRIGGERS = new Set(["food","stress","exercise","intimacy","cold","hormones","travel","sleep","unknown"]);
+const ALLOWED_RELIEF   = new Set(["heat","rest","medication","hydration","movement","massage","bath","sleep","none"]);
 
 async function getOrCreateUser(env, username) {
   // Look up by username; create with deterministic id on first hit.
@@ -504,6 +517,7 @@ async function getMeToday(request, env, user) {
       energy: daily.morning_energy,
       pain: daily.morning_pain,
       sleepHours: daily.morning_sleep_hours,
+      sleepQuality: daily.morning_sleep_quality,
       notes: daily.morning_notes,
       loggedAt: daily.morning_logged_at,
     } : null,
@@ -511,7 +525,22 @@ async function getMeToday(request, env, user) {
       overall: daily.evening_overall,
       reflection: daily.evening_reflection,
       gratitude: daily.evening_gratitude,
+      waterGlasses: daily.water_glasses,
+      movementLevel: daily.movement_level,
+      bowelCount: daily.bowel_count,
+      bowelType: daily.bowel_type,
+      stressLevel: daily.stress_level,
+      intimacy: daily.intimacy,
+      medications: daily.medications,
       loggedAt: daily.evening_logged_at,
+    } : null,
+    cycle: daily ? {
+      day: daily.cycle_day,
+      phase: daily.cycle_phase,
+      flow: daily.flow,
+      bbt: daily.bbt,
+      cervicalMucus: daily.cervical_mucus,
+      breastTenderness: daily.breast_tenderness,
     } : null,
     symptoms: symptoms.results || [],
     pointsToday: daily?.points_total || 0,
@@ -528,18 +557,28 @@ async function postMorningCheckin(request, env, user) {
   const mood = clampInt(body.mood, 1, 5);
   const energy = clampInt(body.energy, 1, 5);
   const pain = clampInt(body.pain, 1, 5);
-  const sleepHours = body.sleepHours == null || body.sleepHours === ""
-    ? null
-    : clampFloat(body.sleepHours, 0, 24);
-  const notes = sanitizeText(body.notes, 1000);
   if (mood == null || energy == null || pain == null) {
     return json({ error: "mood, energy and pain are required (1–5)" }, 400);
   }
+
+  const sleepHours = body.sleepHours == null || body.sleepHours === ""
+    ? null : clampFloat(body.sleepHours, 0, 24);
+  const sleepQuality = clampInt(body.sleepQuality, 1, 5);
+  const notes = sanitizeText(body.notes, 1000);
+
+  // Cycle + body-awareness fields (all optional)
+  const cycleDay   = body.cycleDay == null || body.cycleDay === "" ? null : clampInt(body.cycleDay, 1, 60);
+  const cyclePhase = oneOf(body.cyclePhase, ALLOWED_PHASES);
+  const flow       = oneOf(body.flow, ALLOWED_FLOW);
+  const bbt        = body.bbt == null || body.bbt === "" ? null : clampFloat(body.bbt, 35, 40);
+  const mucus      = oneOf(body.cervicalMucus, ALLOWED_MUCUS);
+  const breastTender = clampInt(body.breastTenderness, 0, 5);
+
   const date = normaliseDate(body.date);
   const now = nowSec();
 
   const existing = await env.DB
-    .prepare("SELECT morning_logged_at, evening_logged_at, points_total FROM daily_logs WHERE user_id = ? AND log_date = ?")
+    .prepare("SELECT morning_logged_at, evening_logged_at FROM daily_logs WHERE user_id = ? AND log_date = ?")
     .bind(user.id, date).first();
 
   const firstTime = !existing?.morning_logged_at;
@@ -551,17 +590,35 @@ async function postMorningCheckin(request, env, user) {
   }
 
   await env.DB.prepare(
-    `INSERT INTO daily_logs (user_id, log_date, morning_mood, morning_energy, morning_pain, morning_sleep_hours, morning_notes, morning_logged_at, points_total)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+    `INSERT INTO daily_logs (
+       user_id, log_date,
+       morning_mood, morning_energy, morning_pain,
+       morning_sleep_hours, morning_sleep_quality, morning_notes, morning_logged_at,
+       cycle_day, cycle_phase, flow, bbt, cervical_mucus, breast_tenderness,
+       points_total)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
      ON CONFLICT(user_id, log_date) DO UPDATE SET
-       morning_mood = excluded.morning_mood,
-       morning_energy = excluded.morning_energy,
-       morning_pain = excluded.morning_pain,
-       morning_sleep_hours = excluded.morning_sleep_hours,
-       morning_notes = excluded.morning_notes,
-       morning_logged_at = COALESCE(daily_logs.morning_logged_at, excluded.morning_logged_at),
-       points_total = daily_logs.points_total + ?9`
-  ).bind(user.id, date, mood, energy, pain, sleepHours, notes, now, pointsAwarded).run();
+       morning_mood          = excluded.morning_mood,
+       morning_energy        = excluded.morning_energy,
+       morning_pain          = excluded.morning_pain,
+       morning_sleep_hours   = excluded.morning_sleep_hours,
+       morning_sleep_quality = excluded.morning_sleep_quality,
+       morning_notes         = excluded.morning_notes,
+       morning_logged_at     = COALESCE(daily_logs.morning_logged_at, excluded.morning_logged_at),
+       cycle_day             = COALESCE(excluded.cycle_day,         daily_logs.cycle_day),
+       cycle_phase           = COALESCE(excluded.cycle_phase,       daily_logs.cycle_phase),
+       flow                  = COALESCE(excluded.flow,              daily_logs.flow),
+       bbt                   = COALESCE(excluded.bbt,               daily_logs.bbt),
+       cervical_mucus        = COALESCE(excluded.cervical_mucus,    daily_logs.cervical_mucus),
+       breast_tenderness     = COALESCE(excluded.breast_tenderness, daily_logs.breast_tenderness),
+       points_total          = daily_logs.points_total + ?16`
+  ).bind(
+    user.id, date,
+    mood, energy, pain,
+    sleepHours, sleepQuality, notes, now,
+    cycleDay, cyclePhase, flow, bbt, mucus, breastTender,
+    pointsAwarded
+  ).run();
 
   const pet = await awardXp(env, user.id, pointsAwarded, date);
   return json({ ok: true, pointsAwarded, fullDayBonus, pet });
@@ -573,15 +630,25 @@ async function postEveningCheckin(request, env, user) {
   if (!body) return json({ error: "Invalid body" }, 400);
 
   const overall = clampInt(body.overall, 1, 5);
-  const reflection = sanitizeText(body.reflection, 2000);
-  const gratitude = sanitizeText(body.gratitude, 500);
   if (overall == null) return json({ error: "overall is required (1–5)" }, 400);
+
+  const reflection = sanitizeText(body.reflection, 2000);
+  const gratitude  = sanitizeText(body.gratitude, 500);
+
+  // Body-care
+  const water     = body.waterGlasses == null ? null : clampInt(body.waterGlasses, 0, 30);
+  const movement  = oneOf(body.movementLevel, ALLOWED_MOVEMENT);
+  const bowelCnt  = body.bowelCount == null ? null : clampInt(body.bowelCount, 0, 15);
+  const bowelTyp  = oneOf(body.bowelType, ALLOWED_BOWEL);
+  const stress    = clampInt(body.stressLevel, 1, 5);
+  const intimacy  = oneOf(body.intimacy, ALLOWED_INTIMACY);
+  const meds      = sanitizeText(body.medications, 500);
 
   const date = normaliseDate(body.date);
   const now = nowSec();
 
   const existing = await env.DB
-    .prepare("SELECT morning_logged_at, evening_logged_at, points_total FROM daily_logs WHERE user_id = ? AND log_date = ?")
+    .prepare("SELECT morning_logged_at, evening_logged_at FROM daily_logs WHERE user_id = ? AND log_date = ?")
     .bind(user.id, date).first();
 
   const firstTime = !existing?.evening_logged_at;
@@ -593,15 +660,31 @@ async function postEveningCheckin(request, env, user) {
   }
 
   await env.DB.prepare(
-    `INSERT INTO daily_logs (user_id, log_date, evening_overall, evening_reflection, evening_gratitude, evening_logged_at, points_total)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    `INSERT INTO daily_logs (
+       user_id, log_date,
+       evening_overall, evening_reflection, evening_gratitude, evening_logged_at,
+       water_glasses, movement_level, bowel_count, bowel_type, stress_level, intimacy, medications,
+       points_total)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
      ON CONFLICT(user_id, log_date) DO UPDATE SET
-       evening_overall = excluded.evening_overall,
+       evening_overall    = excluded.evening_overall,
        evening_reflection = excluded.evening_reflection,
-       evening_gratitude = excluded.evening_gratitude,
-       evening_logged_at = COALESCE(daily_logs.evening_logged_at, excluded.evening_logged_at),
-       points_total = daily_logs.points_total + ?7`
-  ).bind(user.id, date, overall, reflection, gratitude, now, pointsAwarded).run();
+       evening_gratitude  = excluded.evening_gratitude,
+       evening_logged_at  = COALESCE(daily_logs.evening_logged_at, excluded.evening_logged_at),
+       water_glasses      = COALESCE(excluded.water_glasses,  daily_logs.water_glasses),
+       movement_level     = COALESCE(excluded.movement_level, daily_logs.movement_level),
+       bowel_count        = COALESCE(excluded.bowel_count,    daily_logs.bowel_count),
+       bowel_type         = COALESCE(excluded.bowel_type,     daily_logs.bowel_type),
+       stress_level       = COALESCE(excluded.stress_level,   daily_logs.stress_level),
+       intimacy           = COALESCE(excluded.intimacy,       daily_logs.intimacy),
+       medications        = COALESCE(excluded.medications,    daily_logs.medications),
+       points_total       = daily_logs.points_total + ?14`
+  ).bind(
+    user.id, date,
+    overall, reflection, gratitude, now,
+    water, movement, bowelCnt, bowelTyp, stress, intimacy, meds,
+    pointsAwarded
+  ).run();
 
   const pet = await awardXp(env, user.id, pointsAwarded, date);
   return json({ ok: true, pointsAwarded, fullDayBonus, pet });
@@ -617,16 +700,18 @@ async function postSymptom(request, env, user) {
   const severity = clampInt(body.severity, 1, 5);
   if (severity == null) return json({ error: "severity is required (1–5)" }, 400);
   const location = sanitizeText(body.location, 60);
-  const notes = sanitizeText(body.notes, 500);
+  const notes    = sanitizeText(body.notes, 500);
+  const triggers = tagList(body.triggers, ALLOWED_TRIGGERS);
+  const relief   = tagList(body.relief, ALLOWED_RELIEF);
   const date = normaliseDate(body.date);
   const now = nowSec();
   const points = POINTS_SYMPTOM;
 
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO symptoms (user_id, log_date, logged_at, symptom, severity, location, notes, points) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(user.id, date, now, symptom, severity, location, notes, points),
+      "INSERT INTO symptoms (user_id, log_date, logged_at, symptom, severity, location, notes, triggers, relief, points) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(user.id, date, now, symptom, severity, location, notes, triggers, relief, points),
     env.DB.prepare(
       `INSERT INTO daily_logs (user_id, log_date, points_total)
        VALUES (?, ?, ?)
@@ -732,6 +817,22 @@ function clampFloat(v, min, max) {
   const n = Number.parseFloat(v);
   if (!Number.isFinite(n)) return null;
   return Math.min(max, Math.max(min, n));
+}
+function oneOf(v, allowed) {
+  if (typeof v !== "string") return null;
+  const lc = v.toLowerCase().trim();
+  return allowed.has(lc) ? lc : null;
+}
+function tagList(v, allowed) {
+  if (!Array.isArray(v)) return null;
+  const tags = [];
+  for (const item of v) {
+    if (typeof item !== "string") continue;
+    const lc = item.toLowerCase().trim();
+    if (allowed.has(lc) && !tags.includes(lc)) tags.push(lc);
+    if (tags.length >= 10) break;
+  }
+  return tags.length ? tags.join(",") : null;
 }
 function sanitizeText(v, maxLen) {
   if (v == null) return null;

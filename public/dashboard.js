@@ -217,7 +217,7 @@ function prefillModal(name) {
   }
 }
 
-// --- Scale / chip pickers -------------------------------------------------
+// --- Scale / chip / multi pickers ----------------------------------------
 function selectScale(group, value) {
   group.querySelectorAll("button").forEach((b) => b.classList.toggle("on", +b.dataset.val === +value));
   group.dataset.value = String(value);
@@ -226,12 +226,46 @@ function selectChip(group, value) {
   group.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.val === value));
   group.dataset.value = value;
 }
+function toggleMulti(group, value) {
+  const set = new Set((group.dataset.value || "").split(",").filter(Boolean));
+  if (set.has(value)) set.delete(value); else set.add(value);
+  group.dataset.value = [...set].join(",");
+  group.querySelectorAll("button").forEach((b) => b.classList.toggle("on", set.has(b.dataset.val)));
+}
+
+// --- Counters (+/-) -------------------------------------------------------
+function bumpCounter(form, target, delta, opts = {}) {
+  const input = form.querySelector(`input[name="${target}"]`);
+  if (!input) return;
+  let v = parseFloat(input.value || "0");
+  if (!Number.isFinite(v)) v = 0;
+  v = +(v + delta).toFixed(2);
+  const min = opts.min != null ? +opts.min : (input.min !== "" ? +input.min : -Infinity);
+  const max = opts.max != null ? +opts.max : (input.max !== "" ? +input.max : Infinity);
+  v = Math.max(min, Math.min(max, v));
+  input.value = String(v);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
 document.addEventListener("click", (e) => {
   const scaleBtn = e.target.closest("[data-scale] button");
-  if (scaleBtn) { selectScale(scaleBtn.parentElement, scaleBtn.dataset.val); maybeToggleSymptomExtras(); return; }
+  if (scaleBtn) { selectScale(scaleBtn.parentElement, scaleBtn.dataset.val); onPickerChange(scaleBtn); return; }
   const chipBtn = e.target.closest("[data-chip] button");
-  if (chipBtn) { selectChip(chipBtn.parentElement, chipBtn.dataset.val); maybeToggleSymptomExtras(); return; }
+  if (chipBtn) { selectChip(chipBtn.parentElement, chipBtn.dataset.val); onPickerChange(chipBtn); return; }
+  const multiBtn = e.target.closest("[data-multi] button");
+  if (multiBtn) { toggleMulti(multiBtn.parentElement, multiBtn.dataset.val); return; }
+  const cDecr = e.target.closest("[data-counter-decr]");
+  if (cDecr) {
+    const form = cDecr.closest("form");
+    bumpCounter(form, cDecr.dataset.counterTarget, -parseFloat(cDecr.dataset.counterDecr), { min: cDecr.dataset.min, max: cDecr.dataset.max });
+    return;
+  }
+  const cIncr = e.target.closest("[data-counter-incr]");
+  if (cIncr) {
+    const form = cIncr.closest("form");
+    bumpCounter(form, cIncr.dataset.counterTarget, parseFloat(cIncr.dataset.counterIncr), { min: cIncr.dataset.min, max: cIncr.dataset.max });
+    return;
+  }
   const open = e.target.closest("[data-modal]");
   if (open) { e.preventDefault(); openModal(open.dataset.modal); return; }
   if (e.target.closest("[data-close-modal]")) { closeAllModals(); return; }
@@ -241,11 +275,25 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeAllModals();
 });
 
-function maybeToggleSymptomExtras() {
-  const sym = document.querySelector('[data-chip="symptom"]')?.dataset.value;
-  document.querySelectorAll("#symptom-extras [data-show-when]").forEach((el) => {
-    el.hidden = el.dataset.showWhen !== sym;
-  });
+// --- Contextual show/hide -------------------------------------------------
+function onPickerChange(btn) {
+  const group = btn.parentElement;
+  const key = group.dataset.scale || group.dataset.chip;
+  const value = group.dataset.value;
+
+  // Show "Flow today" only when Menstrual is selected
+  if (key === "cyclePhase") {
+    const flowRow = document.getElementById("flow-row");
+    if (flowRow) flowRow.hidden = value !== "menstrual";
+  }
+
+  // Show location row only for pain-type symptoms
+  if (key === "symptom") {
+    document.querySelectorAll("#symptom-extras [data-show-when]").forEach((el) => {
+      const triggers = el.dataset.showWhen.split(/\s+/);
+      el.hidden = !triggers.includes(value);
+    });
+  }
 }
 
 // --- Form submissions -----------------------------------------------------
@@ -278,16 +326,36 @@ async function submitForm(formId, gather, apiCall, successLabel) {
   });
 }
 
+function pickerVal(form, key, type = "scale") {
+  const sel = type === "scale" ? `[data-scale="${key}"]` : `[data-chip="${key}"]`;
+  const v = form.querySelector(sel)?.dataset.value;
+  if (v == null || v === "") return null;
+  return type === "scale" ? +v : v;
+}
+function multiVals(form, key) {
+  const raw = form.querySelector(`[data-multi="${key}"]`)?.dataset.value || "";
+  return raw ? raw.split(",").filter(Boolean) : [];
+}
+
 submitForm(
   "form-morning",
   (form) => {
-    const mood = +form.querySelector('[data-scale="mood"]')?.dataset.value;
-    const energy = +form.querySelector('[data-scale="energy"]')?.dataset.value;
-    const pain = +form.querySelector('[data-scale="pain"]')?.dataset.value;
+    const mood = pickerVal(form, "mood");
+    const energy = pickerVal(form, "energy");
+    const pain = pickerVal(form, "pain");
     if (!mood || !energy || !pain) throw new Error("Pick a value for mood, energy and pain.");
-    const sleepHours = form.sleepHours.value || null;
-    const notes = form.notes.value || null;
-    return { mood, energy, pain, sleepHours, notes };
+    return {
+      mood, energy, pain,
+      sleepHours: form.sleepHours.value || null,
+      sleepQuality: pickerVal(form, "sleepQuality"),
+      cycleDay: form.cycleDay.value || null,
+      cyclePhase: pickerVal(form, "cyclePhase", "chip"),
+      flow: pickerVal(form, "flow", "chip"),
+      bbt: form.bbt.value || null,
+      cervicalMucus: pickerVal(form, "cervicalMucus", "chip"),
+      breastTenderness: pickerVal(form, "breastTenderness"),
+      notes: form.notes.value || null,
+    };
   },
   api.morningCheckin,
   "Morning check-in logged"
@@ -296,13 +364,17 @@ submitForm(
 submitForm(
   "form-symptom",
   (form) => {
-    const symptom = form.querySelector('[data-chip="symptom"]')?.dataset.value;
-    const severity = +form.querySelector('[data-scale="severity"]')?.dataset.value;
+    const symptom = pickerVal(form, "symptom", "chip");
+    const severity = pickerVal(form, "severity");
     if (!symptom) throw new Error("Pick a symptom.");
     if (!severity) throw new Error("Set severity 1–5.");
-    const location = symptom === "pain" ? (form.location.value || null) : null;
-    const notes = form.notes.value || null;
-    return { symptom, severity, location, notes };
+    return {
+      symptom, severity,
+      location: pickerVal(form, "location", "chip"),
+      triggers: multiVals(form, "triggers"),
+      relief: multiVals(form, "relief"),
+      notes: form.notes.value || null,
+    };
   },
   api.logSymptom,
   "Symptom logged"
@@ -311,11 +383,20 @@ submitForm(
 submitForm(
   "form-evening",
   (form) => {
-    const overall = +form.querySelector('[data-scale="overall"]')?.dataset.value;
+    const overall = pickerVal(form, "overall");
     if (!overall) throw new Error("How was your day overall? Pick 1–5.");
-    const reflection = form.reflection.value || null;
-    const gratitude = form.gratitude.value || null;
-    return { overall, reflection, gratitude };
+    return {
+      overall,
+      stressLevel: pickerVal(form, "stressLevel"),
+      waterGlasses: form.waterGlasses.value || null,
+      movementLevel: pickerVal(form, "movementLevel", "chip"),
+      bowelCount: form.bowelCount.value || null,
+      bowelType: pickerVal(form, "bowelType", "chip"),
+      intimacy: pickerVal(form, "intimacy", "chip"),
+      medications: form.medications.value || null,
+      reflection: form.reflection.value || null,
+      gratitude: form.gratitude.value || null,
+    };
   },
   api.eveningCheckin,
   "Evening check-in logged"
