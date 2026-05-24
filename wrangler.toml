@@ -54,7 +54,7 @@ enabled = true
 [[d1_databases]]
 binding = "DB"
 database_name = "endome-db"
-database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+database_id = "3b48e54c-f38a-4b97-b0e5-1d31be6d979b"
 migrations_dir = "migrations"
 
 # Preview / staging environment used by CI on non-main branches.
