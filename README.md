@@ -82,25 +82,40 @@ npm run deploy:preview    # preview env
    - Webhooks → *Add endpoint* → `https://endome.app/api/stripe-webhook`,
      subscribe to `checkout.session.completed`. Copy the signing secret.
 
-## Database (D1) — one-time setup
+## Storage (Workers KV) — one-time setup
 
 The dashboard stores daily logs, symptoms, pet state and notifications in
-Cloudflare D1.
+Cloudflare Workers KV. No schema, no migrations — just create the namespace
+once and paste its ID into `wrangler.toml`.
+
+### Browser route (recommended)
+
+1. Cloudflare dashboard → **Workers & Pages** → **KV** tab → **Create namespace**.
+2. Name it `endome-kv` → **Add**.
+3. Copy the **Namespace ID** shown next to it.
+4. Open `wrangler.toml` and replace `REPLACE_WITH_YOUR_KV_NAMESPACE_ID`
+   under `[[kv_namespaces]]` with that id. Commit + push.
+
+That's it. The next auto-deploy creates the `KV` binding automatically and
+the worker starts writing real data.
+
+### CLI route
 
 ```sh
-# 1. Create the database
-wrangler d1 create endome-db
-# copy the printed `database_id` into wrangler.toml under [[d1_databases]]
-
-# 2. Apply the schema (against your production DB)
-wrangler d1 migrations apply endome-db --remote
-
-# Local dev uses a separate sqlite file in .wrangler/state — apply locally too:
-wrangler d1 migrations apply endome-db --local
+wrangler kv namespace create endome-kv
+# copy the returned id into wrangler.toml
+git add wrangler.toml && git commit -m "wire KV namespace" && git push
 ```
 
-The schema lives in `migrations/0001_init.sql`. Add a new file with the next
-number (`0002_*.sql`) when you need to evolve it.
+### Key layout
+
+| Key pattern                       | What it stores                                                  |
+| --------------------------------- | --------------------------------------------------------------- |
+| `user:<username>`                 | account record (id, displayName, timezone, createdAt)           |
+| `pet:<userId>`                    | pet state (type, name, level, xp, mood, streakDays, ...)        |
+| `day:<userId>:YYYY-MM-DD`         | morning + evening + cycle + pointsTotal for one day             |
+| `sym:<userId>:YYYY-MM-DD:<ts>-r`  | one key per symptom event; entry stored in KV metadata          |
+| `notifs:<userId>`                 | server-side notifications array                                 |
 
 ## Secrets
 
