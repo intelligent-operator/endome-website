@@ -54,6 +54,12 @@ export default {
         if (url.pathname === "/api/login" && request.method === "POST") {
           return await handleLogin(request, env);
         }
+        if (url.pathname === "/api/login/code" && request.method === "POST") {
+          return await handleLoginCode(request, env);
+        }
+        if (url.pathname === "/api/login/verify" && request.method === "POST") {
+          return await handleLoginVerify(request, env);
+        }
         if (url.pathname === "/api/register" && request.method === "POST") {
           return await handleRegister(request, env);
         }
@@ -150,22 +156,32 @@ async function handleLogin(request, env) {
 
   const username = usernameRaw.toLowerCase();
 
-  // 1. Registered user lookup (D1). Matches against username OR email so
-  //    new users can sign in with either.
+  // 1. Registered user lookup (D1). Matches against username OR email.
+  //    Password right → mail a 6-digit code, return a challenge token, no
+  //    session is minted until the code is verified in /api/login/verify.
   if (env.DB) {
     const row = await env.DB.prepare(
-      "SELECT username, password_hash, password_salt FROM users " +
+      "SELECT id, username, email, password_hash, password_salt FROM users " +
       "WHERE username = ? OR email = ? LIMIT 1"
     ).bind(username, username).first();
     if (row?.password_hash && row?.password_salt) {
       const ok = await verifyPassword(password, row.password_hash, row.password_salt);
-      if (ok) return mintSessionResponse(row.username, request, env);
-      await sleep(LOGIN_FAIL_DELAY_MS);
-      return json({ error: "Invalid credentials" }, 401);
+      if (!ok) {
+        await sleep(LOGIN_FAIL_DELAY_MS);
+        return json({ error: "Invalid credentials" }, 401);
+      }
+      try {
+        const challenge = await issueOtpChallenge(env, row.id, row.email || row.username);
+        return json({ ok: true, needsOtp: true, challenge, sentTo: maskEmail(row.email || row.username) });
+      } catch (err) {
+        const status = err?.code === "rate_limited" ? 429 : 500;
+        return json({ error: err.message || "Could not send code." }, status);
+      }
     }
   }
 
   // 2. Fallback: hardcoded env-var account (the "endome" admin login).
+  //    No OTP — env auth is the recovery backdoor.
   const cfgUser = (env.AUTH_USERNAME || "").toLowerCase();
   const cfgPass = env.AUTH_PASSWORD || "";
   if (cfgUser && cfgPass) {
@@ -176,6 +192,102 @@ async function handleLogin(request, env) {
 
   await sleep(LOGIN_FAIL_DELAY_MS);
   return json({ error: "Invalid credentials" }, 401);
+}
+
+// --- Passwordless: email-only "magic code" login --------------------------
+async function handleLoginCode(request, env) {
+  if (!env.DB) return json({ error: "Storage not configured" }, 503);
+  if (!env.SESSION_SECRET) return json({ error: "Authentication not configured" }, 503);
+
+  const ct = request.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) return json({ error: "Invalid request" }, 400);
+
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const email = typeof body?.email === "string" ? body.email.toLowerCase().trim() : "";
+  if (!isEmail(email) || email.length > 200 || /[\x00-\x1f\x7f]/.test(email)) {
+    await sleep(LOGIN_FAIL_DELAY_MS);
+    return json({ error: "Please enter a valid email." }, 400);
+  }
+
+  const row = await env.DB.prepare(
+    "SELECT id, email FROM users WHERE email = ? OR username = ? LIMIT 1"
+  ).bind(email, email).first();
+
+  // Anti-enumeration: always return the same shape regardless of existence.
+  // We only actually mail + persist if the user is real.
+  if (row?.email) {
+    try {
+      const challenge = await issueOtpChallenge(env, row.id, row.email);
+      return json({ ok: true, needsOtp: true, challenge, sentTo: maskEmail(row.email) });
+    } catch (err) {
+      const status = err?.code === "rate_limited" ? 429 : 500;
+      return json({ error: err.message || "Could not send code." }, status);
+    }
+  }
+
+  await sleep(LOGIN_FAIL_DELAY_MS);
+  // Bogus challenge that will fail at verify — keeps response shape uniform.
+  const fakeChallenge = b64url(crypto.getRandomValues(new Uint8Array(24)));
+  return json({ ok: true, needsOtp: true, challenge: fakeChallenge, sentTo: maskEmail(email) });
+}
+
+// --- Verify the 6-digit code, mint a real session -------------------------
+async function handleLoginVerify(request, env) {
+  if (!env.DB) return json({ error: "Storage not configured" }, 503);
+  if (!env.SESSION_SECRET) return json({ error: "Authentication not configured" }, 503);
+
+  const ct = request.headers.get("content-type") || "";
+  if (!ct.includes("application/json")) return json({ error: "Invalid request" }, 400);
+
+  let body;
+  try { body = await request.json(); } catch { body = null; }
+  const challenge = typeof body?.challenge === "string" ? body.challenge : "";
+  const code = typeof body?.code === "string" ? body.code.replace(/\s/g, "") : "";
+
+  if (!challenge || challenge.length > 64 || !/^\d{6}$/.test(code)) {
+    await sleep(LOGIN_FAIL_DELAY_MS);
+    return json({ error: "Enter the 6-digit code from your email." }, 400);
+  }
+
+  const row = await env.DB.prepare(
+    "SELECT challenge, user_id, code_hash, expires_at, attempts, used_at FROM login_otp WHERE challenge = ?"
+  ).bind(challenge).first();
+
+  if (!row) {
+    await sleep(LOGIN_FAIL_DELAY_MS);
+    return json({ error: "Invalid or expired code. Request a new one." }, 401);
+  }
+  if (row.used_at) {
+    return json({ error: "This code has already been used." }, 401);
+  }
+  if (row.expires_at < nowSec()) {
+    return json({ error: "Code has expired. Request a new one." }, 401);
+  }
+  if (row.attempts >= OTP_MAX_ATTEMPTS) {
+    return json({ error: "Too many attempts. Request a new code." }, 429);
+  }
+
+  const submittedHash = await hmacB64Url(env.SESSION_SECRET, code);
+  if (!timingSafeEqual(submittedHash, row.code_hash)) {
+    await env.DB.prepare(
+      "UPDATE login_otp SET attempts = attempts + 1 WHERE challenge = ?"
+    ).bind(challenge).run();
+    await sleep(LOGIN_FAIL_DELAY_MS);
+    return json({ error: "Invalid code." }, 401);
+  }
+
+  // Consume — one-shot.
+  await env.DB.prepare(
+    "UPDATE login_otp SET used_at = ? WHERE challenge = ?"
+  ).bind(nowSec(), challenge).run();
+
+  const user = await env.DB.prepare(
+    "SELECT username FROM users WHERE id = ?"
+  ).bind(row.user_id).first();
+  if (!user) return json({ error: "Account not found." }, 401);
+
+  return mintSessionResponse(user.username, request, env);
 }
 
 // --- Registration ---------------------------------------------------------
@@ -284,6 +396,81 @@ async function verifyPassword(password, storedHashB64, storedSaltB64) {
   } catch {
     return false;
   }
+}
+
+// --- Login OTP (email code) ----------------------------------------------
+const OTP_TTL_SEC = 10 * 60;          // 10 minutes
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_RATE_WINDOW_SEC = 60 * 60;  // 1 hour
+const OTP_MAX_PER_WINDOW = 5;
+
+async function issueOtpChallenge(env, userId, email) {
+  // Per-user rate limit so an attacker can't spam someone's inbox via the
+  // login endpoint.
+  const since = nowSec() - OTP_RATE_WINDOW_SEC;
+  const count = await env.DB.prepare(
+    "SELECT COUNT(*) AS c FROM login_otp WHERE user_id = ? AND created_at > ?"
+  ).bind(userId, since).first();
+  if ((count?.c || 0) >= OTP_MAX_PER_WINDOW) {
+    const err = new Error("Too many codes requested. Try again in a little while.");
+    err.code = "rate_limited";
+    throw err;
+  }
+
+  // 6-digit code from CSPRNG; padded to 6 chars.
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  const code = String(buf[0] % 1_000_000).padStart(6, "0");
+
+  // We hash with SESSION_SECRET so a DB read alone can't recover live codes.
+  const codeHash = await hmacB64Url(env.SESSION_SECRET, code);
+  const challenge = b64url(crypto.getRandomValues(new Uint8Array(24)));
+  const now = nowSec();
+
+  await env.DB.prepare(
+    "INSERT INTO login_otp (challenge, user_id, code_hash, expires_at, created_at) " +
+    "VALUES (?, ?, ?, ?, ?)"
+  ).bind(challenge, userId, codeHash, now + OTP_TTL_SEC, now).run();
+
+  await sendOtpEmail(env, email, code);
+  return challenge;
+}
+
+async function sendOtpEmail(env, email, code) {
+  if (!env.MANDRILL_API_KEY) {
+    console.error("OTP: MANDRILL_API_KEY missing — code would have been:", code);
+    throw new Error("Email delivery is not configured. Contact support.");
+  }
+  await mandrillSend(env, {
+    to: [{ email, type: "to" }],
+    subject: `EndoMe sign-in code: ${code}`,
+    from_email: env.NEWSLETTER_FROM_EMAIL || "no-reply@endome.app",
+    from_name: env.NEWSLETTER_FROM_NAME || "EndoMe",
+    html:
+      `<p style="font-size:15px;color:#3a2330;margin:0 0 12px">Your EndoMe sign-in code:</p>` +
+      `<p style="font-size:32px;font-weight:700;letter-spacing:8px;color:#ff4e8a;margin:0 0 16px;font-family:monospace">${code}</p>` +
+      `<p style="font-size:13px;color:#7a5f6c;margin:0">Expires in 10 minutes. If you didn't try to sign in, you can ignore this email.</p>`,
+    text:
+      `Your EndoMe sign-in code: ${code}\n\n` +
+      "Expires in 10 minutes. If you didn't try to sign in, you can ignore this email.",
+  });
+}
+
+async function hmacB64Url(secret, message) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return b64url(new Uint8Array(sig));
+}
+
+function maskEmail(email) {
+  if (typeof email !== "string" || !email.includes("@")) return email || "";
+  const [local, domain] = email.split("@");
+  const visible = local.length <= 2 ? local : local[0] + "•".repeat(Math.min(local.length - 2, 4)) + local.slice(-1);
+  return `${visible}@${domain}`;
 }
 
 async function handleLogout(request, _env) {
