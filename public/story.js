@@ -18,7 +18,12 @@
     try {
       const res = await fetch("/api/me/story", { credentials: "same-origin" });
       if (res.status === 401) return (location.href = "/login");
-      const data = await res.json();
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok || !Array.isArray(data.steps)) {
+        phasesEl.innerHTML = `<p class="empty-state">Couldn't load your story. ${escapeHtml(data.error || "Refresh to try again.")}</p>`;
+        return;
+      }
       render(data);
     } catch {
       phasesEl.innerHTML = `<p class="empty-state">Couldn't load your story. Refresh to try again.</p>`;
@@ -26,11 +31,17 @@
   }
 
   function render(data) {
-    // Ring
-    const pct = Math.max(0, Math.min(100, data.percent || 0));
+    const steps = Array.isArray(data.steps) ? data.steps : [];
+    const total = Number.isFinite(data.total) ? data.total : steps.length;
+    const completed = Number.isFinite(data.completed)
+      ? data.completed
+      : steps.filter((s) => s.completed).length;
+    const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((completed / total) * 100))) : 0;
+
     ringProgress.style.strokeDashoffset = String(RING_CIRC * (1 - pct / 100));
     ringPercent.textContent  = `${pct}%`;
-    ringFraction.textContent = `${data.completed} of ${data.total}`;
+    ringFraction.textContent = `${completed} of ${total}`;
+    data.steps = steps; // continue with safe value below
 
     // Phases
     const phases = {};

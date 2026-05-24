@@ -32,8 +32,9 @@
         <li><a href="#community">Community</a></li>
       </ul>
       <div class="nav-actions">
-        <a href="/login" class="nav-signin">Sign In</a>
-        <a href="/register" class="btn btn-primary nav-cta">Get Started</a>
+        <a href="/login"     class="nav-signin nav-when-out">Sign In</a>
+        <a href="/register"  class="btn btn-primary nav-cta nav-when-out">Get Started</a>
+        <a href="/dashboard" class="btn btn-primary nav-cta nav-when-in" hidden>Open Dashboard →</a>
       </div>
     </nav>
 
@@ -217,7 +218,8 @@
         <p>Skip straight to symptom tracking, AI support, and the community. Use what works for your journey — the app meets you where you are.</p>
       </div>
       <div class="ntc-actions">
-        <a href="/register" class="btn btn-primary">Start Tracking</a>
+        <a href="/register"  class="btn btn-primary nav-when-out">Start Tracking</a>
+        <a href="/dashboard" class="btn btn-primary nav-when-in" hidden>Open your dashboard →</a>
         <a href="#tracker" class="btn btn-ghost">See How It Works</a>
       </div>
     </div>
@@ -609,7 +611,8 @@
         <p>Take control of your health with EndoMe.</p>
       </div>
       <div class="cta-actions">
-        <a href="/register" class="btn btn-ghost light">Create an Account</a>
+        <a href="/register"  class="btn btn-ghost light nav-when-out">Create an Account</a>
+        <a href="/dashboard" class="btn btn-ghost light nav-when-in" hidden>Open Dashboard</a>
         <a href="#" class="btn btn-primary" data-checkout>Request a DNA Test</a>
         <span class="store-note">Available on iOS and Android</span>
       </div>

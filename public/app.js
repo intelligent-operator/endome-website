@@ -1,3 +1,14 @@
+// Auth-aware nav: swap "Sign In / Get Started" for "Dashboard" if signed in.
+// One small fetch on page load; doesn't block render.
+(async () => {
+  try {
+    const res = await fetch("/api/me/today", { credentials: "same-origin" });
+    if (!res.ok) return;
+    document.querySelectorAll(".nav-when-out").forEach((el) => (el.hidden = true));
+    document.querySelectorAll(".nav-when-in").forEach((el) => (el.hidden = false));
+  } catch { /* offline / failure → leave defaults */ }
+})();
+
 // Newsletter signup -> /api/subscribe
 const newsletterForm = document.getElementById("newsletter-form");
 if (newsletterForm) {

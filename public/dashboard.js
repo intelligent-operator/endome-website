@@ -560,10 +560,10 @@ if (bell && dropdown) {
   });
 }
 
-// --- Sidebar nav (visual) -------------------------------------------------
+// --- Sidebar nav: real navigation, no preventDefault -----------------------
+// (We just paint the visual active state on click — the browser does the rest.)
 document.querySelectorAll(".side-nav a").forEach((link) => {
-  link.addEventListener("click", (e) => {
-    e.preventDefault();
+  link.addEventListener("click", () => {
     document.querySelectorAll(".side-nav a").forEach((a) => a.classList.remove("active"));
     link.classList.add("active");
   });

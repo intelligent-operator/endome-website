@@ -1304,9 +1304,16 @@ const STORY_STEPS = [
 const STORY_STEP_IDS = new Set(STORY_STEPS.map((s) => s.id));
 
 async function getStory(env, user) {
-  const rows = await env.DB.prepare(
-    "SELECT step_id, completed_at, completed_by FROM story_progress WHERE user_id = ?"
-  ).bind(user.id).all();
+  // Tolerant of a missing table — if migration 0004 hasn't been applied yet,
+  // we still render the journey with zero progress instead of 500ing.
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT step_id, completed_at, completed_by FROM story_progress WHERE user_id = ?"
+    ).bind(user.id).all();
+  } catch (err) {
+    console.warn("story_progress query failed (table missing?):", err?.message || err);
+  }
   const done = new Map();
   for (const r of rows.results || []) done.set(r.step_id, r);
 
