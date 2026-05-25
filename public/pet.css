@@ -630,3 +630,122 @@ body.modal-open{overflow:hidden}
 .ach-meta strong{display:block;font-size:13px;color:#2b1922;margin-bottom:2px}
 .ach-meta span{display:block;font-size:11px;color:#7a5f6c;line-height:1.4}
 .ach-reward{display:inline-block !important;margin-top:4px;color:#ff4e8a !important;font-weight:700}
+
+/* ===========================================================================
+   Toys in the room
+   =========================================================================== */
+.toy{
+  position:absolute;
+  left:var(--toy-left, 50%);
+  bottom:var(--toy-bottom, 36px);
+  transform:translateX(-50%);
+  font-size:30px;
+  z-index:3;
+  filter:drop-shadow(0 4px 6px rgba(0,0,0,.22));
+  animation:toy-idle 5s ease-in-out infinite;
+  pointer-events:none;
+  user-select:none;
+}
+@keyframes toy-idle{
+  0%,100%{transform:translateX(-50%) translateY(0) rotate(-3deg)}
+  50%    {transform:translateX(-50%) translateY(-3px) rotate(3deg)}
+}
+/* Brand-new toys drop in from above with a bounce, then settle into the
+   idle animation. */
+.toy.is-new{
+  animation: toy-drop .95s cubic-bezier(.4,1.4,.6,1) forwards,
+             toy-idle 5s ease-in-out infinite 1s;
+}
+@keyframes toy-drop{
+  0%   {transform:translateX(-50%) translateY(-340px) rotate(0);  opacity:0}
+  40%  {opacity:1}
+  60%  {transform:translateX(-50%) translateY(18px)   rotate(180deg)}
+  78%  {transform:translateX(-50%) translateY(-8px)   rotate(260deg)}
+  100% {transform:translateX(-50%) translateY(0)      rotate(360deg); opacity:1}
+}
+/* Pet bumping the toy makes it bounce + spin */
+.toy.toy-wiggle{
+  animation: toy-wiggle .42s cubic-bezier(.4,1.6,.6,1) 3;
+}
+@keyframes toy-wiggle{
+  0%   {transform:translateX(-50%) translateY(0)   rotate(-12deg)}
+  50%  {transform:translateX(-50%) translateY(-18px) rotate(12deg)}
+  100% {transform:translateX(-50%) translateY(0)   rotate(-12deg)}
+}
+
+/* ===========================================================================
+   Persistent bubble polish
+   =========================================================================== */
+.pet-thought[data-persistent]{
+  /* When the bubble is showing the state emoji, give it a slight bob so
+     it feels alive rather than static. */
+  animation: bubble-float 2.4s ease-in-out infinite;
+}
+@keyframes bubble-float{
+  0%,100%{transform:translateY(0)}
+  50%    {transform:translateY(-3px)}
+}
+
+/* ===========================================================================
+   Sleep state — closed eyes + Zzz overlay
+   =========================================================================== */
+.pet-zzz{
+  position:absolute;top:-18px;right:-4px;
+  font-size:22px;line-height:1;
+  opacity:0;pointer-events:none;
+}
+.pet[data-state="sleep"]  .pet-zzz,
+.pet[data-state="sleepy"] .pet-zzz{
+  opacity:1;
+  animation: zzz-float 2s ease-in-out infinite;
+}
+@keyframes zzz-float{
+  0%   {transform:translateY(0)   scale(.8); opacity:0}
+  30%  {transform:translateY(-8px)  scale(1); opacity:1}
+  70%  {transform:translateY(-18px) scale(1.05); opacity:.9}
+  100% {transform:translateY(-26px) scale(1.1);  opacity:0}
+}
+/* Close the eyes when asleep */
+.pet[data-state="sleep"]  .pet-eye,
+.pet[data-state="sleepy"] .pet-eye{
+  transform: scaleY(.1);
+  animation: none;
+}
+/* Slow breathing on the body */
+.pet[data-state="sleep"]  .pet-body,
+.pet[data-state="sleepy"] .pet-body{
+  animation: sleep-breathe 4.2s ease-in-out infinite;
+}
+@keyframes sleep-breathe{
+  0%,100%{transform:translateY(2px) scaleY(.98)}
+  50%    {transform:translateY(0)   scaleY(1.02)}
+}
+
+/* Hungry tummy wobble */
+.pet[data-state="hungry"] .pet-body{animation:hungry-wobble 1.6s ease-in-out infinite}
+@keyframes hungry-wobble{
+  0%,100%{transform:translateY(0) scaleX(1)}
+  35%    {transform:translateY(-3px) scaleX(.96)}
+  70%    {transform:translateY(0) scaleX(1.04)}
+}
+
+/* "Eat" action — already exists; add a tiny crumb particle */
+.pet[data-action="eat"]::before{
+  content:"·";
+  position:absolute;top:42px;left:50%;
+  font-size:22px;color:#ff7aa6;
+  animation: crumb-fall .55s ease-in forwards;
+}
+@keyframes crumb-fall{
+  0%   {transform:translate(-50%,0)  scale(1); opacity:1}
+  100% {transform:translate(-50%,12px) scale(.4); opacity:0}
+}
+
+/* Play-with-toy → bouncy + tilt */
+.pet[data-state="play_with_toy"] .pet-body{
+  animation: play-bounce .9s cubic-bezier(.5,1.6,.6,1) infinite;
+}
+@keyframes play-bounce{
+  0%,100%{transform:translateY(0)   rotate(-4deg)}
+  50%    {transform:translateY(-12px) rotate(4deg)}
+}

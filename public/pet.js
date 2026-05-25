@@ -204,10 +204,11 @@
           ${decor.rug}
         </div>
         ${decor.companion}
+        ${renderToys()}
         <div class="pet" id="pet" data-pet="${pet.type}" data-mood="${pet.mood}">
           <div class="pet-thought" id="pet-thought" hidden></div>
           <div class="pet-shadow"></div>
-          <div class="pet-body">${petSvg(pet.type)}${wearables}</div>
+          <div class="pet-body">${petSvg(pet.type)}${wearables}<div class="pet-zzz" aria-hidden="true">💤</div></div>
         </div>
       </div>`;
     petEl = document.getElementById("pet");
@@ -261,28 +262,110 @@
     return layers.join("");
   }
 
+  // Owned toys live on the floor. Each toy has a deterministic spot so it
+  // stays put across renders. Toys acquired in the last 8 seconds drop in
+  // from above with a bounce animation.
+  function renderToys() {
+    const toys = inventory.filter((r) => r.item?.category === "toy" && (r.quantity || 0) > 0);
+    if (!toys.length) return "";
+    const nowSec = Math.floor(Date.now() / 1000);
+    return toys.map((row) => {
+      const pos = toySpot(row.key);
+      const isNew = (nowSec - (row.acquiredAt || 0)) < 8;
+      return `<div class="toy ${isNew ? "is-new" : ""}" data-toy-key="${row.key}"
+                style="--toy-left:${pos.left}%;--toy-bottom:${pos.bottom}px"
+                title="${escapeHtml(row.item.name)}">${row.item.icon}</div>`;
+    }).join("");
+  }
+  // Deterministic floor slot per toy key.
+  const TOY_SPOTS = [
+    { left: 14, bottom: 28 },
+    { left: 82, bottom: 42 },
+    { left: 32, bottom: 18 },
+    { left: 64, bottom: 32 },
+  ];
+  function toySpot(key) {
+    let h = 0;
+    for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return TOY_SPOTS[h % TOY_SPOTS.length];
+  }
+  function toyEmoji(key) {
+    const row = inventory.find((r) => r.key === key);
+    return row?.item?.icon || "🎾";
+  }
+
+  // --- Persistent state bubble -------------------------------------------
+  // A few states have a steady emoji over the pet (💤 for sleep, 🍎 for
+  // hungry, etc.) so anyone glancing at the scene knows what's happening.
+  const STATE_BUBBLE = {
+    sleep:   "💤",
+    sleepy:  "💤",
+    hungry:  "🍎",
+    sad:     "😢",
+    droop:   "😢",
+    eating:  "😋",
+  };
+  function setStateBubble(emoji) {
+    const bubble = document.getElementById("pet-thought");
+    if (!bubble) return;
+    if (bubble.classList.contains("temporary")) {
+      bubble.dataset.persistent = emoji || "";
+      return;
+    }
+    if (emoji) {
+      bubble.textContent = emoji;
+      bubble.hidden = false;
+      bubble.dataset.persistent = emoji;
+    } else {
+      bubble.hidden = true;
+      delete bubble.dataset.persistent;
+    }
+  }
+  function applyState(state) {
+    if (!petEl) return;
+    petEl.dataset.state = state;
+    setStateBubble(STATE_BUBBLE[state] || null);
+  }
+
   // --- Wandering + state loop ---------------------------------------------
+  let lastUserTouchTs = Date.now();
   function startBehaviorLoop() {
     if (!stage || !petEl) return;
-    // initial drift
     wander();
-    // pick a random ambient action every ~6s
+    applyState(ambientState());
     stateTimer = setInterval(() => {
       const next = ambientState();
-      petEl.dataset.state = next;
+      applyState(next);
       if (next === "walk") wander();
-    }, 6000);
-    // occasional thought bubbles
+      else if (next === "play_with_toy") goPlayWithToy();
+      else if (next === "sleep") {
+        // Stay where you are. Z bubble + closed eyes handle it visually.
+      }
+    }, 6500);
     thoughtTimer = setInterval(() => {
+      // Only if not currently in a state with a persistent bubble.
+      const bubble = document.getElementById("pet-thought");
+      if (bubble?.dataset.persistent) return;
       const t = needBasedThought();
       if (t) showThought(t, 2400);
     }, 7500);
   }
 
   function ambientState() {
-    if (pet.happiness < 35) return Math.random() < 0.4 ? "sad" : "idle";
-    if (pet.hunger    > 70) return Math.random() < 0.4 ? "hungry" : "idle";
-    const options = ["idle", "walk", "idle", "look", "walk"];
+    const r = Math.random();
+    // Need-driven states always win
+    if (pet.happiness < 30) return r < 0.5 ? "sad" : "sleep";
+    if (pet.hunger    > 70) return r < 0.6 ? "hungry" : "idle";
+
+    // Has toys? Sometimes go play.
+    const toyCount = inventory.filter((i) => i.item?.category === "toy" && (i.quantity || 0) > 0).length;
+    if (toyCount > 0 && r < 0.32) return "play_with_toy";
+
+    // Sometimes sleepy when there's been no interaction for a while
+    const minSinceTouch = (Date.now() - lastUserTouchTs) / 60000;
+    if (minSinceTouch > 3 && r < 0.22) return "sleep";
+
+    const options = ["idle", "walk", "idle", "look", "walk", "idle"];
     return options[Math.floor(Math.random() * options.length)];
   }
 
@@ -294,6 +377,37 @@
     const flip = Math.random() < 0.5 ? -1 : 1;
     petEl.style.setProperty("--pet-x", `${x}px`);
     petEl.style.setProperty("--pet-flip", flip);
+  }
+
+  // Walk over to a random owned toy, then bounce on it once arrived.
+  function goPlayWithToy() {
+    const toys = inventory.filter((i) => i.item?.category === "toy" && (i.quantity || 0) > 0);
+    if (!toys.length || !petEl || !stage) return;
+    const toy = toys[Math.floor(Math.random() * toys.length)];
+    const toyEl = document.querySelector(`[data-toy-key="${toy.key}"]`);
+    if (!toyEl) return;
+
+    // Move pet to roughly the toy's x position
+    const stageW = stage.clientWidth;
+    const spot = toySpot(toy.key);
+    const toyXpx = (spot.left / 100) * stageW;
+    const petWidth = 120;
+    const targetX = Math.max(0, Math.min(stageW - petWidth, toyXpx - petWidth / 2));
+    const flip = targetX < (parseFloat(petEl.style.getPropertyValue("--pet-x")) || 0) ? -1 : 1;
+    petEl.style.setProperty("--pet-x", `${targetX}px`);
+    petEl.style.setProperty("--pet-flip", flip);
+    setStateBubble(toy.item.icon || "🎾");
+
+    // After the transition, bounce + wiggle the toy
+    setTimeout(() => {
+      if (!petEl || petEl.dataset.state !== "play_with_toy") return;
+      petEl.dataset.action = "bounce";
+      toyEl.classList.add("toy-wiggle");
+      setTimeout(() => {
+        if (petEl) delete petEl.dataset.action;
+        toyEl.classList.remove("toy-wiggle");
+      }, 1400);
+    }, 2700);
   }
 
   function needBasedThought() {
@@ -317,8 +431,18 @@
     if (!bubble) return;
     bubble.textContent = emoji;
     bubble.hidden = false;
+    bubble.classList.add("temporary");
     clearTimeout(showThought._t);
-    showThought._t = setTimeout(() => { bubble.hidden = true; }, duration);
+    showThought._t = setTimeout(() => {
+      bubble.classList.remove("temporary");
+      if (bubble.dataset.persistent) {
+        bubble.textContent = bubble.dataset.persistent;
+        bubble.hidden = false;
+      } else {
+        bubble.hidden = true;
+      }
+    }, duration);
+    lastUserTouchTs = Date.now();
   }
 
   function clearTimers() {
