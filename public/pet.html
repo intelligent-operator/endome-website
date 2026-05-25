@@ -72,6 +72,25 @@
         </div>
       </section>
 
+      <!-- Lifecycle + Glow strip -->
+      <section id="pet-lifecycle" class="pet-lifecycle" hidden>
+        <div class="lc-head">
+          <div>
+            <p class="lc-stage-key" id="lc-stage-key">Egg</p>
+            <p class="lc-stage-copy" id="lc-stage-copy">Something gentle is growing.</p>
+          </div>
+          <div class="lc-glow">
+            <span class="lc-glow-icon">✨</span>
+            <span class="lc-glow-value" id="glow-points">0</span>
+            <span class="lc-glow-label">Glow Points</span>
+          </div>
+        </div>
+        <div class="lc-progress" id="lc-progress" aria-label="Lifecycle progression">
+          <!-- rendered by JS as a 6-segment bar -->
+        </div>
+        <p class="lc-next" id="lc-next"></p>
+      </section>
+
       <!-- Stat bars -->
       <section id="pet-stats" class="pet-stats" hidden>
         <div class="stat">
@@ -114,6 +133,33 @@
           <span>Pet</span>
           <span class="pet-action-hint">+8 happy</span>
         </button>
+        <button class="pet-action pet-action-soft" data-action="shop" type="button">
+          <span class="pet-action-emoji">🛍️</span>
+          <span>Shop</span>
+          <span class="pet-action-hint">spend Glow Points</span>
+        </button>
+        <button class="pet-action pet-action-soft" data-action="rest" type="button" id="rest-btn">
+          <span class="pet-action-emoji">🌙</span>
+          <span id="rest-label">Rest Mode</span>
+          <span class="pet-action-hint" id="rest-hint">pause regression</span>
+        </button>
+      </section>
+
+      <!-- Inventory -->
+      <section id="pet-inventory-card" class="pet-inv-card" hidden>
+        <div class="inv-head">
+          <h3>🎒 Your bits & pieces</h3>
+          <span class="inv-count" id="inv-count">0 items</span>
+        </div>
+        <div id="inv-grid" class="inv-grid">
+          <p class="inv-empty">Nothing collected yet — the shop has cosy things waiting.</p>
+        </div>
+      </section>
+
+      <!-- Recent rewards -->
+      <section id="pet-rewards-card" class="pet-rewards-card" hidden>
+        <h3>✨ Recent sparkles</h3>
+        <ul id="rewards-list" class="rewards-list"></ul>
       </section>
 
       <!-- Info card -->
@@ -121,10 +167,40 @@
         <div class="pet-info-icon">🐾</div>
         <div>
           <h3>How your EndoPet grows</h3>
-          <p>Every check-in, symptom log, and reflection helps your EndoPet thrive. Feed them when they're hungry, play when they're glum — and they'll level up alongside your own story.</p>
+          <p>Every check-in, symptom log, and reflection earns you XP and Glow Points. Spend Glow on cosy items for your pet. If life pulls you away, your pet rests in their cocoon — no streak pressure. Activate Rest Mode anytime you need softness.</p>
         </div>
       </section>
     </main>
+
+    <!-- Shop modal -->
+    <div id="shop-modal" class="shop-modal" hidden role="dialog" aria-labelledby="shop-title">
+      <div class="shop-backdrop" data-close-shop></div>
+      <div class="shop-card">
+        <header class="shop-head">
+          <div>
+            <h2 id="shop-title">EndoPet Shop</h2>
+            <p>Soft things for your companion.</p>
+          </div>
+          <div class="shop-balance">
+            <span class="shop-balance-emoji">✨</span>
+            <span id="shop-balance-value">0</span>
+          </div>
+          <button class="shop-close" data-close-shop aria-label="Close">×</button>
+        </header>
+        <div class="shop-filters" id="shop-filters">
+          <button class="shop-filter on" data-filter="all">All</button>
+          <button class="shop-filter" data-filter="food">Food</button>
+          <button class="shop-filter" data-filter="comfort">Comfort</button>
+          <button class="shop-filter" data-filter="toy">Toys</button>
+          <button class="shop-filter" data-filter="decor">Decor</button>
+          <button class="shop-filter" data-filter="wear">Wearables</button>
+          <button class="shop-filter" data-filter="special">Special</button>
+        </div>
+        <div class="shop-grid" id="shop-grid">
+          <p class="inv-empty">Loading the shelves…</p>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>

@@ -110,6 +110,27 @@ export default {
           if (url.pathname === "/api/me/pet/pat" && request.method === "POST") {
             return jsonHeaders(await postPetPat(env, user));
           }
+          if (url.pathname === "/api/me/pet/state" && request.method === "GET") {
+            return jsonHeaders(await getEndopetState(env, user));
+          }
+          if (url.pathname === "/api/me/pet/shop" && request.method === "GET") {
+            return jsonHeaders(await getEndopetShop(env, user));
+          }
+          if (url.pathname === "/api/me/pet/buy" && request.method === "POST") {
+            return jsonHeaders(await postEndopetBuy(request, env, user));
+          }
+          if (url.pathname === "/api/me/pet/equip" && request.method === "POST") {
+            return jsonHeaders(await postEndopetEquip(request, env, user));
+          }
+          if (url.pathname === "/api/me/pet/use" && request.method === "POST") {
+            return jsonHeaders(await postEndopetUse(request, env, user));
+          }
+          if (url.pathname === "/api/me/pet/rest" && request.method === "POST") {
+            return jsonHeaders(await postEndopetRest(request, env, user));
+          }
+          if (url.pathname === "/api/me/pet/rest/end" && request.method === "POST") {
+            return jsonHeaders(await postEndopetRestEnd(request, env, user));
+          }
           if (url.pathname === "/api/me/story" && request.method === "GET") {
             return jsonHeaders(await getStory(env, user));
           }
@@ -1200,7 +1221,8 @@ async function postMorningCheckin(request, env, user) {
   ).run();
 
   const pet = await awardXp(env, user.id, pointsAwarded, date);
-  return json({ ok: true, pointsAwarded, fullDayBonus, pet });
+  const glow = await endopetGrantReward(env, user.id, "morning_checkin", date);
+  return json({ ok: true, pointsAwarded, fullDayBonus, pet, glow });
 }
 
 // --- /api/me/checkin/evening ----------------------------------------------
@@ -1272,7 +1294,8 @@ async function postEveningCheckin(request, env, user) {
   ).run();
 
   const pet = await awardXp(env, user.id, pointsAwarded, date);
-  return json({ ok: true, pointsAwarded, fullDayBonus, pet });
+  const glow = await endopetGrantReward(env, user.id, "evening_checkin", date);
+  return json({ ok: true, pointsAwarded, fullDayBonus, pet, glow });
 }
 
 // --- /api/me/symptoms (POST) ----------------------------------------------
@@ -1307,7 +1330,11 @@ async function postSymptom(request, env, user) {
   ]);
 
   const pet = await awardXp(env, user.id, points, date);
-  return json({ ok: true, pointsAwarded: points, pet });
+  // Use logged_at as the source id — unique per symptom entry. Pain or
+  // severity-5 entries also flag as a flare for the future achievement.
+  const isFlare = severity >= 4 || ["pelvic_pain", "endo_belly"].includes(symptom);
+  const glow = await endopetGrantReward(env, user.id, isFlare ? "flare" : "symptom", `${date}:${now}`);
+  return json({ ok: true, pointsAwarded: points, pet, glow });
 }
 
 // --- /api/me/symptoms (GET) -----------------------------------------------
@@ -1990,4 +2017,448 @@ function normaliseDate(s) {
     if (Math.abs(sent - now) <= 2 * 86400 * 1000) return s;
   }
   return new Date().toISOString().slice(0, 10);
+}
+
+// =============================================================================
+// ENDOPET ECONOMY — Glow Points, lifecycle, regression, shop, inventory.
+// All behaviour configuration-driven so it's easy to tune later.
+// =============================================================================
+
+const ENDOPET_STAGES = [
+  { key: "egg",        label: "Glow Egg",         minLevel: 0,  minDays: 0,  copy: "Something gentle is growing." },
+  { key: "hatchling",  label: "Dotling",          minLevel: 1,  minDays: 1,  copy: "Tiny bounces, big heart." },
+  { key: "child",      label: "Sprout Sprite",    minLevel: 4,  minDays: 4,  copy: "Curious and collecting sparkles." },
+  { key: "teen",       label: "Flare Companion",  minLevel: 8,  minDays: 8,  copy: "Expressive, loyal, learning their rhythms." },
+  { key: "adult",      label: "Guardian Glowpet", minLevel: 16, minDays: 19, copy: "Celebrates patterns, brings tiny gifts." },
+  { key: "elder",      label: "Wise Glowkeeper",  minLevel: 30, minDays: 46, copy: "Cosy, reflective, full of soft light." },
+];
+
+// Reward configs. xp powers levels (existing system), glow is the spendable
+// currency. Keep modest and let the streak/repeat-day pattern win.
+const ENDOPET_REWARDS = {
+  morning_checkin:   { xp: 15, glow: 20, label: "Morning check-in" },
+  evening_checkin:   { xp: 15, glow: 20, label: "Evening reflection" },
+  symptom:           { xp: 25, glow: 30, label: "Symptom logged" },
+  flare:             { xp: 20, glow: 25, label: "Flare logged" },
+  // Backfill counts less. Note: not currently used (we don't allow editing
+  // dates), but the field is here so it doesn't need refactoring later.
+  backfill:          { xp: 8,  glow: 10, label: "Backfilled" },
+};
+const ENDOPET_DAILY_XP_CAP   = 100;
+const ENDOPET_DAILY_GLOW_CAP = 120;
+const ENDOPET_FIRST_LOG_BONUS = { xp: 10, glow: 15, label: "First log of the day" };
+
+// Items: id → { name, category, price, rarity, icon, slot?, consumable?, equippable?, stageRequirement?, effect? }
+const ENDOPET_ITEMS = {
+  // --- Food (consumable, lifts nourishment + small comfort/joy) ---------
+  moonberry_snack:   { name: "Moonberry Snack",    category: "food",   price: 30,  rarity: "common",   icon: "🫐", consumable: true, effect: { nourishment: 25, comfort: 5 } },
+  ginger_biscuit:    { name: "Ginger Tea Biscuit", category: "food",   price: 35,  rarity: "common",   icon: "🍪", consumable: true, effect: { nourishment: 22, comfort: 10 } },
+  cozy_soup:         { name: "Cozy Soup",          category: "food",   price: 50,  rarity: "uncommon", icon: "🍲", consumable: true, effect: { nourishment: 40, comfort: 15 } },
+  starfruit_jelly:   { name: "Starfruit Jelly",    category: "food",   price: 75,  rarity: "uncommon", icon: "🟡", consumable: true, effect: { nourishment: 30, joy: 20 } },
+
+  // --- Comfort (mix of consumable + permanent) --------------------------
+  tiny_heat_pad:     { name: "Tiny Heat Pad",         category: "comfort", price: 90,  rarity: "uncommon", icon: "♨️",  consumable: false, equippable: true, slot: "wear_back" },
+  cloud_blanket:     { name: "Cloud Blanket",         category: "comfort", price: 140, rarity: "rare",     icon: "☁️",  consumable: false, equippable: true, slot: "wear_back" },
+  moon_pillow:       { name: "Moon Pillow",           category: "comfort", price: 70,  rarity: "common",   icon: "🌙",  consumable: false, equippable: true, slot: "decor_floor" },
+  warm_bath_bubbles: { name: "Warm Bath Bubbles",     category: "comfort", price: 60,  rarity: "common",   icon: "🛁",  consumable: true, effect: { comfort: 30 } },
+
+  // --- Toys --------------------------------------------------------------
+  symptom_star_ball: { name: "Symptom Star Ball",     category: "toy",   price: 45,  rarity: "common",   icon: "⭐",  consumable: false, effect: { joy: 25 } },
+  crinkle_leaf:      { name: "Crinkle Leaf",          category: "toy",   price: 30,  rarity: "common",   icon: "🍃",  consumable: false, effect: { joy: 15 } },
+  bubble_wand:       { name: "Bubble Wand",           category: "toy",   price: 70,  rarity: "uncommon", icon: "🫧",  consumable: false, effect: { joy: 30 } },
+  tiny_journal:      { name: "Tiny Journal",          category: "toy",   price: 90,  rarity: "uncommon", icon: "📓",  consumable: false, effect: { joy: 20, sparkle: 10 } },
+
+  // --- Decor (room background) ------------------------------------------
+  lavender_lamp:     { name: "Lavender Lamp",         category: "decor", price: 110, rarity: "uncommon", icon: "💡",  consumable: false, equippable: true, slot: "decor_light" },
+  cloud_rug:         { name: "Cloud Rug",             category: "decor", price: 85,  rarity: "common",   icon: "☁️",  consumable: false, equippable: true, slot: "decor_floor" },
+  moon_window:       { name: "Moon Window",           category: "decor", price: 180, rarity: "rare",     icon: "🪟",  consumable: false, equippable: true, slot: "decor_wall" },
+  herbal_shelf:      { name: "Herbal Shelf",          category: "decor", price: 140, rarity: "uncommon", icon: "🪴",  consumable: false, equippable: true, slot: "decor_shelf" },
+  stardust_paper:    { name: "Stardust Wallpaper",    category: "decor", price: 230, rarity: "rare",     icon: "🌌",  consumable: false, equippable: true, slot: "decor_wall" },
+
+  // --- Wearables (pet display) ------------------------------------------
+  tiny_scarf:        { name: "Tiny Scarf",            category: "wear",  price: 80,  rarity: "common",   icon: "🧣",  consumable: false, equippable: true, slot: "wear_neck" },
+  sleepy_beanie:     { name: "Sleepy Beanie",         category: "wear",  price: 100, rarity: "uncommon", icon: "🎀",  consumable: false, equippable: true, slot: "wear_head" },
+  star_cape:         { name: "Star Cape",             category: "wear",  price: 180, rarity: "rare",     icon: "✨",  consumable: false, equippable: true, slot: "wear_back", stageRequirement: 3 },
+  warrior_ribbon:    { name: "Warrior Ribbon",        category: "wear",  price: 200, rarity: "rare",     icon: "🎗️",  consumable: false, equippable: true, slot: "wear_head", stageRequirement: 3 },
+
+  // --- Special -----------------------------------------------------------
+  flare_care_kit:    { name: "Flare Care Kit",        category: "special", price: 300, rarity: "rare",      icon: "🎁",  consumable: true, effect: { comfort: 50, energy: 30 } },
+  memory_seed:       { name: "Memory Seed",           category: "special", price: 500, rarity: "legendary", icon: "🌱",  consumable: false, equippable: true, slot: "decor_shelf", stageRequirement: 4 },
+  legacy_lantern:    { name: "Legacy Lantern",        category: "special", price: 750, rarity: "legendary", icon: "🏮",  consumable: false, equippable: true, slot: "decor_light", stageRequirement: 5 },
+  mini_companion:    { name: "Mini Companion Plush",  category: "special", price: 400, rarity: "rare",      icon: "🧸",  consumable: false, equippable: true, slot: "decor_friend" },
+};
+const ENDOPET_ITEM_KEYS = new Set(Object.keys(ENDOPET_ITEMS));
+
+// Lifecycle ---------------------------------------------------------------
+function endopetBaseStageIndex(level, distinctDays) {
+  let idx = 0;
+  for (let i = 0; i < ENDOPET_STAGES.length; i++) {
+    if (level >= ENDOPET_STAGES[i].minLevel && distinctDays >= ENDOPET_STAGES[i].minDays) {
+      idx = i;
+    }
+  }
+  return idx;
+}
+
+// Regression returns how many stages we should shift DOWN from the base.
+// 0 for the first 14 days of absence (the pet just gets sleepy / cocoons in
+// its current stage); each subsequent 14-day window removes one stage.
+function endopetRegressionLevels(pet) {
+  const now = nowSec();
+  if (pet.rest_mode_until && pet.rest_mode_until > now) return 0;
+  if (!pet.last_meaningful_log_at) return 0;
+  const days = (now - pet.last_meaningful_log_at) / 86400;
+  if (days < 14) return 0;
+  return Math.min(ENDOPET_STAGES.length - 1, Math.floor((days - 14) / 14) + 1);
+}
+
+function endopetEffectiveStage(pet) {
+  const baseIdx = endopetBaseStageIndex(pet.level || 0, pet.distinct_log_days || 0);
+  const regress = endopetRegressionLevels(pet);
+  const idx = Math.max(0, baseIdx - regress);
+  return { stage: ENDOPET_STAGES[idx], baseIdx, idx, regress };
+}
+
+// Mood derives from happiness / activity / rest mode / regression.
+function endopetMood(pet) {
+  const now = nowSec();
+  if (pet.rest_mode_until && pet.rest_mode_until > now) return "cosy";
+  const daysSince = pet.last_meaningful_log_at ? (now - pet.last_meaningful_log_at) / 86400 : 0;
+  if (daysSince >= 14) return "cocooning";
+  if (daysSince >= 3) return "sleepy";
+  if ((pet.happiness || 0) >= 80) return "sparkly";
+  if ((pet.happiness || 0) >= 60) return "celebrating";
+  if ((pet.happiness || 0) < 35) return "sleepy";
+  return "curious";
+}
+
+// =============================================================================
+// REWARD LEDGER — idempotent point grants
+// =============================================================================
+async function endopetGrantReward(env, userId, sourceType, sourceId, opts = {}) {
+  const cfg = ENDOPET_REWARDS[sourceType];
+  if (!cfg) return null;
+  const now = nowSec();
+
+  // Idempotency check — ledger has UNIQUE(user_id, source_type, source_id).
+  try {
+    const existing = await env.DB.prepare(
+      "SELECT 1 FROM endopet_reward_ledger WHERE user_id = ? AND source_type = ? AND source_id = ?"
+    ).bind(userId, sourceType, String(sourceId)).first();
+    if (existing) return null;
+  } catch (err) {
+    // Ledger table missing? Skip silently — we'll grant nothing rather than
+    // double-award later when the migration arrives.
+    console.warn("endopet ledger lookup failed:", err?.message || err);
+    return null;
+  }
+
+  // Daily cap check
+  const localDate = new Date().toISOString().slice(0, 10);
+  const todayStart = Math.floor(Date.parse(`${localDate}T00:00:00Z`) / 1000);
+  const todayTotal = await env.DB.prepare(
+    "SELECT COALESCE(SUM(xp_awarded),0) AS x, COALESCE(SUM(glow_awarded),0) AS g, COUNT(*) AS n " +
+    "FROM endopet_reward_ledger WHERE user_id = ? AND created_at >= ?"
+  ).bind(userId, todayStart).first().catch(() => ({ x: 0, g: 0, n: 0 }));
+
+  const xpRoom   = Math.max(0, ENDOPET_DAILY_XP_CAP   - (todayTotal.x || 0));
+  const glowRoom = Math.max(0, ENDOPET_DAILY_GLOW_CAP - (todayTotal.g || 0));
+  let xpAward   = Math.min(cfg.xp,   xpRoom);
+  let glowAward = Math.min(cfg.glow, glowRoom);
+
+  // First-log-of-day bonus, applied IN ADDITION to the regular reward.
+  let firstLogBonus = false;
+  if ((todayTotal.n || 0) === 0) {
+    xpAward   += Math.min(ENDOPET_FIRST_LOG_BONUS.xp,   Math.max(0, xpRoom   - xpAward));
+    glowAward += Math.min(ENDOPET_FIRST_LOG_BONUS.glow, Math.max(0, glowRoom - glowAward));
+    firstLogBonus = true;
+  }
+
+  if (xpAward === 0 && glowAward === 0) return null;
+
+  // Welcome-back bonus on returning after 3+ / 7+ days
+  let welcomeBack = 0;
+  try {
+    const pet = await env.DB.prepare("SELECT last_meaningful_log_at FROM pets WHERE user_id = ?")
+      .bind(userId).first();
+    if (pet?.last_meaningful_log_at) {
+      const daysGone = (now - pet.last_meaningful_log_at) / 86400;
+      if (daysGone >= 7) welcomeBack = 40;
+      else if (daysGone >= 3) welcomeBack = 20;
+    }
+  } catch {}
+  if (welcomeBack > 0) glowAward += welcomeBack;
+
+  // Persist ledger entry FIRST so we never double-grant on retries.
+  try {
+    await env.DB.prepare(
+      "INSERT INTO endopet_reward_ledger (user_id, source_type, source_id, xp_awarded, glow_awarded, reason, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).bind(
+      userId, sourceType, String(sourceId),
+      xpAward, glowAward,
+      cfg.label + (firstLogBonus ? " + first-log bonus" : "") + (welcomeBack > 0 ? " + welcome back" : ""),
+      now
+    ).run();
+  } catch (err) {
+    // UNIQUE violation? Means another concurrent request already inserted.
+    console.warn("endopet ledger insert failed:", err?.message || err);
+    return null;
+  }
+
+  // Update pet: glow_points + last_meaningful_log_at + distinct_log_days.
+  // distinct_log_days only ticks when this is the first reward of a new day.
+  try {
+    const incDay = (todayTotal.n || 0) === 0 ? 1 : 0;
+    await env.DB.prepare(
+      "UPDATE pets SET " +
+      "  glow_points = COALESCE(glow_points,0) + ?, " +
+      "  last_meaningful_log_at = ?, " +
+      "  distinct_log_days = COALESCE(distinct_log_days,0) + ? " +
+      "WHERE user_id = ?"
+    ).bind(glowAward, now, incDay, userId).run();
+  } catch (err) {
+    console.warn("endopet pet update failed:", err?.message || err);
+  }
+
+  return { xpAward, glowAward, firstLogBonus, welcomeBack };
+}
+
+// =============================================================================
+// SHOP / INVENTORY / REST MODE
+// =============================================================================
+async function getEndopetShop(env, user) {
+  // Pet is needed to know what's locked by stage.
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(user.id).first();
+  const { idx: stageIdx } = endopetEffectiveStage(pet || {});
+  // Inventory keys we already own.
+  let owned = new Set();
+  let equipped = new Set();
+  try {
+    const inv = await env.DB.prepare(
+      "SELECT item_key, quantity, equipped FROM endopet_inventory WHERE user_id = ?"
+    ).bind(user.id).all();
+    for (const row of inv.results || []) {
+      if ((row.quantity || 0) > 0) owned.add(row.item_key);
+      if (row.equipped) equipped.add(row.item_key);
+    }
+  } catch (err) {
+    console.warn("endopet inventory lookup failed:", err?.message || err);
+  }
+
+  const items = Object.entries(ENDOPET_ITEMS).map(([key, def]) => ({
+    key,
+    ...def,
+    locked: (def.stageRequirement || 0) > stageIdx,
+    owned: owned.has(key),
+    equipped: equipped.has(key),
+  }));
+  return json({
+    glowPoints: pet?.glow_points || 0,
+    stageIdx,
+    items,
+  });
+}
+
+async function postEndopetBuy(request, env, user) {
+  const body = await readJsonSafe(request);
+  const itemKey = typeof body?.itemKey === "string" ? body.itemKey : null;
+  if (!itemKey || !ENDOPET_ITEM_KEYS.has(itemKey)) {
+    return json({ error: "Unknown item" }, 400);
+  }
+  const item = ENDOPET_ITEMS[itemKey];
+
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(user.id).first();
+  if (!pet) return json({ error: "No pet" }, 404);
+
+  const { idx: stageIdx } = endopetEffectiveStage(pet);
+  if ((item.stageRequirement || 0) > stageIdx) {
+    return json({ error: `Unlocks at ${ENDOPET_STAGES[item.stageRequirement]?.label || "a later stage"}.` }, 400);
+  }
+  if ((pet.glow_points || 0) < item.price) {
+    return json({ error: "Not enough Glow Points yet." }, 400);
+  }
+
+  const now = nowSec();
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE pets SET glow_points = COALESCE(glow_points,0) - ? WHERE user_id = ?"
+      ).bind(item.price, user.id),
+      env.DB.prepare(
+        "INSERT INTO endopet_inventory (user_id, item_key, quantity, acquired_at) " +
+        "VALUES (?, ?, 1, ?) " +
+        "ON CONFLICT(user_id, item_key) DO UPDATE SET quantity = quantity + 1"
+      ).bind(user.id, itemKey, now),
+    ]);
+  } catch (err) {
+    console.error("endopet buy failed:", err?.message || err);
+    return json({ error: "Couldn't complete the purchase." }, 500);
+  }
+
+  return getEndopetState(env, user);
+}
+
+async function postEndopetEquip(request, env, user) {
+  const body = await readJsonSafe(request);
+  const itemKey = typeof body?.itemKey === "string" ? body.itemKey : null;
+  if (!itemKey || !ENDOPET_ITEM_KEYS.has(itemKey)) {
+    return json({ error: "Unknown item" }, 400);
+  }
+  const item = ENDOPET_ITEMS[itemKey];
+  if (!item.equippable) return json({ error: "This item isn't equippable." }, 400);
+
+  // Confirm owned
+  const inv = await env.DB.prepare(
+    "SELECT quantity, equipped FROM endopet_inventory WHERE user_id = ? AND item_key = ?"
+  ).bind(user.id, itemKey).first();
+  if (!inv || (inv.quantity || 0) === 0) {
+    return json({ error: "You don't own this item." }, 400);
+  }
+
+  const willEquip = !inv.equipped;
+  try {
+    if (willEquip && item.slot) {
+      // Unequip anything else in the same slot first.
+      const sameSlotKeys = Object.entries(ENDOPET_ITEMS)
+        .filter(([_, def]) => def.slot === item.slot)
+        .map(([k]) => k);
+      if (sameSlotKeys.length > 0) {
+        const placeholders = sameSlotKeys.map(() => "?").join(",");
+        await env.DB.prepare(
+          `UPDATE endopet_inventory SET equipped = 0 WHERE user_id = ? AND item_key IN (${placeholders})`
+        ).bind(user.id, ...sameSlotKeys).run();
+      }
+    }
+    await env.DB.prepare(
+      "UPDATE endopet_inventory SET equipped = ? WHERE user_id = ? AND item_key = ?"
+    ).bind(willEquip ? 1 : 0, user.id, itemKey).run();
+  } catch (err) {
+    console.error("endopet equip failed:", err?.message || err);
+    return json({ error: "Couldn't equip the item." }, 500);
+  }
+
+  return getEndopetState(env, user);
+}
+
+async function postEndopetUse(request, env, user) {
+  const body = await readJsonSafe(request);
+  const itemKey = typeof body?.itemKey === "string" ? body.itemKey : null;
+  if (!itemKey || !ENDOPET_ITEM_KEYS.has(itemKey)) {
+    return json({ error: "Unknown item" }, 400);
+  }
+  const item = ENDOPET_ITEMS[itemKey];
+  if (!item.consumable) return json({ error: "This item isn't consumable." }, 400);
+
+  const inv = await env.DB.prepare(
+    "SELECT quantity FROM endopet_inventory WHERE user_id = ? AND item_key = ?"
+  ).bind(user.id, itemKey).first();
+  if (!inv || (inv.quantity || 0) < 1) return json({ error: "You're out of this item." }, 400);
+
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(user.id).first();
+  if (!pet) return json({ error: "No pet" }, 404);
+
+  const eff = item.effect || {};
+  const newHappy   = Math.max(0, Math.min(100, (pet.happiness || 100) + (eff.joy || 0) + (eff.comfort || 0)));
+  const newHunger  = Math.max(0, Math.min(100, (pet.hunger || 0)   - (eff.nourishment || 0)));
+  const now = nowSec();
+
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE endopet_inventory SET quantity = quantity - 1 WHERE user_id = ? AND item_key = ?"
+      ).bind(user.id, itemKey),
+      env.DB.prepare(
+        "UPDATE pets SET happiness = ?, hunger = ?, last_fed_at = ?, last_played_at = ?, updated_at = ? WHERE user_id = ?"
+      ).bind(newHappy, newHunger, eff.nourishment ? now : pet.last_fed_at, eff.joy ? now : pet.last_played_at, now, user.id),
+    ]);
+  } catch (err) {
+    console.error("endopet use failed:", err?.message || err);
+    return json({ error: "Couldn't use the item." }, 500);
+  }
+
+  return getEndopetState(env, user);
+}
+
+async function postEndopetRest(request, env, user) {
+  const body = await readJsonSafe(request);
+  const days = clampInt(body?.days, 1, 7) || 1;
+  const until = nowSec() + days * 86400;
+  try {
+    await env.DB.prepare(
+      "UPDATE pets SET rest_mode_until = ?, updated_at = ? WHERE user_id = ?"
+    ).bind(until, nowSec(), user.id).run();
+  } catch (err) {
+    console.error("endopet rest failed:", err?.message || err);
+    return json({ error: "Couldn't activate Rest Mode." }, 500);
+  }
+  return getEndopetState(env, user);
+}
+
+async function postEndopetRestEnd(_request, env, user) {
+  try {
+    await env.DB.prepare("UPDATE pets SET rest_mode_until = NULL WHERE user_id = ?").bind(user.id).run();
+  } catch {}
+  return getEndopetState(env, user);
+}
+
+// Aggregate state: pet + inventory + recent rewards. Used by /pet page.
+async function getEndopetState(env, user) {
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(user.id).first();
+  if (!pet) return json({ error: "No pet" }, 404);
+
+  let inv = { results: [] };
+  try {
+    inv = await env.DB.prepare(
+      "SELECT item_key, quantity, equipped, acquired_at FROM endopet_inventory WHERE user_id = ? ORDER BY acquired_at DESC"
+    ).bind(user.id).all();
+  } catch {}
+
+  let recentLedger = { results: [] };
+  try {
+    recentLedger = await env.DB.prepare(
+      "SELECT source_type, xp_awarded, glow_awarded, reason, created_at FROM endopet_reward_ledger " +
+      "WHERE user_id = ? ORDER BY created_at DESC LIMIT 12"
+    ).bind(user.id).all();
+  } catch {}
+
+  const inventory = (inv.results || []).map((row) => ({
+    key: row.item_key,
+    quantity: row.quantity,
+    equipped: !!row.equipped,
+    acquiredAt: row.acquired_at,
+    item: ENDOPET_ITEMS[row.item_key] || { name: row.item_key, icon: "?" },
+  }));
+
+  const eff = endopetEffectiveStage(pet);
+  const nextIdx = Math.min(ENDOPET_STAGES.length - 1, eff.baseIdx + 1);
+  const nextStage = ENDOPET_STAGES[nextIdx];
+  const now = nowSec();
+  const restActive = !!(pet.rest_mode_until && pet.rest_mode_until > now);
+
+  return json({
+    pet: {
+      ...petFullResponse(pet),
+      glowPoints: pet.glow_points || 0,
+      distinctLogDays: pet.distinct_log_days || 0,
+      lastMeaningfulLogAt: pet.last_meaningful_log_at || null,
+      stageKey:   eff.stage.key,
+      stageLabel: eff.stage.label,
+      stageCopy:  eff.stage.copy,
+      stageIdx:   eff.idx,
+      baseStageIdx: eff.baseIdx,
+      regressionLevels: eff.regress,
+      mood: endopetMood(pet),
+      restModeUntil: pet.rest_mode_until || null,
+      restActive,
+      nextStageLabel: nextStage.label,
+      nextStageMinLevel: nextStage.minLevel,
+      nextStageMinDays:  nextStage.minDays,
+    },
+    inventory,
+    recentRewards: (recentLedger.results || []).map((r) => ({
+      sourceType: r.source_type, xp: r.xp_awarded, glow: r.glow_awarded, reason: r.reason, at: r.created_at,
+    })),
+    stages: ENDOPET_STAGES.map((s) => ({ key: s.key, label: s.label, minLevel: s.minLevel, minDays: s.minDays })),
+  });
 }

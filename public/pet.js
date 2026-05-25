@@ -23,20 +23,32 @@
   // --- Bootstrap ----------------------------------------------------------
   bootstrap();
 
+  let inventory = [];
+  let recentRewards = [];
+
   async function bootstrap() {
     try {
       const me = await fetchJson("/api/me/today");
       document.querySelectorAll("[data-bind='displayName']").forEach((el) => {
         el.textContent = me?.user?.displayName || me?.user?.username || "there";
       });
-      const data = await fetchJson("/api/me/pet");
-      pet = data.pet;
-      render();
+      await reloadState();
     } catch (err) {
       stage.innerHTML = `<p class="pet-empty">Couldn't load your EndoPet. Refresh to try again.</p>`;
     } finally {
       hideLoader();
     }
+  }
+
+  async function reloadState() {
+    const data = await fetchJson("/api/me/pet/state");
+    pet           = data.pet;
+    inventory     = data.inventory || [];
+    recentRewards = data.recentRewards || [];
+    render();
+    renderLifecycle();
+    renderInventory();
+    renderRecentRewards();
   }
 
   async function fetchJson(url, init) {
@@ -245,22 +257,283 @@
     clearInterval(thoughtTimer); thoughtTimer = null;
   }
 
+  // --- Lifecycle / Glow Points display -----------------------------------
+  function renderLifecycle() {
+    const card = document.getElementById("pet-lifecycle");
+    if (!card || !pet) return;
+    card.hidden = !pet.isHatched;
+
+    document.getElementById("glow-points").textContent = pet.glowPoints ?? 0;
+    document.getElementById("lc-stage-key").textContent  = pet.stageLabel || "—";
+    document.getElementById("lc-stage-copy").textContent = pet.stageCopy  || "";
+
+    // 6-segment lifecycle bar
+    const bar = document.getElementById("lc-progress");
+    if (bar) {
+      const total = 6;
+      const filled = (pet.stageIdx ?? 0) + 1;
+      bar.innerHTML = "";
+      for (let i = 0; i < total; i++) {
+        const seg = document.createElement("div");
+        seg.className = "lc-seg" + (i < filled ? " on" : "") + (pet.regressionLevels > 0 && i >= filled && i < (pet.baseStageIdx + 1) ? " ghost" : "");
+        bar.appendChild(seg);
+      }
+    }
+
+    // Next stage hint
+    const next = document.getElementById("lc-next");
+    if (next) {
+      if (pet.stageIdx >= 5) {
+        next.textContent = "Your pet is in their wisest, cosiest era. Keep showing up.";
+      } else if (pet.regressionLevels > 0) {
+        next.textContent = "Your pet is cocooning gently — a check-in helps them remember their sparkle.";
+      } else {
+        next.textContent = `Next: ${pet.nextStageLabel} at level ${pet.nextStageMinLevel} · ${pet.nextStageMinDays} logged days (you have ${pet.distinctLogDays}).`;
+      }
+    }
+
+    // Rest mode button state
+    const restLabel = document.getElementById("rest-label");
+    const restHint  = document.getElementById("rest-hint");
+    if (restLabel && restHint) {
+      if (pet.restActive && pet.restModeUntil) {
+        const hours = Math.max(1, Math.ceil((pet.restModeUntil - Math.floor(Date.now()/1000)) / 3600));
+        const days = Math.max(1, Math.round(hours / 24));
+        restLabel.textContent = "End Rest";
+        restHint.textContent = `${days} day${days > 1 ? "s" : ""} cosy`;
+      } else {
+        restLabel.textContent = "Rest Mode";
+        restHint.textContent = "pause regression";
+      }
+    }
+  }
+
+  // --- Inventory ----------------------------------------------------------
+  function renderInventory() {
+    const card = document.getElementById("pet-inventory-card");
+    const grid = document.getElementById("inv-grid");
+    const count = document.getElementById("inv-count");
+    if (!card || !grid) return;
+    card.hidden = !pet?.isHatched;
+    const owned = inventory.filter((i) => (i.quantity || 0) > 0);
+    count.textContent = `${owned.length} item${owned.length !== 1 ? "s" : ""}`;
+    if (!owned.length) {
+      grid.innerHTML = `<p class="inv-empty">Nothing collected yet — open the shop to start your little cosy stash.</p>`;
+      return;
+    }
+    grid.innerHTML = owned.map(invCardHtml).join("");
+  }
+
+  function invCardHtml(row) {
+    const it = row.item;
+    const act = it.consumable
+      ? `<button class="inv-act" data-inv-use="${row.key}">Use</button>`
+      : it.equippable
+        ? `<button class="inv-act ${row.equipped ? "on" : ""}" data-inv-equip="${row.key}">${row.equipped ? "Equipped" : "Equip"}</button>`
+        : "";
+    const qty = (row.quantity || 0) > 1 ? `<span class="inv-qty">×${row.quantity}</span>` : "";
+    return `
+      <div class="inv-tile rarity-${it.rarity || "common"}${row.equipped ? " is-equipped" : ""}">
+        <div class="inv-icon" aria-hidden="true">${it.icon || "?"}${qty}</div>
+        <div class="inv-meta">
+          <strong>${escapeHtml(it.name)}</strong>
+          <span class="inv-cat">${escapeHtml(it.category || "")}</span>
+        </div>
+        ${act}
+      </div>`;
+  }
+
+  // --- Recent rewards ----------------------------------------------------
+  const REWARD_LABEL = {
+    morning_checkin: "Morning check-in", evening_checkin: "Evening reflection",
+    symptom: "Symptom logged", flare: "Flare logged",
+  };
+  function renderRecentRewards() {
+    const card = document.getElementById("pet-rewards-card");
+    const list = document.getElementById("rewards-list");
+    if (!card || !list) return;
+    card.hidden = !pet?.isHatched || recentRewards.length === 0;
+    list.innerHTML = recentRewards.map((r) => `
+      <li>
+        <span class="r-label">${escapeHtml(REWARD_LABEL[r.sourceType] || r.sourceType)}</span>
+        <span class="r-gain">${r.xp ? `⭐ +${r.xp}` : ""} ${r.glow ? `✨ +${r.glow}` : ""}</span>
+        <span class="r-time">${relTime(r.at)}</span>
+      </li>`).join("");
+  }
+
+  function relTime(unixSec) {
+    if (!unixSec) return "";
+    const diff = Math.floor(Date.now() / 1000) - unixSec;
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return `${Math.floor(diff / 86400)}d`;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[<>&"']/g, (c) => ({
+      "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
+    })[c]);
+  }
+
+  // --- Shop modal --------------------------------------------------------
+  let shopFilter = "all";
+  let shopState = null;
+
+  async function openShop() {
+    document.getElementById("shop-modal").hidden = false;
+    document.body.classList.add("modal-open");
+    try {
+      shopState = await fetchJson("/api/me/pet/shop");
+      renderShop();
+    } catch (err) {
+      document.getElementById("shop-grid").innerHTML = `<p class="inv-empty">Couldn't open the shop.</p>`;
+    }
+  }
+  function closeShop() {
+    document.getElementById("shop-modal").hidden = true;
+    document.body.classList.remove("modal-open");
+  }
+
+  function renderShop() {
+    if (!shopState) return;
+    document.getElementById("shop-balance-value").textContent = shopState.glowPoints ?? 0;
+    const grid = document.getElementById("shop-grid");
+    const items = (shopState.items || []).filter((i) => shopFilter === "all" || i.category === shopFilter);
+    if (!items.length) { grid.innerHTML = `<p class="inv-empty">Nothing in this category yet.</p>`; return; }
+    grid.innerHTML = items.map(shopCardHtml).join("");
+  }
+
+  function shopCardHtml(it) {
+    const canAfford = (shopState.glowPoints || 0) >= it.price;
+    let actionBtn;
+    if (it.locked) {
+      actionBtn = `<button class="shop-buy" disabled>🔒 Locked</button>`;
+    } else if (it.owned && !it.consumable) {
+      actionBtn = `<button class="shop-buy owned" disabled>Owned</button>`;
+    } else if (!canAfford) {
+      actionBtn = `<button class="shop-buy" disabled>${it.price} ✨</button>`;
+    } else {
+      actionBtn = `<button class="shop-buy" data-buy="${it.key}">${it.price} ✨</button>`;
+    }
+    return `
+      <div class="shop-item rarity-${it.rarity || "common"}">
+        <div class="shop-item-icon">${it.icon || "?"}</div>
+        <div class="shop-item-meta">
+          <strong>${escapeHtml(it.name)}</strong>
+          <span class="shop-item-cat">${escapeHtml(it.category)}${it.consumable ? " · consumable" : ""}</span>
+        </div>
+        ${actionBtn}
+      </div>`;
+  }
+
+  document.addEventListener("click", async (e) => {
+    if (e.target.closest("[data-close-shop]")) { closeShop(); return; }
+    if (e.target.closest(".shop-filter")) {
+      const btn = e.target.closest(".shop-filter");
+      document.querySelectorAll(".shop-filter").forEach((b) => b.classList.remove("on"));
+      btn.classList.add("on");
+      shopFilter = btn.dataset.filter;
+      renderShop();
+      return;
+    }
+    const buyBtn = e.target.closest("[data-buy]");
+    if (buyBtn) {
+      e.preventDefault();
+      const itemKey = buyBtn.dataset.buy;
+      buyBtn.disabled = true; buyBtn.textContent = "…";
+      try {
+        await fetchJson("/api/me/pet/buy", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ itemKey }),
+        });
+        toast(`Added to your stash 🌸`);
+        shopState = await fetchJson("/api/me/pet/shop");
+        renderShop();
+        await reloadState();
+      } catch (err) {
+        toast(err.message || "Couldn't buy", "err");
+        buyBtn.disabled = false;
+      }
+      return;
+    }
+    const useBtn = e.target.closest("[data-inv-use]");
+    if (useBtn) {
+      e.preventDefault();
+      useBtn.disabled = true;
+      try {
+        await fetchJson("/api/me/pet/use", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ itemKey: useBtn.dataset.invUse }),
+        });
+        toast("Used — your pet looks brighter ✨");
+        await reloadState();
+      } catch (err) {
+        toast(err.message || "Couldn't use", "err");
+        useBtn.disabled = false;
+      }
+      return;
+    }
+    const equipBtn = e.target.closest("[data-inv-equip]");
+    if (equipBtn) {
+      e.preventDefault();
+      equipBtn.disabled = true;
+      try {
+        await fetchJson("/api/me/pet/equip", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ itemKey: equipBtn.dataset.invEquip }),
+        });
+        await reloadState();
+      } catch (err) {
+        toast(err.message || "Couldn't equip", "err");
+        equipBtn.disabled = false;
+      }
+      return;
+    }
+  });
+
   // --- Actions ------------------------------------------------------------
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest(".pet-action");
     if (!btn) return;
     e.preventDefault();
     const action = btn.dataset.action;
+
+    // Special non-API actions
+    if (action === "shop") { openShop(); return; }
+    if (action === "rest") {
+      btn.disabled = true;
+      try {
+        const url = pet?.restActive ? "/api/me/pet/rest/end" : "/api/me/pet/rest";
+        await fetchJson(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ days: 3 }),
+        });
+        toast(pet?.restActive ? "Welcome back. We saved your spot." : "Rest Mode on — your pet is resting with you 🌙");
+        await reloadState();
+      } catch (err) {
+        toast(err.message || "Couldn't toggle Rest Mode", "err");
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
     btn.disabled = true;
     try {
       const data = await fetchJson(`/api/me/pet/${action}`, { method: "POST" });
-      pet = data.pet;
+      pet = { ...pet, ...(data.pet || {}) };
       if (petEl) {
         petEl.dataset.action = actionAnim(action);
         showThought(actionEmoji(action), 1600);
         setTimeout(() => { if (petEl) delete petEl.dataset.action; }, 900);
       }
       renderStats();
+      renderLifecycle();
       toast(actionToast(action, data.leveledUp));
     } catch (err) {
       toast(err.message || "Couldn't do that", "err");
