@@ -131,6 +131,35 @@ export default {
           if (url.pathname === "/api/me/pet/rest/end" && request.method === "POST") {
             return jsonHeaders(await postEndopetRestEnd(request, env, user));
           }
+
+          // --- Community ----------------------------------------------------
+          if (url.pathname === "/api/me/community" && request.method === "GET") {
+            return jsonHeaders(await getCommunityHub(env, user));
+          }
+          if (url.pathname === "/api/me/community/circles" && request.method === "POST") {
+            return jsonHeaders(await postCreateCircle(request, env, user));
+          }
+          const slugMatch = url.pathname.match(/^\/api\/me\/community\/circles\/([a-z0-9-]+)(?:\/(\w+))?$/);
+          if (slugMatch) {
+            const [, slug, action] = slugMatch;
+            if (!action      && request.method === "GET")  return jsonHeaders(await getCircleDetail(env, user, slug));
+            if (action === "join"   && request.method === "POST") return jsonHeaders(await postJoinCircle(env, user, slug));
+            if (action === "leave"  && request.method === "POST") return jsonHeaders(await postLeaveCircle(env, user, slug));
+            if (action === "posts"  && request.method === "POST") return jsonHeaders(await postCreatePost(request, env, user, slug));
+          }
+          const postMatch = url.pathname.match(/^\/api\/me\/community\/posts\/(\d+)(?:\/(\w+))?$/);
+          if (postMatch) {
+            const id = +postMatch[1];
+            const action = postMatch[2];
+            if (!action     && request.method === "DELETE") return jsonHeaders(await deletePost(env, user, id));
+            if (action === "react"   && request.method === "POST") return jsonHeaders(await reactPost(env, user, id));
+            if (action === "replies" && request.method === "GET")  return jsonHeaders(await getReplies(env, user, id));
+            if (action === "replies" && request.method === "POST") return jsonHeaders(await postCreateReply(request, env, user, id));
+          }
+          const replyMatch = url.pathname.match(/^\/api\/me\/community\/replies\/(\d+)\/react$/);
+          if (replyMatch && request.method === "POST") {
+            return jsonHeaders(await reactReply(env, user, +replyMatch[1]));
+          }
           if (url.pathname === "/api/me/story" && request.method === "GET") {
             return jsonHeaders(await getStory(env, user));
           }
@@ -187,7 +216,8 @@ export default {
       url.pathname === "/onboarding"  || url.pathname.startsWith("/onboarding/") ||
       url.pathname === "/story"       || url.pathname.startsWith("/story/") ||
       url.pathname === "/tests"       || url.pathname.startsWith("/tests/") ||
-      url.pathname === "/pet"         || url.pathname.startsWith("/pet/")
+      url.pathname === "/pet"         || url.pathname.startsWith("/pet/") ||
+      url.pathname === "/community"   || url.pathname.startsWith("/community/")
     ) {
       const session = await readSession(request, env);
       if (!session) {
@@ -1068,6 +1098,8 @@ async function getOrCreateUser(env, username) {
        VALUES (?, 'luna', 'Luna', 1, 0, 'happy', 0, ABS(RANDOM() % 360), 0, 100, ?)`
     ).bind(id, now),
   ]);
+  // Auto-join the official EndoMe circle. Best-effort.
+  await autoJoinOfficialCircle(env, id);
   return { id, username, display_name: display, timezone: "UTC" };
 }
 
@@ -2812,4 +2844,415 @@ async function endopetRunAllChecks(env, userId, ctx = {}) {
   const ach = await endopetCheckAchievements(env, userId, ctx).catch(() => []);
   const qst = await endopetCheckQuests(env, userId).catch(() => []);
   return { achievements: ach, quests: qst };
+}
+
+// =============================================================================
+// COMMUNITY — Support Circles, posts, replies, reactions, member tiers.
+// =============================================================================
+
+// Tier thresholds based on distinct logged days. Easy to tune later.
+const COMMUNITY_TIERS = [
+  { key: "newcomer", label: "Newcomer", minDays: 0,  canCreateCircle: false },
+  { key: "active",   label: "Active",   minDays: 7,  canCreateCircle: false },
+  { key: "trusted",  label: "Trusted",  minDays: 30, canCreateCircle: true  },
+];
+
+function communityTier(pet) {
+  const days = pet?.distinct_log_days || 0;
+  let tier = COMMUNITY_TIERS[0];
+  for (const t of COMMUNITY_TIERS) if (days >= t.minDays) tier = t;
+  return { ...tier, distinctLogDays: days };
+}
+
+function communityNextTier(currentKey) {
+  const idx = COMMUNITY_TIERS.findIndex((t) => t.key === currentKey);
+  return idx >= 0 && idx < COMMUNITY_TIERS.length - 1 ? COMMUNITY_TIERS[idx + 1] : null;
+}
+
+// Generate a URL-safe slug. Falls back to "circle" if name has no letters.
+function communitySlug(name) {
+  const base = String(name || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  return base || "circle";
+}
+
+async function communityFindFreeSlug(env, base) {
+  for (let i = 0; i < 30; i++) {
+    const candidate = i === 0 ? base : `${base}-${i + 1}`;
+    const row = await env.DB.prepare("SELECT 1 FROM circles WHERE slug = ?")
+      .bind(candidate).first();
+    if (!row) return candidate;
+  }
+  return `${base}-${Math.floor(Math.random() * 100000)}`;
+}
+
+// Ensure the official EndoMe circle exists. Idempotent.
+async function ensureOfficialCircle(env) {
+  try {
+    const existing = await env.DB.prepare(
+      "SELECT id FROM circles WHERE slug = 'endome' LIMIT 1"
+    ).first();
+    if (existing) return existing.id;
+
+    const adminUser = await env.DB.prepare(
+      "SELECT id FROM users WHERE username = ? LIMIT 1"
+    ).bind((env.AUTH_USERNAME || "endome").toLowerCase()).first().catch(() => null);
+
+    const now = nowSec();
+    const res = await env.DB.prepare(
+      "INSERT INTO circles (slug, name, description, creator_user_id, is_official, is_open, created_at) " +
+      "VALUES ('endome', 'EndoMe', " +
+      "'The home for everyone here. Share stories, ask questions, lift each other up.', " +
+      "?, 1, 1, ?)"
+    ).bind(adminUser?.id || null, now).run();
+
+    const circleId = res.meta?.last_row_id || null;
+    if (circleId && adminUser?.id) {
+      await env.DB.prepare(
+        "INSERT INTO circle_members (circle_id, user_id, role, joined_at) " +
+        "VALUES (?, ?, 'admin', ?) ON CONFLICT DO NOTHING"
+      ).bind(circleId, adminUser.id, now).run();
+    }
+    return circleId;
+  } catch (err) {
+    console.warn("ensureOfficialCircle failed:", err?.message || err);
+    return null;
+  }
+}
+
+// Auto-join EndoMe on user creation. Best-effort — never blocks signup.
+async function autoJoinOfficialCircle(env, userId) {
+  try {
+    const circleId = await ensureOfficialCircle(env);
+    if (!circleId) return;
+    await env.DB.prepare(
+      "INSERT INTO circle_members (circle_id, user_id, role, joined_at) " +
+      "VALUES (?, ?, 'member', ?) ON CONFLICT DO NOTHING"
+    ).bind(circleId, userId, nowSec()).run();
+  } catch (err) {
+    console.warn("autoJoinOfficialCircle failed:", err?.message || err);
+  }
+}
+
+// --- /api/me/community ---------------------------------------------------
+// Hub view: my circles + discover (open circles I'm not in) + my tier.
+async function getCommunityHub(env, user) {
+  // Make sure the official circle exists and the user is in it.
+  await ensureOfficialCircle(env);
+  await autoJoinOfficialCircle(env, user.id);
+
+  const pet = await env.DB.prepare("SELECT distinct_log_days FROM pets WHERE user_id = ?")
+    .bind(user.id).first().catch(() => null);
+  const tier = communityTier(pet);
+  const next = communityNextTier(tier.key);
+
+  let myCircles = { results: [] };
+  let discover  = { results: [] };
+  try {
+    myCircles = await env.DB.prepare(
+      "SELECT c.id, c.slug, c.name, c.description, c.is_official, c.created_at, " +
+      "       cm.role, " +
+      "       (SELECT COUNT(*) FROM circle_members m2 WHERE m2.circle_id = c.id) AS member_count, " +
+      "       (SELECT COUNT(*) FROM circle_posts p WHERE p.circle_id = c.id AND p.deleted_at IS NULL) AS post_count " +
+      "FROM circles c JOIN circle_members cm ON cm.circle_id = c.id " +
+      "WHERE cm.user_id = ? " +
+      "ORDER BY c.is_official DESC, c.created_at DESC"
+    ).bind(user.id).all();
+  } catch (err) { console.warn("hub myCircles:", err?.message || err); }
+
+  try {
+    discover = await env.DB.prepare(
+      "SELECT c.id, c.slug, c.name, c.description, c.is_official, c.created_at, " +
+      "       (SELECT COUNT(*) FROM circle_members m2 WHERE m2.circle_id = c.id) AS member_count " +
+      "FROM circles c " +
+      "WHERE c.is_open = 1 AND c.id NOT IN (SELECT circle_id FROM circle_members WHERE user_id = ?) " +
+      "ORDER BY c.created_at DESC LIMIT 24"
+    ).bind(user.id).all();
+  } catch (err) { console.warn("hub discover:", err?.message || err); }
+
+  return json({
+    tier: {
+      key: tier.key, label: tier.label,
+      distinctLogDays: tier.distinctLogDays,
+      canCreateCircle: tier.canCreateCircle,
+      nextLabel: next?.label || null,
+      nextMinDays: next?.minDays || null,
+    },
+    myCircles: myCircles.results || [],
+    discover:  discover.results  || [],
+  });
+}
+
+// --- POST /api/me/community/circles --------------------------------------
+async function postCreateCircle(request, env, user) {
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+
+  const pet = await env.DB.prepare("SELECT distinct_log_days FROM pets WHERE user_id = ?")
+    .bind(user.id).first().catch(() => null);
+  const tier = communityTier(pet);
+  if (!tier.canCreateCircle) {
+    return json({
+      error: `Circle creation unlocks at the Trusted tier (${COMMUNITY_TIERS.find(t=>t.key==='trusted').minDays}+ logged days). You're at ${tier.distinctLogDays}.`,
+    }, 403);
+  }
+
+  const name = sanitizeText(body.name, 60);
+  const description = sanitizeText(body.description, 400) || null;
+  if (!name || name.length < 3) {
+    return json({ error: "Circle name needs at least 3 characters." }, 400);
+  }
+  const slug = await communityFindFreeSlug(env, communitySlug(name));
+  const now = nowSec();
+
+  try {
+    const res = await env.DB.prepare(
+      "INSERT INTO circles (slug, name, description, creator_user_id, is_official, is_open, created_at) " +
+      "VALUES (?, ?, ?, ?, 0, 1, ?)"
+    ).bind(slug, name, description, user.id, now).run();
+    const circleId = res.meta?.last_row_id;
+    await env.DB.prepare(
+      "INSERT INTO circle_members (circle_id, user_id, role, joined_at) VALUES (?, ?, 'admin', ?)"
+    ).bind(circleId, user.id, now).run();
+    return json({ ok: true, slug, name });
+  } catch (err) {
+    console.error("create circle failed:", err?.message || err);
+    return json({ error: "Couldn't create the circle." }, 500);
+  }
+}
+
+// --- GET /api/me/community/circles/:slug ---------------------------------
+async function getCircleDetail(env, user, slug) {
+  let circle = null;
+  try {
+    circle = await env.DB.prepare(
+      "SELECT c.*, " +
+      "       (SELECT COUNT(*) FROM circle_members m WHERE m.circle_id = c.id) AS member_count, " +
+      "       (SELECT role FROM circle_members m WHERE m.circle_id = c.id AND m.user_id = ?) AS my_role " +
+      "FROM circles c WHERE c.slug = ? LIMIT 1"
+    ).bind(user.id, slug).first();
+  } catch (err) { console.warn("getCircleDetail:", err?.message); }
+
+  if (!circle) return json({ error: "Circle not found" }, 404);
+
+  let posts = { results: [] };
+  try {
+    posts = await env.DB.prepare(
+      "SELECT p.id, p.body, p.is_question, p.created_at, p.user_id, " +
+      "       u.display_name AS author_name, u.username AS author_username, " +
+      "       (SELECT COUNT(*) FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.reaction='heart') AS heart_count, " +
+      "       (SELECT COUNT(*) FROM circle_replies r WHERE r.post_id=p.id AND r.deleted_at IS NULL) AS reply_count, " +
+      "       EXISTS(SELECT 1 FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.user_id=? AND r.reaction='heart') AS i_hearted " +
+      "FROM circle_posts p LEFT JOIN users u ON u.id = p.user_id " +
+      "WHERE p.circle_id = ? AND p.deleted_at IS NULL " +
+      "ORDER BY p.created_at DESC LIMIT 50"
+    ).bind(user.id, circle.id).all();
+  } catch (err) { console.warn("posts:", err?.message); }
+
+  return json({
+    circle: {
+      id: circle.id, slug: circle.slug, name: circle.name,
+      description: circle.description, isOfficial: !!circle.is_official,
+      isOpen: !!circle.is_open, createdAt: circle.created_at,
+      memberCount: circle.member_count || 0,
+      myRole: circle.my_role || null, // null if not a member
+    },
+    posts: (posts.results || []).map((p) => ({
+      id: p.id, body: p.body, isQuestion: !!p.is_question, createdAt: p.created_at,
+      authorId: p.user_id, authorName: p.author_name || p.author_username || "Someone",
+      heartCount: p.heart_count || 0, replyCount: p.reply_count || 0,
+      iHearted: !!p.i_hearted, mine: p.user_id === user.id,
+    })),
+  });
+}
+
+// --- POST /api/me/community/circles/:slug/join ---------------------------
+async function postJoinCircle(env, user, slug) {
+  const circle = await env.DB.prepare("SELECT id, is_open FROM circles WHERE slug = ?")
+    .bind(slug).first().catch(() => null);
+  if (!circle) return json({ error: "Circle not found" }, 404);
+  if (!circle.is_open) return json({ error: "This circle isn't open to join." }, 403);
+  try {
+    await env.DB.prepare(
+      "INSERT INTO circle_members (circle_id, user_id, role, joined_at) " +
+      "VALUES (?, ?, 'member', ?) ON CONFLICT DO NOTHING"
+    ).bind(circle.id, user.id, nowSec()).run();
+  } catch (err) {
+    console.error("join circle failed:", err?.message || err);
+    return json({ error: "Couldn't join right now." }, 500);
+  }
+  return json({ ok: true });
+}
+
+// --- POST /api/me/community/circles/:slug/leave --------------------------
+async function postLeaveCircle(env, user, slug) {
+  const circle = await env.DB.prepare("SELECT id, is_official FROM circles WHERE slug = ?")
+    .bind(slug).first().catch(() => null);
+  if (!circle) return json({ error: "Circle not found" }, 404);
+  if (circle.is_official) return json({ error: "You can't leave the official EndoMe circle." }, 400);
+  try {
+    await env.DB.prepare(
+      "DELETE FROM circle_members WHERE circle_id = ? AND user_id = ?"
+    ).bind(circle.id, user.id).run();
+  } catch (err) {
+    console.error("leave circle failed:", err?.message || err);
+    return json({ error: "Couldn't leave right now." }, 500);
+  }
+  return json({ ok: true });
+}
+
+// --- POST /api/me/community/circles/:slug/posts --------------------------
+async function postCreatePost(request, env, user, slug) {
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const text = sanitizeText(body.body, 2000);
+  if (!text || text.length < 1) return json({ error: "Post can't be empty." }, 400);
+  const isQuestion = body.isQuestion ? 1 : 0;
+
+  const circle = await env.DB.prepare(
+    "SELECT c.id, m.user_id AS membership FROM circles c " +
+    "LEFT JOIN circle_members m ON m.circle_id = c.id AND m.user_id = ? " +
+    "WHERE c.slug = ? LIMIT 1"
+  ).bind(user.id, slug).first().catch(() => null);
+  if (!circle) return json({ error: "Circle not found" }, 404);
+  if (!circle.membership) return json({ error: "Join this circle first." }, 403);
+
+  const now = nowSec();
+  try {
+    const res = await env.DB.prepare(
+      "INSERT INTO circle_posts (circle_id, user_id, body, is_question, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(circle.id, user.id, text, isQuestion, now, now).run();
+    return json({ ok: true, postId: res.meta?.last_row_id });
+  } catch (err) {
+    console.error("create post failed:", err?.message || err);
+    return json({ error: "Couldn't post right now." }, 500);
+  }
+}
+
+// --- DELETE /api/me/community/posts/:id ----------------------------------
+async function deletePost(env, user, postId) {
+  const row = await env.DB.prepare(
+    "SELECT p.id, p.user_id AS author_id, p.circle_id, " +
+    "       (SELECT role FROM circle_members m WHERE m.circle_id = p.circle_id AND m.user_id = ?) AS my_role " +
+    "FROM circle_posts p WHERE p.id = ?"
+  ).bind(user.id, postId).first().catch(() => null);
+  if (!row) return json({ error: "Post not found" }, 404);
+  const canDelete = row.author_id === user.id || ["admin", "moderator"].includes(row.my_role);
+  if (!canDelete) return json({ error: "You can't delete this post." }, 403);
+  await env.DB.prepare(
+    "UPDATE circle_posts SET deleted_at = ? WHERE id = ?"
+  ).bind(nowSec(), postId).run();
+  return json({ ok: true });
+}
+
+// --- POST /api/me/community/posts/:id/react ------------------------------
+async function reactPost(env, user, postId) {
+  const post = await env.DB.prepare(
+    "SELECT p.id, p.circle_id, m.user_id AS membership FROM circle_posts p " +
+    "LEFT JOIN circle_members m ON m.circle_id = p.circle_id AND m.user_id = ? " +
+    "WHERE p.id = ? AND p.deleted_at IS NULL"
+  ).bind(user.id, postId).first().catch(() => null);
+  if (!post) return json({ error: "Post not found" }, 404);
+  if (!post.membership) return json({ error: "Join the circle to react." }, 403);
+
+  const existing = await env.DB.prepare(
+    "SELECT 1 FROM circle_reactions WHERE target_type='post' AND target_id=? AND user_id=? AND reaction='heart'"
+  ).bind(postId, user.id).first().catch(() => null);
+  if (existing) {
+    await env.DB.prepare(
+      "DELETE FROM circle_reactions WHERE target_type='post' AND target_id=? AND user_id=? AND reaction='heart'"
+    ).bind(postId, user.id).run();
+    return json({ ok: true, hearted: false });
+  }
+  await env.DB.prepare(
+    "INSERT INTO circle_reactions (target_type, target_id, user_id, reaction, created_at) VALUES ('post', ?, ?, 'heart', ?)"
+  ).bind(postId, user.id, nowSec()).run();
+  return json({ ok: true, hearted: true });
+}
+
+// --- GET /api/me/community/posts/:id/replies -----------------------------
+async function getReplies(env, user, postId) {
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT r.id, r.body, r.created_at, r.parent_reply_id, r.user_id, " +
+      "       u.display_name AS author_name, u.username AS author_username, " +
+      "       (SELECT COUNT(*) FROM circle_reactions x WHERE x.target_type='reply' AND x.target_id=r.id AND x.reaction='heart') AS heart_count, " +
+      "       EXISTS(SELECT 1 FROM circle_reactions x WHERE x.target_type='reply' AND x.target_id=r.id AND x.user_id=? AND x.reaction='heart') AS i_hearted " +
+      "FROM circle_replies r LEFT JOIN users u ON u.id = r.user_id " +
+      "WHERE r.post_id = ? AND r.deleted_at IS NULL ORDER BY r.created_at ASC LIMIT 200"
+    ).bind(user.id, postId).all();
+  } catch (err) { console.warn("getReplies:", err?.message); }
+  return json({
+    replies: (rows.results || []).map((r) => ({
+      id: r.id, body: r.body, createdAt: r.created_at,
+      parentReplyId: r.parent_reply_id,
+      authorId: r.user_id, authorName: r.author_name || r.author_username || "Someone",
+      heartCount: r.heart_count || 0, iHearted: !!r.i_hearted,
+      mine: r.user_id === user.id,
+    })),
+  });
+}
+
+// --- POST /api/me/community/posts/:id/replies ----------------------------
+async function postCreateReply(request, env, user, postId) {
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const text = sanitizeText(body.body, 1000);
+  if (!text) return json({ error: "Reply can't be empty." }, 400);
+  const parentReplyId = body.parentReplyId ? clampInt(body.parentReplyId, 1, 9_999_999_999) : null;
+
+  const post = await env.DB.prepare(
+    "SELECT p.id, p.circle_id, m.user_id AS membership FROM circle_posts p " +
+    "LEFT JOIN circle_members m ON m.circle_id = p.circle_id AND m.user_id = ? " +
+    "WHERE p.id = ? AND p.deleted_at IS NULL"
+  ).bind(user.id, postId).first().catch(() => null);
+  if (!post) return json({ error: "Post not found" }, 404);
+  if (!post.membership) return json({ error: "Join the circle to reply." }, 403);
+
+  const now = nowSec();
+  try {
+    const res = await env.DB.prepare(
+      "INSERT INTO circle_replies (post_id, user_id, body, parent_reply_id, created_at) " +
+      "VALUES (?, ?, ?, ?, ?)"
+    ).bind(postId, user.id, text, parentReplyId, now).run();
+    return json({ ok: true, replyId: res.meta?.last_row_id });
+  } catch (err) {
+    console.error("reply failed:", err?.message || err);
+    return json({ error: "Couldn't reply right now." }, 500);
+  }
+}
+
+// --- POST /api/me/community/replies/:id/react ----------------------------
+async function reactReply(env, user, replyId) {
+  const reply = await env.DB.prepare(
+    "SELECT r.id, p.circle_id, m.user_id AS membership FROM circle_replies r " +
+    "JOIN circle_posts p ON p.id = r.post_id " +
+    "LEFT JOIN circle_members m ON m.circle_id = p.circle_id AND m.user_id = ? " +
+    "WHERE r.id = ? AND r.deleted_at IS NULL"
+  ).bind(user.id, replyId).first().catch(() => null);
+  if (!reply) return json({ error: "Reply not found" }, 404);
+  if (!reply.membership) return json({ error: "Join the circle to react." }, 403);
+
+  const existing = await env.DB.prepare(
+    "SELECT 1 FROM circle_reactions WHERE target_type='reply' AND target_id=? AND user_id=? AND reaction='heart'"
+  ).bind(replyId, user.id).first().catch(() => null);
+  if (existing) {
+    await env.DB.prepare(
+      "DELETE FROM circle_reactions WHERE target_type='reply' AND target_id=? AND user_id=? AND reaction='heart'"
+    ).bind(replyId, user.id).run();
+    return json({ ok: true, hearted: false });
+  }
+  await env.DB.prepare(
+    "INSERT INTO circle_reactions (target_type, target_id, user_id, reaction, created_at) VALUES ('reply', ?, ?, 'heart', ?)"
+  ).bind(replyId, user.id, nowSec()).run();
+  return json({ ok: true, hearted: true });
 }
