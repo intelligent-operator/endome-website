@@ -145,6 +145,24 @@
         </button>
       </section>
 
+      <!-- Quests (daily + weekly) -->
+      <section id="pet-quests-card" class="pet-quests-card" hidden>
+        <div class="quests-head">
+          <h3>🌟 Quests</h3>
+          <span class="quests-sub">Soft daily and weekly nudges. No pressure.</span>
+        </div>
+        <div class="quests-grid">
+          <div class="quests-block">
+            <p class="quests-label">Today</p>
+            <ul id="daily-quests" class="quests-list"></ul>
+          </div>
+          <div class="quests-block">
+            <p class="quests-label">This week</p>
+            <ul id="weekly-quests" class="quests-list"></ul>
+          </div>
+        </div>
+      </section>
+
       <!-- Inventory -->
       <section id="pet-inventory-card" class="pet-inv-card" hidden>
         <div class="inv-head">
@@ -154,6 +172,15 @@
         <div id="inv-grid" class="inv-grid">
           <p class="inv-empty">Nothing collected yet — the shop has cosy things waiting.</p>
         </div>
+      </section>
+
+      <!-- Achievements -->
+      <section id="pet-ach-card" class="pet-ach-card" hidden>
+        <div class="ach-head">
+          <h3>🏅 Achievements</h3>
+          <span id="ach-count" class="ach-count">0 / 10</span>
+        </div>
+        <div id="ach-grid" class="ach-grid"></div>
       </section>
 
       <!-- Recent rewards -->

@@ -40,15 +40,24 @@
     }
   }
 
+  let achievements = [];
+  let dailyQuests = [];
+  let weeklyQuests = [];
+
   async function reloadState() {
     const data = await fetchJson("/api/me/pet/state");
     pet           = data.pet;
     inventory     = data.inventory || [];
     recentRewards = data.recentRewards || [];
+    achievements  = data.achievements || [];
+    dailyQuests   = data.dailyQuests  || [];
+    weeklyQuests  = data.weeklyQuests || [];
     render();
     renderLifecycle();
     renderInventory();
     renderRecentRewards();
+    renderQuests();
+    renderAchievements();
   }
 
   async function fetchJson(url, init) {
@@ -170,17 +179,36 @@
   function renderHatched() {
     stage.dataset.state = "live";
     stage.style.setProperty("--color-shift", `${pet.colorSeed || 0}deg`);
+    const decor = renderDecor();
+    const wearables = renderWearables();
     stage.innerHTML = `
       <div class="pet-scene">
+        ${decor.wallpaper}
+        <div class="scene-sky">
+          <div class="scene-moon"></div>
+          <div class="scene-star s1"></div>
+          <div class="scene-star s2"></div>
+          <div class="scene-star s3"></div>
+          <div class="scene-star s4"></div>
+          <div class="scene-sparkle k1">✨</div>
+          <div class="scene-sparkle k2">✦</div>
+          <div class="scene-sparkle k3">·</div>
+        </div>
+        ${decor.window}
+        ${decor.shelf}
+        ${decor.lamp}
         <div class="pet-cloud cloud-a"></div>
         <div class="pet-cloud cloud-b"></div>
         <div class="pet-cloud cloud-c"></div>
+        <div class="scene-floor">
+          ${decor.rug}
+        </div>
+        ${decor.companion}
         <div class="pet" id="pet" data-pet="${pet.type}" data-mood="${pet.mood}">
           <div class="pet-thought" id="pet-thought" hidden></div>
           <div class="pet-shadow"></div>
-          <div class="pet-body">${petSvg(pet.type)}</div>
+          <div class="pet-body">${petSvg(pet.type)}${wearables}</div>
         </div>
-        <div class="pet-floor"></div>
       </div>`;
     petEl = document.getElementById("pet");
     petEl.addEventListener("click", () => {
@@ -189,6 +217,48 @@
       showThought(randomFromState(), 1600);
     });
     startBehaviorLoop();
+  }
+
+  // Pick equipped decor + wearables out of inventory and build HTML layers.
+  function renderDecor() {
+    const eq = {};
+    for (const row of inventory) {
+      if (row.equipped && row.item?.slot?.startsWith("decor_")) eq[row.item.slot] = row;
+    }
+    const wallKey = eq.decor_wall?.key;
+    const wallpaper = wallKey === "stardust_paper"
+      ? `<div class="scene-wallpaper stardust"></div>`
+      : "";
+    const windowHtml = wallKey === "moon_window"
+      ? `<div class="decor-window"><div class="window-moon">🌙</div><div class="window-stars">✦ ✦ ·</div></div>`
+      : `<div class="decor-window default"></div>`;
+    const lamp = eq.decor_light?.key === "lavender_lamp"
+      ? `<div class="decor-lamp"><div class="lamp-shade">💡</div><div class="lamp-glow"></div></div>`
+      : eq.decor_light?.key === "legacy_lantern"
+        ? `<div class="decor-lamp legacy"><div class="lamp-shade">🏮</div><div class="lamp-glow strong"></div></div>`
+        : "";
+    const shelf = eq.decor_shelf
+      ? `<div class="decor-shelf">${eq.decor_shelf.item.icon || "🪴"}</div>`
+      : "";
+    const rug = eq.decor_floor
+      ? `<div class="decor-rug ${eq.decor_floor.key}">${eq.decor_floor.item.icon || "☁️"}</div>`
+      : "";
+    const companion = eq.decor_friend
+      ? `<div class="decor-companion">${eq.decor_friend.item.icon || "🧸"}</div>`
+      : "";
+    return { wallpaper, window: windowHtml, lamp, shelf, rug, companion };
+  }
+
+  // Equipped wearables overlay on the pet itself (scarf/hat/cape on top of SVG).
+  function renderWearables() {
+    const layers = [];
+    for (const row of inventory) {
+      if (!row.equipped || !row.item?.slot?.startsWith("wear_")) continue;
+      const slot = row.item.slot;
+      const cls = `wear-${slot.replace("wear_", "")}`;
+      layers.push(`<div class="wear ${cls}" aria-hidden="true">${row.item.icon}</div>`);
+    }
+    return layers.join("");
   }
 
   // --- Wandering + state loop ---------------------------------------------
@@ -359,6 +429,54 @@
         <span class="r-gain">${r.xp ? `⭐ +${r.xp}` : ""} ${r.glow ? `✨ +${r.glow}` : ""}</span>
         <span class="r-time">${relTime(r.at)}</span>
       </li>`).join("");
+  }
+
+  // --- Quests --------------------------------------------------------------
+  function renderQuests() {
+    const card = document.getElementById("pet-quests-card");
+    if (!card) return;
+    card.hidden = !pet?.isHatched;
+    document.getElementById("daily-quests").innerHTML  = dailyQuests.map(questHtml).join("");
+    document.getElementById("weekly-quests").innerHTML = weeklyQuests.map(questHtml).join("");
+  }
+  function questHtml(q) {
+    const pct = Math.max(0, Math.min(100, Math.round((q.current / q.target) * 100)));
+    return `
+      <li class="quest-row ${q.completed ? "is-done" : ""}">
+        <div class="quest-icon">${q.icon}</div>
+        <div class="quest-body">
+          <div class="quest-top">
+            <strong>${escapeHtml(q.name)}</strong>
+            <span class="quest-reward">+${q.reward} ✨</span>
+          </div>
+          <p class="quest-desc">${escapeHtml(q.desc)}</p>
+          <div class="quest-bar"><div class="quest-fill" style="width:${pct}%"></div></div>
+          <span class="quest-progress">${q.current} / ${q.target}${q.completed ? " · ✓ complete" : ""}</span>
+        </div>
+      </li>`;
+  }
+
+  // --- Achievements --------------------------------------------------------
+  function renderAchievements() {
+    const card = document.getElementById("pet-ach-card");
+    const grid = document.getElementById("ach-grid");
+    const count = document.getElementById("ach-count");
+    if (!card || !grid) return;
+    card.hidden = !pet?.isHatched;
+    const unlocked = achievements.filter((a) => a.unlocked).length;
+    count.textContent = `${unlocked} / ${achievements.length}`;
+    grid.innerHTML = achievements.map(achHtml).join("");
+  }
+  function achHtml(a) {
+    return `
+      <div class="ach-tile ${a.unlocked ? "is-unlocked" : "is-locked"}" title="${escapeHtml(a.desc)}">
+        <div class="ach-icon">${a.unlocked ? a.icon : "🔒"}</div>
+        <div class="ach-meta">
+          <strong>${escapeHtml(a.name)}</strong>
+          <span>${escapeHtml(a.desc)}</span>
+          <span class="ach-reward">+${a.reward} ✨</span>
+        </div>
+      </div>`;
   }
 
   function relTime(unixSec) {

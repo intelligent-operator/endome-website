@@ -1222,7 +1222,8 @@ async function postMorningCheckin(request, env, user) {
 
   const pet = await awardXp(env, user.id, pointsAwarded, date);
   const glow = await endopetGrantReward(env, user.id, "morning_checkin", date);
-  return json({ ok: true, pointsAwarded, fullDayBonus, pet, glow });
+  const ach  = await endopetRunAllChecks(env, user.id, { welcomeBack: glow?.welcomeBack });
+  return json({ ok: true, pointsAwarded, fullDayBonus, pet, glow, ach });
 }
 
 // --- /api/me/checkin/evening ----------------------------------------------
@@ -1295,7 +1296,8 @@ async function postEveningCheckin(request, env, user) {
 
   const pet = await awardXp(env, user.id, pointsAwarded, date);
   const glow = await endopetGrantReward(env, user.id, "evening_checkin", date);
-  return json({ ok: true, pointsAwarded, fullDayBonus, pet, glow });
+  const ach  = await endopetRunAllChecks(env, user.id, { welcomeBack: glow?.welcomeBack });
+  return json({ ok: true, pointsAwarded, fullDayBonus, pet, glow, ach });
 }
 
 // --- /api/me/symptoms (POST) ----------------------------------------------
@@ -1334,7 +1336,8 @@ async function postSymptom(request, env, user) {
   // severity-5 entries also flag as a flare for the future achievement.
   const isFlare = severity >= 4 || ["pelvic_pain", "endo_belly"].includes(symptom);
   const glow = await endopetGrantReward(env, user.id, isFlare ? "flare" : "symptom", `${date}:${now}`);
-  return json({ ok: true, pointsAwarded: points, pet, glow });
+  const ach  = await endopetRunAllChecks(env, user.id, { welcomeBack: glow?.welcomeBack });
+  return json({ ok: true, pointsAwarded: points, pet, glow, ach });
 }
 
 // --- /api/me/symptoms (GET) -----------------------------------------------
@@ -2296,6 +2299,7 @@ async function postEndopetBuy(request, env, user) {
     return json({ error: "Couldn't complete the purchase." }, 500);
   }
 
+  await endopetRunAllChecks(env, user.id);
   return getEndopetState(env, user);
 }
 
@@ -2392,6 +2396,7 @@ async function postEndopetRest(request, env, user) {
     console.error("endopet rest failed:", err?.message || err);
     return json({ error: "Couldn't activate Rest Mode." }, 500);
   }
+  await endopetRunAllChecks(env, user.id, { restActivated: true });
   return getEndopetState(env, user);
 }
 
@@ -2421,6 +2426,48 @@ async function getEndopetState(env, user) {
       "WHERE user_id = ? ORDER BY created_at DESC LIMIT 12"
     ).bind(user.id).all();
   } catch {}
+
+  // Achievements (unlocked vs locked) + quest progress are computed here
+  // so the pet page just consumes them.
+  let unlockedAch = new Set();
+  try {
+    const rows = await env.DB.prepare(
+      "SELECT achievement_key, unlocked_at FROM endopet_achievements WHERE user_id = ?"
+    ).bind(user.id).all();
+    unlockedAch = new Map((rows.results || []).map((r) => [r.achievement_key, r.unlocked_at]));
+  } catch {}
+  const achievements = Object.entries(ACHIEVEMENTS).map(([key, def]) => ({
+    key, name: def.name, icon: def.icon, desc: def.desc, reward: def.reward || 0,
+    unlocked: unlockedAch instanceof Map ? unlockedAch.has(key) : false,
+    unlockedAt: unlockedAch instanceof Map ? (unlockedAch.get(key) || null) : null,
+  }));
+
+  let questCompletions = new Set();
+  try {
+    const todayPeriod = periodDaily();
+    const weekPeriod  = periodWeekly();
+    const rows = await env.DB.prepare(
+      "SELECT quest_key, period FROM endopet_quest_completions WHERE user_id = ? AND period IN (?, ?)"
+    ).bind(user.id, todayPeriod, weekPeriod).all();
+    questCompletions = new Set((rows.results || []).map((r) => `${r.quest_key}:${r.period}`));
+  } catch {}
+
+  async function questBlock(defs, period) {
+    const out = [];
+    for (const [key, def] of Object.entries(defs)) {
+      let p = { current: 0, target: 1 };
+      try { p = await def.progress(env, user.id); } catch {}
+      out.push({
+        key, name: def.name, icon: def.icon, desc: def.desc, reward: def.reward,
+        current: Math.min(p.current, p.target),
+        target:  p.target,
+        completed: questCompletions.has(`${key}:${period}`) || p.current >= p.target,
+      });
+    }
+    return out;
+  }
+  const dailyQuests  = await questBlock(DAILY_QUESTS,  periodDaily());
+  const weeklyQuests = await questBlock(WEEKLY_QUESTS, periodWeekly());
 
   const inventory = (inv.results || []).map((row) => ({
     key: row.item_key,
@@ -2459,6 +2506,310 @@ async function getEndopetState(env, user) {
     recentRewards: (recentLedger.results || []).map((r) => ({
       sourceType: r.source_type, xp: r.xp_awarded, glow: r.glow_awarded, reason: r.reason, at: r.created_at,
     })),
+    achievements,
+    dailyQuests,
+    weeklyQuests,
     stages: ENDOPET_STAGES.map((s) => ({ key: s.key, label: s.label, minLevel: s.minLevel, minDays: s.minDays })),
   });
+}
+
+// =============================================================================
+// ACHIEVEMENTS — milestone badges that unlock once and pay out Glow Points
+// =============================================================================
+
+const ACHIEVEMENTS = {
+  first_hatch: {
+    name: "First Hatch", icon: "🥚",
+    desc: "Your tiny companion stepped out of their shell.",
+    reward: 30,
+    check: async (env, userId, pet) => !!pet?.hatched_at,
+  },
+  five_logs: {
+    name: "Five Gentle Check-ins", icon: "🌸",
+    desc: "Logged on five different days.",
+    reward: 50,
+    check: async (env, userId, pet) => (pet?.distinct_log_days || 0) >= 5,
+  },
+  pattern_finder: {
+    name: "Pattern Finder", icon: "🔍",
+    desc: "Logged on 14 different days in a single month.",
+    reward: 100,
+    check: async (env, userId) => {
+      try {
+        const monthStart = new Date();
+        monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0);
+        const start = Math.floor(monthStart.getTime() / 1000);
+        const row = await env.DB.prepare(
+          "SELECT COUNT(DISTINCT date(created_at,'unixepoch')) AS d " +
+          "FROM endopet_reward_ledger WHERE user_id = ? AND created_at >= ?"
+        ).bind(userId, start).first();
+        return (row?.d || 0) >= 14;
+      } catch { return false; }
+    },
+  },
+  flare_buddy: {
+    name: "Flare Buddy", icon: "🤗",
+    desc: "Logged a flare and let your pet care for you.",
+    reward: 40,
+    check: async (env, userId, pet) => {
+      try {
+        const flare = await env.DB.prepare(
+          "SELECT 1 FROM endopet_reward_ledger WHERE user_id = ? AND source_type = 'flare' LIMIT 1"
+        ).bind(userId).first();
+        return !!flare && !!pet?.rest_mode_until;
+      } catch { return false; }
+    },
+  },
+  rest_is_care: {
+    name: "Rest Is Care", icon: "🌙",
+    desc: "Activated Rest Mode when you needed softness.",
+    reward: 30,
+    check: async (env, userId, pet, ctx) => ctx?.restActivated === true || !!pet?.rest_mode_until,
+  },
+  welcome_back: {
+    name: "Welcome Back", icon: "💖",
+    desc: "Returned to your pet after time away.",
+    reward: 50,
+    check: async (env, userId, pet, ctx) => (ctx?.welcomeBack || 0) >= 40,
+  },
+  cozy_collector: {
+    name: "Cozy Collector", icon: "🎒",
+    desc: "Gathered 10 items in your stash.",
+    reward: 75,
+    check: async (env, userId) => {
+      try {
+        const row = await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM endopet_inventory WHERE user_id = ? AND quantity > 0"
+        ).bind(userId).first();
+        return (row?.n || 0) >= 10;
+      } catch { return false; }
+    },
+  },
+  moon_garden: {
+    name: "Moon Garden", icon: "🪴",
+    desc: "Unlocked three decor items for the room.",
+    reward: 75,
+    check: async (env, userId) => {
+      try {
+        const decorKeys = Object.entries(ENDOPET_ITEMS)
+          .filter(([_, def]) => def.category === "decor").map(([k]) => k);
+        if (!decorKeys.length) return false;
+        const placeholders = decorKeys.map(() => "?").join(",");
+        const row = await env.DB.prepare(
+          `SELECT COUNT(*) AS n FROM endopet_inventory WHERE user_id = ? AND quantity > 0 AND item_key IN (${placeholders})`
+        ).bind(userId, ...decorKeys).first();
+        return (row?.n || 0) >= 3;
+      } catch { return false; }
+    },
+  },
+  tiny_archivist: {
+    name: "Tiny Archivist", icon: "📓",
+    desc: "Added notes to 10 logs.",
+    reward: 100,
+    check: async (env, userId) => {
+      try {
+        const row = await env.DB.prepare(
+          "SELECT COUNT(*) AS n FROM symptoms WHERE user_id = ? AND notes IS NOT NULL AND LENGTH(notes) > 0"
+        ).bind(userId).first();
+        return (row?.n || 0) >= 10;
+      } catch { return false; }
+    },
+  },
+  elder_glow: {
+    name: "Elder Glow", icon: "✨",
+    desc: "Reached the Wise Glowkeeper stage.",
+    reward: 200,
+    check: async (env, userId, pet) => {
+      const stageIdx = endopetBaseStageIndex(pet?.level || 0, pet?.distinct_log_days || 0);
+      return stageIdx >= 5;
+    },
+  },
+};
+
+async function endopetCheckAchievements(env, userId, ctx = {}) {
+  let already = new Set();
+  try {
+    const rows = await env.DB.prepare(
+      "SELECT achievement_key FROM endopet_achievements WHERE user_id = ?"
+    ).bind(userId).all();
+    already = new Set((rows.results || []).map((r) => r.achievement_key));
+  } catch { return []; }
+
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
+    .bind(userId).first().catch(() => null);
+
+  const newly = [];
+  for (const [key, def] of Object.entries(ACHIEVEMENTS)) {
+    if (already.has(key)) continue;
+    let met = false;
+    try { met = await def.check(env, userId, pet, ctx); } catch { met = false; }
+    if (!met) continue;
+
+    try {
+      await env.DB.prepare(
+        "INSERT INTO endopet_achievements (user_id, achievement_key, unlocked_at, glow_reward) " +
+        "VALUES (?, ?, ?, ?) ON CONFLICT(user_id, achievement_key) DO NOTHING"
+      ).bind(userId, key, nowSec(), def.reward || 0).run();
+      if (def.reward) {
+        await env.DB.prepare(
+          "UPDATE pets SET glow_points = COALESCE(glow_points,0) + ? WHERE user_id = ?"
+        ).bind(def.reward, userId).run();
+      }
+      newly.push({ key, ...def });
+    } catch (err) {
+      console.warn("endopet ach insert failed:", err?.message || err);
+    }
+  }
+  return newly;
+}
+
+// =============================================================================
+// QUESTS — daily & weekly, auto-claimed when conditions met
+// =============================================================================
+
+function periodDaily()  { return new Date().toISOString().slice(0, 10); }   // YYYY-MM-DD
+function periodWeekly() {
+  // ISO-ish week stamp YYYY-Www based on UTC.
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  // Move to Thursday of this week (ISO week pivots there) so year boundaries work.
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const year = d.getUTCFullYear();
+  const start = new Date(Date.UTC(year, 0, 1));
+  const week = Math.ceil((((d - start) / 86400000) + 1) / 7);
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+function weekStartTs() {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  const day = (d.getUTCDay() + 6) % 7; // Monday = 0
+  d.setUTCDate(d.getUTCDate() - day);
+  return Math.floor(d.getTime() / 1000);
+}
+function dayStartTs() {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return Math.floor(d.getTime() / 1000);
+}
+
+const DAILY_QUESTS = {
+  daily_checkin: {
+    name: "Gentle check-in", icon: "🌅", reward: 25,
+    desc: "Do one morning or evening check-in today.",
+    progress: async (env, userId) => {
+      const row = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM endopet_reward_ledger WHERE user_id = ? AND created_at >= ? AND source_type IN ('morning_checkin','evening_checkin')"
+      ).bind(userId, dayStartTs()).first().catch(() => null);
+      return { current: row?.n || 0, target: 1 };
+    },
+  },
+  daily_log_anything: {
+    name: "Log something soft", icon: "📝", reward: 20,
+    desc: "Log any symptom today.",
+    progress: async (env, userId) => {
+      const row = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM endopet_reward_ledger WHERE user_id = ? AND created_at >= ? AND source_type IN ('symptom','flare')"
+      ).bind(userId, dayStartTs()).first().catch(() => null);
+      return { current: row?.n || 0, target: 1 };
+    },
+  },
+  daily_pet_love: {
+    name: "Give your pet love", icon: "💖", reward: 20,
+    desc: "Feed, play with, or pat your pet today.",
+    progress: async (env, userId) => {
+      const ds = dayStartTs();
+      const pet = await env.DB.prepare(
+        "SELECT last_fed_at, last_played_at FROM pets WHERE user_id = ?"
+      ).bind(userId).first().catch(() => null);
+      const today =
+        ((pet?.last_fed_at    || 0) >= ds ? 1 : 0) +
+        ((pet?.last_played_at || 0) >= ds ? 1 : 0);
+      return { current: Math.min(today, 1), target: 1 };
+    },
+  },
+};
+
+const WEEKLY_QUESTS = {
+  weekly_five_days: {
+    name: "Five different days", icon: "📅", reward: 75,
+    desc: "Check in on five distinct days this week.",
+    progress: async (env, userId) => {
+      const row = await env.DB.prepare(
+        "SELECT COUNT(DISTINCT date(created_at,'unixepoch')) AS d FROM endopet_reward_ledger WHERE user_id = ? AND created_at >= ?"
+      ).bind(userId, weekStartTs()).first().catch(() => null);
+      return { current: row?.d || 0, target: 5 };
+    },
+  },
+  weekly_morning: {
+    name: "Three morning check-ins", icon: "☀️", reward: 50,
+    desc: "Morning check-in three times this week.",
+    progress: async (env, userId) => {
+      const row = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM endopet_reward_ledger WHERE user_id = ? AND created_at >= ? AND source_type = 'morning_checkin'"
+      ).bind(userId, weekStartTs()).first().catch(() => null);
+      return { current: row?.n || 0, target: 3 };
+    },
+  },
+  weekly_one_note: {
+    name: "One note for future-you", icon: "📓", reward: 40,
+    desc: "Add a note to one symptom log this week.",
+    progress: async (env, userId) => {
+      const ws = weekStartTs();
+      const row = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM symptoms WHERE user_id = ? AND logged_at >= ? AND notes IS NOT NULL AND LENGTH(notes) > 0"
+      ).bind(userId, ws).first().catch(() => null);
+      return { current: row?.n || 0, target: 1 };
+    },
+  },
+};
+
+async function endopetCheckQuests(env, userId) {
+  const today = periodDaily();
+  const thisWeek = periodWeekly();
+  const newly = [];
+
+  for (const [key, def] of Object.entries(DAILY_QUESTS)) {
+    const p = await def.progress(env, userId);
+    if (p.current >= p.target) {
+      const inserted = await tryCompleteQuest(env, userId, key, today, def.reward);
+      if (inserted) newly.push({ key, name: def.name, icon: def.icon, reward: def.reward, kind: "daily" });
+    }
+  }
+  for (const [key, def] of Object.entries(WEEKLY_QUESTS)) {
+    const p = await def.progress(env, userId);
+    if (p.current >= p.target) {
+      const inserted = await tryCompleteQuest(env, userId, key, thisWeek, def.reward);
+      if (inserted) newly.push({ key, name: def.name, icon: def.icon, reward: def.reward, kind: "weekly" });
+    }
+  }
+  return newly;
+}
+
+async function tryCompleteQuest(env, userId, key, period, reward) {
+  try {
+    const existing = await env.DB.prepare(
+      "SELECT 1 FROM endopet_quest_completions WHERE user_id = ? AND quest_key = ? AND period = ?"
+    ).bind(userId, key, period).first();
+    if (existing) return false;
+    await env.DB.prepare(
+      "INSERT INTO endopet_quest_completions (user_id, quest_key, period, completed_at, glow_reward) " +
+      "VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id, quest_key, period) DO NOTHING"
+    ).bind(userId, key, period, nowSec(), reward || 0).run();
+    if (reward) {
+      await env.DB.prepare(
+        "UPDATE pets SET glow_points = COALESCE(glow_points,0) + ? WHERE user_id = ?"
+      ).bind(reward, userId).run();
+    }
+    return true;
+  } catch (err) {
+    console.warn("quest complete failed:", err?.message || err);
+    return false;
+  }
+}
+
+// Convenience: run both checks together. Returns combined newly-unlocked list.
+async function endopetRunAllChecks(env, userId, ctx = {}) {
+  const ach = await endopetCheckAchievements(env, userId, ctx).catch(() => []);
+  const qst = await endopetCheckQuests(env, userId).catch(() => []);
+  return { achievements: ach, quests: qst };
 }
