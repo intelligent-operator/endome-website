@@ -1037,23 +1037,24 @@ async function getMeToday(request, env, user) {
   const url = new URL(request.url);
   const date = normaliseDate(url.searchParams.get("date"));
 
+  // Every query individually .catch()ed so a missing column in any one
+  // table (mid-migration) can't take down the whole /api/me/today response.
   const [daily, symptoms, pet, notifs, userRow] = await Promise.all([
     env.DB.prepare("SELECT * FROM daily_logs WHERE user_id = ? AND log_date = ?")
-      .bind(user.id, date).first(),
+      .bind(user.id, date).first().catch((e) => { console.warn("daily_logs read:", e?.message); return null; }),
     env.DB.prepare(
-      "SELECT id, log_date, logged_at, symptom, severity, location, notes, pain_type, triggers, relief, points " +
-      "FROM symptoms WHERE user_id = ? AND log_date = ? ORDER BY logged_at DESC"
-    ).bind(user.id, date).all(),
-    env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(user.id).first(),
+      "SELECT * FROM symptoms WHERE user_id = ? AND log_date = ? ORDER BY logged_at DESC"
+    ).bind(user.id, date).all().catch((e) => { console.warn("symptoms read:", e?.message); return { results: [] }; }),
+    env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(user.id).first()
+      .catch((e) => { console.warn("pets read:", e?.message); return null; }),
     env.DB.prepare(
       "SELECT id, type, title, body, action_url, created_at, read_at " +
       "FROM notifications WHERE user_id = ? AND dismissed_at IS NULL " +
       "ORDER BY created_at DESC LIMIT 20"
-    ).bind(user.id).all(),
-    env.DB.prepare(
-      "SELECT dna_ordered_at, dna_results_at, bloods_ordered_at, bloods_results_at, " +
-      "map_ordered_at, map_results_at FROM users WHERE id = ?"
-    ).bind(user.id).first().catch(() => null),
+    ).bind(user.id).all().catch((e) => { console.warn("notifications read:", e?.message); return { results: [] }; }),
+    env.DB.prepare("SELECT * FROM users WHERE id = ?")
+      .bind(user.id).first()
+      .catch((e) => { console.warn("users read:", e?.message); return null; }),
   ]);
 
   const tests = {};
