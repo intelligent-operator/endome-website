@@ -31,37 +31,11 @@ if (newsletterForm) {
   });
 }
 
-// "Request a DNA Test" CTAs -> Stripe Checkout
-document.querySelectorAll("[data-checkout]").forEach((el) => {
-  el.addEventListener("click", async (e) => {
-    e.preventDefault();
-    const original = el.textContent;
-    el.setAttribute("aria-busy", "true");
-    try {
-      const res = await fetch("/api/checkout", { method: "POST" });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        el.textContent = "Unavailable — try again";
-        setTimeout(() => (el.textContent = original), 2500);
-      }
-    } catch {
-      el.textContent = "Network error";
-      setTimeout(() => (el.textContent = original), 2500);
-    } finally {
-      el.removeAttribute("aria-busy");
-    }
-  });
-});
+// (DNA / Tests CTAs are now plain links — logged-out users land on
+// /register, logged-in users on /tests where the per-test Stripe
+// Checkout flow takes over.)
 
-// Friendly post-checkout banner
-const params = new URLSearchParams(location.search);
-if (params.get("checkout") === "success") {
-  alert("Thanks for your order — check your email for next steps.");
-} else if (params.get("checkout") === "cancelled") {
-  alert("Checkout cancelled. You can try again whenever you're ready.");
-}
+// (Post-checkout success/cancel banner now lives on /tests.)
 
 // EndoPet selection (visual only)
 document.querySelectorAll(".pet-card").forEach((card) => {

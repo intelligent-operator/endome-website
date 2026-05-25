@@ -128,6 +128,15 @@ export default {
           if (url.pathname === "/api/me/order/map" && request.method === "POST") {
             return jsonHeaders(await postTestOrder(request, env, user, "map"));
           }
+          if (url.pathname === "/api/me/checkout/dna" && request.method === "POST") {
+            return jsonHeaders(await postTestCheckout(env, user, "dna"));
+          }
+          if (url.pathname === "/api/me/checkout/bloods" && request.method === "POST") {
+            return jsonHeaders(await postTestCheckout(env, user, "bloods"));
+          }
+          if (url.pathname === "/api/me/checkout/map" && request.method === "POST") {
+            return jsonHeaders(await postTestCheckout(env, user, "map"));
+          }
           if (url.pathname === "/api/me/results/dna" && request.method === "POST") {
             return jsonHeaders(await postTestResults(request, env, user, "dna"));
           }
@@ -878,26 +887,35 @@ async function handleStripeWebhook(request, env) {
   const event = JSON.parse(payload);
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const customerEmail = session.customer_details?.email;
-    if (customerEmail) {
-      await mandrillSend(env, {
-        to: [{ email: customerEmail, type: "to" }],
-        subject: "Your EndoMe DNA test is on the way",
-        from_email: env.NEWSLETTER_FROM_EMAIL,
-        from_name: env.NEWSLETTER_FROM_NAME,
-        html:
-          `<p>Thanks for your order.</p>` +
-          `<p>We'll prepare your at-home DNA test kit and email you a tracking link shortly. ` +
-          `In the meantime, download the EndoMe app to set up your profile and EndoPet.</p>`,
-      });
+    const userId        = session.metadata?.user_id || session.client_reference_id || null;
+    const testId        = session.metadata?.test_id || null;
+    const customerEmail = session.customer_details?.email || null;
+    const amount        = session.amount_total != null ? (session.amount_total / 100).toFixed(2) : "?";
+    const currency      = (session.currency || "AUD").toUpperCase();
+
+    // Record the order against the user (sets ordered_at + marks story step
+    // + sends the customer a branded confirmation email).
+    if (userId && testId) {
+      await recordTestOrder(env, userId, testId, customerEmail);
     }
-    await mandrillSend(env, {
-      to: [{ email: env.NOTIFY_EMAIL, type: "to" }],
-      subject: `New DNA test order — ${customerEmail || "unknown"}`,
-      from_email: env.NEWSLETTER_FROM_EMAIL,
-      from_name: env.NEWSLETTER_FROM_NAME,
-      text: `Stripe session: ${session.id}\nAmount: ${session.amount_total}\nEmail: ${customerEmail}`,
-    });
+
+    // Notify the team inbox so we know to fulfill.
+    try {
+      await mandrillSend(env, {
+        to: [{ email: env.NOTIFY_EMAIL || FROM_EMAIL_DEFAULT, type: "to" }],
+        subject: `New ${testId ? TESTS[testId]?.name || testId : "EndoMe"} order — ${customerEmail || "unknown"}`,
+        from_email: env.NEWSLETTER_FROM_EMAIL || FROM_EMAIL_DEFAULT,
+        from_name:  env.NEWSLETTER_FROM_NAME || "EndoMe",
+        text:
+          `Test:    ${testId || "unknown"}\n` +
+          `Amount:  $${amount} ${currency}\n` +
+          `Email:   ${customerEmail || "—"}\n` +
+          `User ID: ${userId || "—"}\n` +
+          `Session: ${session.id}\n`,
+      });
+    } catch (err) {
+      console.error("notify-team email failed:", err?.message || err);
+    }
   }
   return new Response("ok");
 }
@@ -1476,9 +1494,30 @@ function petFullResponse(pet) {
 // completed the step renders locked.
 // =============================================================================
 const TESTS = {
-  dna:    { name: "EndoMe DNA",    icon: "🧬", orderedCol: "dna_ordered_at",    resultsCol: "dna_results_at" },
-  bloods: { name: "EndoMe Bloods", icon: "🩸", orderedCol: "bloods_ordered_at", resultsCol: "bloods_results_at" },
-  map:    { name: "EndoMe Map",    icon: "🗺️", orderedCol: "map_ordered_at",    resultsCol: "map_results_at" },
+  dna: {
+    name: "EndoMe DNA",
+    icon: "🧬",
+    priceLabel: "$249 AUD",
+    orderedCol: "dna_ordered_at",
+    resultsCol: "dna_results_at",
+    priceEnv:   "STRIPE_PRICE_DNA",
+  },
+  bloods: {
+    name: "EndoMe Bloods",
+    icon: "🩸",
+    priceLabel: "$149 AUD",
+    orderedCol: "bloods_ordered_at",
+    resultsCol: "bloods_results_at",
+    priceEnv:   "STRIPE_PRICE_BLOODS",
+  },
+  map: {
+    name: "EndoMe Map",
+    icon: "🗺️",
+    priceLabel: "$349 AUD",
+    orderedCol: "map_ordered_at",
+    resultsCol: "map_results_at",
+    priceEnv:   "STRIPE_PRICE_MAP",
+  },
 };
 const TEST_IDS = new Set(Object.keys(TESTS));
 
@@ -1725,6 +1764,124 @@ async function postTestResults(_request, env, user, testId) {
   ).bind(now, user.id).run();
   await markStoryStep(env, user.id, `${testId}_results`, "auto");
   return json({ ok: true, test: testId, results_at: now });
+}
+
+// --- Stripe Checkout for a specific test --------------------------------
+// Creates a Stripe Checkout session and returns the URL the browser
+// should redirect to. The actual order timestamp is set when the
+// webhook fires (handleStripeWebhook → recordTestOrder).
+async function postTestCheckout(env, user, testId) {
+  if (!TEST_IDS.has(testId)) return json({ error: "Unknown test" }, 400);
+  const t = TESTS[testId];
+
+  const priceId = env[t.priceEnv];
+  if (!priceId) {
+    return json({
+      error: `${t.name} pricing isn't configured yet — set ${t.priceEnv} in the Worker secrets.`,
+    }, 503);
+  }
+  if (!env.STRIPE_SECRET_KEY) {
+    return json({ error: "Payments aren't configured yet — set STRIPE_SECRET_KEY." }, 503);
+  }
+
+  // Pull the user's email so Stripe Checkout pre-fills + a receipt goes
+  // to the right address.
+  const userRow = await env.DB.prepare(
+    "SELECT email FROM users WHERE id = ?"
+  ).bind(user.id).first().catch(() => null);
+  const email = userRow?.email || null;
+
+  const siteUrl = (env.SITE_URL || "https://endome.com").replace(/\/$/, "");
+
+  const form = new URLSearchParams();
+  form.set("mode", "payment");
+  form.set("line_items[0][price]", priceId);
+  form.set("line_items[0][quantity]", "1");
+  form.set("success_url", `${siteUrl}/tests?checkout=success&test=${testId}&session_id={CHECKOUT_SESSION_ID}`);
+  form.set("cancel_url",  `${siteUrl}/tests?checkout=cancelled&test=${testId}`);
+  form.set("allow_promotion_codes", "true");
+  form.set("billing_address_collection", "required");
+  form.set("shipping_address_collection[allowed_countries][0]", "AU");
+  form.set("shipping_address_collection[allowed_countries][1]", "NZ");
+  form.set("client_reference_id", user.id);
+  form.set("metadata[user_id]", user.id);
+  form.set("metadata[test_id]", testId);
+  if (email) form.set("customer_email", email);
+
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("stripe checkout failed", res.status, text);
+    return json({ error: "Couldn't start checkout. Try again in a moment." }, 502);
+  }
+  const session = await res.json();
+  return json({ ok: true, url: session.url });
+}
+
+// Internal: record a paid order against the user, mark the story step,
+// and send the confirmation email. Idempotent.
+async function recordTestOrder(env, userId, testId, customerEmail) {
+  if (!TEST_IDS.has(testId)) return;
+  const t = TESTS[testId];
+  const now = nowSec();
+  try {
+    await env.DB.prepare(
+      `UPDATE users SET ${t.orderedCol} = COALESCE(${t.orderedCol}, ?) WHERE id = ?`
+    ).bind(now, userId).run();
+  } catch (err) {
+    console.error("recordTestOrder users update failed:", err?.message || err);
+  }
+  try {
+    await env.DB.prepare(
+      "INSERT INTO story_progress (user_id, step_id, completed_at, completed_by) " +
+      "VALUES (?, ?, ?, 'auto') ON CONFLICT(user_id, step_id) DO NOTHING"
+    ).bind(userId, `order_${testId}`, now).run();
+  } catch (err) {
+    console.error("recordTestOrder story update failed:", err?.message || err);
+  }
+  if (customerEmail) {
+    await sendTestOrderEmail(env, customerEmail, t).catch((err) =>
+      console.error("test order email failed:", err?.message || err)
+    );
+  }
+}
+
+async function sendTestOrderEmail(env, email, t) {
+  if (!env.MANDRILL_API_KEY) return;
+  const siteUrl = env.SITE_URL || "https://endome.com";
+  const html = renderEmail({
+    siteUrl,
+    preheader: `${t.name} is on its way.`,
+    headline: `${t.name} ordered ${t.icon}`,
+    body: `
+      <p style="margin:0 0 16px;color:#3a2330;font-size:16px;line-height:1.65">
+        Your <strong style="color:#ff4e8a">${t.name}</strong> is on its way. We'll send another note when it ships, and again when it's time to upload your results.
+      </p>
+      <p style="margin:0 0 16px;color:#5a3a48;font-size:15px;line-height:1.6">
+        While you wait, keep logging in EndoMe — the more your story builds, the more useful your results will be alongside it.
+      </p>`,
+    ctaText: "Track in your story",
+    ctaUrl:  `${siteUrl}/story`,
+  });
+  const text =
+    `${t.name} ordered\n\n` +
+    `Your ${t.name} is on its way. We'll send another note when it ships, and again when it's time to upload your results.\n\n` +
+    `${siteUrl}/story\n`;
+  await mandrillSend(env, {
+    to: [{ email, type: "to" }],
+    subject: `${t.name} ordered ${t.icon}`,
+    from_email: env.NEWSLETTER_FROM_EMAIL || FROM_EMAIL_DEFAULT,
+    from_name:  env.NEWSLETTER_FROM_NAME || "EndoMe",
+    headers: { "Reply-To": env.NOTIFY_EMAIL || FROM_EMAIL_DEFAULT },
+    html, text,
+  });
 }
 
 // Idempotent — first call sets the row, subsequent calls are no-ops.

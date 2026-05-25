@@ -30,6 +30,10 @@ STRIPE_DNA_PRICE_ID = "price_replace_me"
 #
 #   STRIPE_SECRET_KEY      sk_live_...   (or sk_test_... in preview)
 #   STRIPE_WEBHOOK_SECRET  whsec_...     (Stripe -> Webhooks)
+#   STRIPE_PRICE_DNA       price_...     (Stripe Price ID for EndoMe DNA)
+#   STRIPE_PRICE_BLOODS    price_...     (Stripe Price ID for EndoMe Bloods)
+#   STRIPE_PRICE_MAP       price_...     (Stripe Price ID for EndoMe Map)
+#
 #   MANDRILL_API_KEY       md-...        (Mailchimp Transactional)
 #
 #   AUTH_USERNAME          dashboard login username

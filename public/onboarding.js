@@ -74,13 +74,31 @@
     }
   });
 
-  // --- "Order EndoMap" — no-op for now ------------------------------------
+  // --- "Order EndoMe DNA" -> Stripe Checkout ------------------------------
   const buy = $("buy-endomap");
   if (buy) {
-    buy.addEventListener("click", (e) => {
+    buy.addEventListener("click", async (e) => {
       e.preventDefault();
-      toast("EndoMe DNA is launching soon — we'll email you when it's ready 🌸");
-      setTimeout(() => (location.href = "/dashboard"), 1800);
+      buy.disabled = true;
+      const original = buy.textContent;
+      buy.textContent = "Opening Stripe…";
+      try {
+        const res = await fetch("/api/me/checkout/dna", {
+          method: "POST",
+          credentials: "same-origin",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.url) {
+          location.href = data.url;
+          return;
+        }
+        toast(data.error || "Couldn't start checkout right now.");
+      } catch {
+        toast("Network error. Try again.");
+      } finally {
+        buy.disabled = false;
+        buy.textContent = original;
+      }
     });
   }
 
