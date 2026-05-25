@@ -473,7 +473,23 @@
             <button type="button" data-val="painful_sex">💔 Painful sex</button>
             <button type="button" data-val="mood">💭 Mood swing</button>
             <button type="button" data-val="sleep">🌙 Sleep issue</button>
+            <button type="button" data-val="appetite">🍽 Appetite</button>
             <button type="button" data-val="other">＋ Other</button>
+          </div>
+        </div>
+
+        <div class="modal-section" id="pain-type-section" data-show-when="pain pelvic_pain back_pain cramps headache endo_belly breast_tender painful_urination painful_bowel painful_sex" hidden>
+          <h4 class="section-title">Pain feels like <span class="sec-hint">(optional)</span></h4>
+          <div class="chip-pick wrap" data-chip="painType">
+            <button type="button" data-val="sharp">🗡 Sharp</button>
+            <button type="button" data-val="dull">🌫 Dull</button>
+            <button type="button" data-val="burning">🔥 Burning</button>
+            <button type="button" data-val="aching">💢 Aching</button>
+            <button type="button" data-val="throbbing">💓 Throbbing</button>
+            <button type="button" data-val="cramping">⚡ Cramping</button>
+            <button type="button" data-val="stabbing">🩻 Stabbing</button>
+            <button type="button" data-val="shooting">⚡ Shooting</button>
+            <button type="button" data-val="pressure">🧊 Pressure</button>
           </div>
         </div>
 
@@ -616,6 +632,31 @@
                 <button type="button" data-val="normal">Normal</button>
                 <button type="button" data-val="loose">Loose</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <h4 class="section-title">How was your body today?</h4>
+          <div class="seg-field">
+            <label>Anything you noticed <em>(pick any)</em></label>
+            <div class="chip-pick wrap multi" data-multi="eveningSymptoms">
+              <button type="button" data-val="bloating">💧 Bloating</button>
+              <button type="button" data-val="ovulation_pain">⚡ Ovulation pain</button>
+              <button type="button" data-val="nausea">🤢 Nausea</button>
+              <button type="button" data-val="fatigue">😴 Fatigue</button>
+              <button type="button" data-val="headaches">🧠 Headaches</button>
+              <button type="button" data-val="dizziness">💫 Dizziness</button>
+              <button type="button" data-val="pms">🌸 PMS</button>
+              <button type="button" data-val="skin_breakout">🪞 Skin breakout</button>
+            </div>
+          </div>
+          <div class="seg-field">
+            <label>Appetite</label>
+            <div class="chip-pick wrap" data-chip="appetite">
+              <button type="button" data-val="low">🥄 Low</button>
+              <button type="button" data-val="normal">🍽 Normal</button>
+              <button type="button" data-val="high">🍕 Increased</button>
             </div>
           </div>
         </div>

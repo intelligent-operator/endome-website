@@ -96,7 +96,7 @@
     stage.innerHTML = `
       <div class="egg-scene">
         <div class="egg-shadow"></div>
-        <div class="egg" id="egg" tabindex="0" role="button" aria-label="Hatch your EndoPet">
+        <div class="egg" id="egg" tabindex="0" role="button" aria-label="Tap or double-click to hatch your EndoPet">
           <svg viewBox="0 0 120 140" width="160" height="180" aria-hidden="true">
             <ellipse cx="60" cy="120" rx="42" ry="6" fill="#ffd6e0" opacity=".5"/>
             <defs>
@@ -113,37 +113,44 @@
             <circle cx="68" cy="100" r="2.5" fill="#ff5d8f" opacity=".35"/>
           </svg>
         </div>
-        <p class="egg-hint">Double-click your egg to meet your EndoPet 🌸</p>
+        <p class="egg-hint">Tap the egg twice (or use the button) to meet your EndoPet 🌸</p>
+        <button class="egg-hatch-btn" id="egg-hatch-btn" type="button">Hatch my EndoPet ✨</button>
       </div>`;
     const egg = document.getElementById("egg");
-    egg.addEventListener("dblclick", hatch);
-    // Touch devices: also accept two taps within 400ms
+    const btn = document.getElementById("egg-hatch-btn");
+
     let lastTap = 0;
-    egg.addEventListener("touchend", (e) => {
+    const tryHatchOnDouble = () => {
       const now = Date.now();
-      if (now - lastTap < 400) hatch();
-      lastTap = now;
-    });
+      if (now - lastTap < 450) { hatch(); lastTap = 0; }
+      else { lastTap = now; }
+    };
+
+    egg.addEventListener("dblclick", hatch);
     egg.addEventListener("click", () => {
-      // Single click → wobble harder; encourages the double click.
       egg.classList.remove("nudge");
       void egg.offsetWidth;
       egg.classList.add("nudge");
+      tryHatchOnDouble();
     });
+    btn.addEventListener("click", hatch);
   }
 
   async function hatch() {
     const egg = document.getElementById("egg");
-    if (!egg || egg.classList.contains("cracking")) return;
-    egg.classList.add("cracking");
-    toast("Welcome to the world, little one ✨");
+    const btn = document.getElementById("egg-hatch-btn");
+    if (btn?.disabled) return;
+    if (btn) btn.disabled = true;
+    if (egg) egg.classList.add("cracking");
     try {
       const data = await fetchJson("/api/me/pet/hatch", { method: "POST" });
       pet = data.pet;
+      toast("Welcome to the world, little one ✨");
       setTimeout(() => render(), 900);
     } catch (err) {
-      toast("Couldn't hatch right now. Try again.", "err");
-      egg.classList.remove("cracking");
+      toast(err.message || "Couldn't hatch right now.", "err");
+      if (egg) egg.classList.remove("cracking");
+      if (btn) btn.disabled = false;
     }
   }
 

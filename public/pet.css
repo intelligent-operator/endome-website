@@ -90,6 +90,17 @@
   border-radius:999px;color:#5a3a48;font-size:13px;font-weight:600;
   position:relative;z-index:2;
 }
+.egg-hatch-btn{
+  position:relative;z-index:2;
+  padding:12px 26px;
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  border:none;border-radius:999px;cursor:pointer;
+  font-family:inherit;font-size:14px;font-weight:700;letter-spacing:.02em;
+  box-shadow:0 8px 20px rgba(255,77,138,.35);
+  transition:transform .12s, box-shadow .12s, opacity .15s;
+}
+.egg-hatch-btn:hover{transform:translateY(-2px);box-shadow:0 12px 26px rgba(255,77,138,.45)}
+.egg-hatch-btn:disabled{opacity:.7;cursor:wait;transform:none}
 
 /* ---------- Hatched pet scene ---------- */
 .pet-scene{position:absolute;inset:0}

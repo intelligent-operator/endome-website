@@ -182,6 +182,7 @@ const SYMPTOM_META = {
   painful_sex:       { icon: "💔", label: "Painful sex" },
   mood:              { icon: "💭", label: "Mood swing" },
   sleep:             { icon: "🌙", label: "Sleep issue" },
+  appetite:          { icon: "🍽", label: "Appetite" },
   other:             { icon: "＋", label: "Other" },
 };
 function relTime(unixSec) {
@@ -209,6 +210,7 @@ function renderTodaySymptoms() {
   list.innerHTML = `<ul class="sym-list">` + items.map((s) => {
     const meta = SYMPTOM_META[s.symptom] || { icon: "•", label: s.symptom };
     const tags = [];
+    if (s.pain_type) tags.push(`🩸 ${s.pain_type}`);
     if (s.location) tags.push(`📍 ${s.location}`);
     if (s.triggers) tags.push(...String(s.triggers).split(",").map((t) => `· ${t}`));
     return `<li class="sym-row">
@@ -431,7 +433,7 @@ function onPickerChange(btn) {
 
   // Show location row only for pain-type symptoms
   if (key === "symptom") {
-    document.querySelectorAll("#symptom-extras [data-show-when]").forEach((el) => {
+    document.querySelectorAll("[data-show-when]").forEach((el) => {
       const triggers = el.dataset.showWhen.split(/\s+/);
       el.hidden = !triggers.includes(value);
     });
@@ -513,6 +515,7 @@ submitForm(
     return {
       symptom, severity,
       location: pickerVal(form, "location", "chip"),
+      painType: pickerVal(form, "painType", "chip"),
       triggers: multiVals(form, "triggers"),
       relief: multiVals(form, "relief"),
       notes: form.notes.value || null,
@@ -534,6 +537,8 @@ submitForm(
       movementLevel: pickerVal(form, "movementLevel", "chip"),
       bowelCount: form.bowelCount.value || null,
       bowelType: pickerVal(form, "bowelType", "chip"),
+      eveningSymptoms: multiVals(form, "eveningSymptoms"),
+      appetite: pickerVal(form, "appetite", "chip"),
       intimacy: pickerVal(form, "intimacy", "chip"),
       medications: form.medications.value || null,
       reflection: form.reflection.value || null,

@@ -985,6 +985,8 @@ const ALLOWED_SYMPTOMS = new Set([
   "pelvic_pain", "back_pain", "breast_tender", "hot_flash",
   "painful_urination", "painful_bowel", "painful_sex",
   "spotting", "endo_belly", "dizziness",
+  // appetite
+  "appetite",
 ]);
 const ALLOWED_PHASES   = new Set(["menstrual", "follicular", "ovulation", "luteal"]);
 const ALLOWED_FLOW     = new Set(["none", "spotting", "light", "medium", "heavy"]);
@@ -994,6 +996,19 @@ const ALLOWED_BOWEL    = new Set(["constipated", "normal", "loose"]);
 const ALLOWED_INTIMACY = new Set(["none", "comfortable", "uncomfortable"]);
 const ALLOWED_TRIGGERS = new Set(["food","stress","exercise","intimacy","cold","hormones","travel","sleep","unknown"]);
 const ALLOWED_RELIEF   = new Set(["heat","rest","medication","hydration","movement","massage","bath","sleep","none"]);
+const ALLOWED_EVENING_SYMPTOMS = new Set([
+  "bloating", "ovulation_pain", "nausea", "fatigue", "headaches",
+  "dizziness", "pms", "skin_breakout",
+]);
+const ALLOWED_APPETITE = new Set(["low", "normal", "high"]);
+const ALLOWED_PAIN_TYPES = new Set([
+  "sharp", "dull", "burning", "aching", "throbbing", "cramping", "stabbing", "shooting", "pressure",
+]);
+// Pain-type field only makes sense for these symptom ids.
+const PAIN_SYMPTOMS = new Set([
+  "pain", "pelvic_pain", "back_pain", "cramps", "headache", "endo_belly", "breast_tender",
+  "painful_urination", "painful_bowel", "painful_sex",
+]);
 
 async function getOrCreateUser(env, username) {
   // Look up by username; create with deterministic id on first hit.
@@ -1026,7 +1041,7 @@ async function getMeToday(request, env, user) {
     env.DB.prepare("SELECT * FROM daily_logs WHERE user_id = ? AND log_date = ?")
       .bind(user.id, date).first(),
     env.DB.prepare(
-      "SELECT id, log_date, logged_at, symptom, severity, location, notes, points " +
+      "SELECT id, log_date, logged_at, symptom, severity, location, notes, pain_type, triggers, relief, points " +
       "FROM symptoms WHERE user_id = ? AND log_date = ? ORDER BY logged_at DESC"
     ).bind(user.id, date).all(),
     env.DB.prepare("SELECT * FROM pets WHERE user_id = ?").bind(user.id).first(),
@@ -1074,6 +1089,8 @@ async function getMeToday(request, env, user) {
       stressLevel: daily.stress_level,
       intimacy: daily.intimacy,
       medications: daily.medications,
+      eveningSymptoms: daily.evening_symptoms ? String(daily.evening_symptoms).split(",").filter(Boolean) : [],
+      appetite: daily.appetite,
       loggedAt: daily.evening_logged_at,
     } : null,
     cycle: daily ? {
@@ -1186,6 +1203,8 @@ async function postEveningCheckin(request, env, user) {
   const stress    = clampInt(body.stressLevel, 1, 5);
   const intimacy  = oneOf(body.intimacy, ALLOWED_INTIMACY);
   const meds      = sanitizeText(body.medications, 500);
+  const evenSyms  = tagList(body.eveningSymptoms, ALLOWED_EVENING_SYMPTOMS);
+  const appetite  = oneOf(body.appetite, ALLOWED_APPETITE);
 
   const date = normaliseDate(body.date);
   const now = nowSec();
@@ -1207,8 +1226,9 @@ async function postEveningCheckin(request, env, user) {
        user_id, log_date,
        evening_overall, evening_reflection, evening_gratitude, evening_logged_at,
        water_glasses, movement_level, bowel_count, bowel_type, stress_level, intimacy, medications,
+       evening_symptoms, appetite,
        points_total)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
      ON CONFLICT(user_id, log_date) DO UPDATE SET
        evening_overall    = excluded.evening_overall,
        evening_reflection = excluded.evening_reflection,
@@ -1221,11 +1241,14 @@ async function postEveningCheckin(request, env, user) {
        stress_level       = COALESCE(excluded.stress_level,   daily_logs.stress_level),
        intimacy           = COALESCE(excluded.intimacy,       daily_logs.intimacy),
        medications        = COALESCE(excluded.medications,    daily_logs.medications),
-       points_total       = daily_logs.points_total + ?14`
+       evening_symptoms   = COALESCE(excluded.evening_symptoms, daily_logs.evening_symptoms),
+       appetite           = COALESCE(excluded.appetite,         daily_logs.appetite),
+       points_total       = daily_logs.points_total + ?16`
   ).bind(
     user.id, date,
     overall, reflection, gratitude, now,
     water, movement, bowelCnt, bowelTyp, stress, intimacy, meds,
+    evenSyms, appetite,
     pointsAwarded
   ).run();
 
@@ -1246,15 +1269,17 @@ async function postSymptom(request, env, user) {
   const notes    = sanitizeText(body.notes, 500);
   const triggers = tagList(body.triggers, ALLOWED_TRIGGERS);
   const relief   = tagList(body.relief, ALLOWED_RELIEF);
+  // pain_type only persisted for pain-style symptoms; ignored otherwise.
+  const painType = PAIN_SYMPTOMS.has(symptom) ? oneOf(body.painType, ALLOWED_PAIN_TYPES) : null;
   const date = normaliseDate(body.date);
   const now = nowSec();
   const points = POINTS_SYMPTOM;
 
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO symptoms (user_id, log_date, logged_at, symptom, severity, location, notes, triggers, relief, points) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(user.id, date, now, symptom, severity, location, notes, triggers, relief, points),
+      "INSERT INTO symptoms (user_id, log_date, logged_at, symptom, severity, location, notes, triggers, relief, pain_type, points) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(user.id, date, now, symptom, severity, location, notes, triggers, relief, painType, points),
     env.DB.prepare(
       `INSERT INTO daily_logs (user_id, log_date, points_total)
        VALUES (?, ?, ?)
@@ -1341,11 +1366,18 @@ async function getMePet(env, user) {
 
 async function postPetHatch(env, user) {
   const now = nowSec();
-  await env.DB.prepare(
-    "UPDATE pets SET hatched_at = COALESCE(hatched_at, ?), updated_at = ?, " +
-    "last_fed_at = COALESCE(last_fed_at, ?), last_played_at = COALESCE(last_played_at, ?) " +
-    "WHERE user_id = ?"
-  ).bind(now, now, now, now, user.id).run();
+  try {
+    await env.DB.prepare(
+      "UPDATE pets SET hatched_at = COALESCE(hatched_at, ?), updated_at = ?, " +
+      "last_fed_at = COALESCE(last_fed_at, ?), last_played_at = COALESCE(last_played_at, ?) " +
+      "WHERE user_id = ?"
+    ).bind(now, now, now, now, user.id).run();
+  } catch (err) {
+    console.error("postPetHatch failed:", err?.message || err);
+    return json({
+      error: "Your pet's home isn't set up yet — migration 0007 needs to be applied to the database.",
+    }, 503);
+  }
   return getMePet(env, user);
 }
 
@@ -1632,7 +1664,20 @@ async function checkStory(request, env, user) {
   if (step.type !== "manual") {
     return json({ error: "This step is completed automatically — no need to tick it." }, 400);
   }
-  await markStoryStep(env, user.id, stepId, "manual");
+  // Use the strict version so the user sees a clear error if storage is broken
+  // (instead of the silent best-effort behaviour used for auto-marking).
+  try {
+    await env.DB.prepare(
+      "INSERT INTO story_progress (user_id, step_id, completed_at, completed_by) " +
+      "VALUES (?, ?, ?, 'manual') " +
+      "ON CONFLICT(user_id, step_id) DO NOTHING"
+    ).bind(user.id, stepId, nowSec()).run();
+  } catch (err) {
+    console.error("checkStory insert failed:", err?.message || err);
+    return json({
+      error: "Couldn't save — your story table may need setup. Ask your admin to run migration 0004.",
+    }, 500);
+  }
   return getStory(env, user);
 }
 
