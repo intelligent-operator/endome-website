@@ -605,22 +605,48 @@ function prettyDate(iso) {
 }
 
 // --- Medication log modal (opens from "+ Log medication" sidebar button) --
+// Always renders an "add a new one" search at the top, even when the user
+// already has saved meds. Below that, the saved list with one-tap dose
+// logging. No need to ever leave the dashboard.
+let _medLogCache = [];
 async function renderMedLogModal() {
   const body = document.getElementById("med-log-body");
   if (!body) return;
-  body.innerHTML = `<p class="empty-state">Loading your medications…</p>`;
+  body.innerHTML = `
+    <div class="med-add-inline">
+      <label class="field">
+        <span>Add &amp; log a new one</span>
+        <input type="search" id="med-quick-search" placeholder="Start typing — Ibuprofen, Magnesium, Vitamin D, NAC…" autocomplete="off" />
+      </label>
+      <ul class="med-autocomplete" id="med-quick-ac" hidden></ul>
+      <div id="med-quick-detail" hidden></div>
+    </div>
+    <div id="med-quick-saved">
+      <div class="med-quick-head">Your saved medications</div>
+      <ul class="med-quicklog-list" id="med-quicklog-list">
+        <li class="empty-state small">Loading…</li>
+      </ul>
+    </div>`;
+  wireQuickSearch();
+  await refreshMedQuickList();
+}
+
+async function refreshMedQuickList() {
+  const ul = document.getElementById("med-quicklog-list");
+  if (!ul) return;
   try {
     const data = await fetch("/api/me/medications", { credentials: "same-origin" }).then((r) => r.json());
-    const meds = data.medications || [];
-    if (!meds.length) {
-      body.innerHTML = `<p class="empty-state">No medications saved yet. <a href="/meds">Add your first medication →</a></p>`;
+    _medLogCache = data.medications || [];
+    if (!_medLogCache.length) {
+      ul.innerHTML = `<li class="empty-state small">Nothing saved yet — add your first medication above.</li>`;
       return;
     }
-    body.innerHTML = `<ul class="med-quicklog-list">${meds.map(medQuickRow).join("")}</ul>`;
+    ul.innerHTML = _medLogCache.map(medQuickRow).join("");
   } catch {
-    body.innerHTML = `<p class="empty-state">Couldn't load medications.</p>`;
+    ul.innerHTML = `<li class="empty-state small">Couldn't load medications.</li>`;
   }
 }
+
 function medQuickRow(m) {
   const okNow = !m.nextAllowedAt || (Date.now() / 1000) >= m.nextAllowedAt;
   const next  = m.nextAllowedAt
@@ -633,6 +659,144 @@ function medQuickRow(m) {
     </div>
     <button class="btn btn-primary small" data-quick-log="${m.id}" ${okNow ? "" : "disabled"}>Log dose</button>
   </li>`;
+}
+
+// --- Inline "add new" search inside the medLog modal ---------------------
+function wireQuickSearch() {
+  const input  = document.getElementById("med-quick-search");
+  const ac     = document.getElementById("med-quick-ac");
+  const detail = document.getElementById("med-quick-detail");
+  if (!input || !ac || !detail) return;
+  const CATALOG = Array.isArray(window.MED_CATALOG) ? window.MED_CATALOG : [];
+
+  let hover = -1;
+  let picked = null; // either a catalog entry or { name } for custom
+
+  function paint(query) {
+    const q = (query || "").trim().toLowerCase();
+    let items;
+    if (!q) {
+      items = CATALOG.filter((c) => ["Ibuprofen","Paracetamol","Magnesium","Vitamin D","Omega-3","NAC (N-Acetyl Cysteine)","PEA (Palmitoylethanolamide)","Dienogest"].includes(c.name));
+    } else {
+      items = CATALOG.filter((c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.aliases || []).some((a) => a.toLowerCase().includes(q)) ||
+        (c.category || "").toLowerCase().includes(q));
+    }
+    items = items.slice(0, 8);
+    // Always offer the "use this as a custom name" row when there's a query
+    // that doesn't match any catalog name exactly.
+    const exactMatch = q && items.some((c) => c.name.toLowerCase() === q);
+    let html = items.map((m) => `<li data-name="${escapeHtml(m.name)}">
+      <span class="ac-name">${escapeHtml(m.name)}</span>
+      <span class="ac-meta">${escapeHtml(m.category || "")} · ${escapeHtml(m.kind)}</span>
+    </li>`).join("");
+    if (q && !exactMatch) {
+      html += `<li data-custom="${escapeHtml(query.trim())}">
+        <span class="ac-name">Use "${escapeHtml(query.trim())}" as a custom medication</span>
+        <span class="ac-meta">+ add to my list</span>
+      </li>`;
+    }
+    if (!html) { ac.hidden = true; return; }
+    ac.innerHTML = html;
+    hover = -1;
+    ac.querySelectorAll("li").forEach((li) => {
+      li.addEventListener("click", () => pick(li));
+    });
+    ac.hidden = false;
+  }
+  function pick(li) {
+    if (li.dataset.name) {
+      picked = CATALOG.find((c) => c.name === li.dataset.name) || null;
+    } else if (li.dataset.custom) {
+      picked = { name: li.dataset.custom, kind: "medication" };
+    }
+    if (!picked) return;
+    input.value = picked.name;
+    ac.hidden = true;
+    showDetail(picked);
+  }
+  function showDetail(entry) {
+    detail.hidden = false;
+    detail.innerHTML = `
+      <div class="med-detail-card">
+        <div class="med-detail-top">
+          <strong>${escapeHtml(entry.name)}</strong>
+          <span class="med-detail-meta">${escapeHtml(entry.category || "Custom")} · ${escapeHtml(entry.kind || "medication")}</span>
+        </div>
+        ${entry.summary ? `<p class="med-detail-summary">${escapeHtml(entry.summary)}</p>` : ""}
+        <div class="med-detail-fields">
+          <label class="field"><span>Dose</span>
+            <input type="text" id="med-q-dose" maxlength="40" value="${escapeHtml(entry.defaultDose || "")}" placeholder="e.g. 400mg" />
+          </label>
+          <label class="field"><span>Min hours between doses <em>(optional)</em></span>
+            <input type="number" id="med-q-cooldown" min="0" max="168" step="0.5" value="${entry.minHoursBetween != null ? entry.minHoursBetween : ""}" placeholder="e.g. 6" />
+          </label>
+        </div>
+        <div class="med-detail-actions">
+          <button class="btn btn-primary" id="med-q-save">Save &amp; log this dose</button>
+          <button class="btn-soft" id="med-q-save-only">Just add to my list</button>
+        </div>
+        <p class="form-status" id="med-q-status" role="status"></p>
+      </div>`;
+    document.getElementById("med-q-save").addEventListener("click", () => saveAndLog(entry, true));
+    document.getElementById("med-q-save-only").addEventListener("click", () => saveAndLog(entry, false));
+  }
+  async function saveAndLog(entry, alsoLog) {
+    const dose = document.getElementById("med-q-dose").value.trim();
+    const cooldown = document.getElementById("med-q-cooldown").value.trim();
+    const status = document.getElementById("med-q-status");
+    status.textContent = "Saving…"; status.className = "form-status";
+    try {
+      // 1. Create the medication
+      const res = await fetch("/api/me/medications", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: entry.name,
+          kind: entry.kind || "medication",
+          dose: dose || null,
+          frequency: entry.defaultFreq || "as_needed",
+          minHoursBetween: cooldown || null,
+        }),
+      }).then((r) => r.json());
+      if (res.error) throw new Error(res.error);
+      // 2. Optionally log a dose right now
+      if (alsoLog && res.id) {
+        const logRes = await fetch(`/api/me/medications/${res.id}/log`, {
+          method: "POST", credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ doseText: dose || null }),
+        }).then((r) => r.json());
+        if (logRes.error) throw new Error(logRes.error);
+      }
+      toast(alsoLog ? `Added ${entry.name} & logged a dose ✨` : `Added ${entry.name}`, "ok");
+      // Reset and refresh the saved list inside the modal
+      input.value = "";
+      detail.hidden = true;
+      detail.innerHTML = "";
+      picked = null;
+      await refreshMedQuickList();
+    } catch (err) {
+      status.textContent = err.message || "Couldn't save.";
+      status.className = "form-status err";
+    }
+  }
+
+  input.addEventListener("input", () => paint(input.value));
+  input.addEventListener("focus", () => paint(input.value));
+  input.addEventListener("keydown", (e) => {
+    if (ac.hidden) return;
+    const items = ac.querySelectorAll("li");
+    if (e.key === "ArrowDown") { e.preventDefault(); hover = Math.min(items.length - 1, hover + 1); items.forEach((it, i) => it.classList.toggle("is-hover", i === hover)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); hover = Math.max(0, hover - 1); items.forEach((it, i) => it.classList.toggle("is-hover", i === hover)); }
+    else if (e.key === "Enter" && hover >= 0) { e.preventDefault(); items[hover]?.click(); }
+    else if (e.key === "Escape") { ac.hidden = true; }
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".med-add-inline")) ac.hidden = true;
+  });
 }
 
 function renderSymptomsTodayHint(count) {

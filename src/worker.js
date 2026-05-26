@@ -199,6 +199,12 @@ export default {
           if (url.pathname === "/api/me/profile" && request.method === "PUT") {
             return jsonHeaders(await putMyProfile(request, env, user));
           }
+          if (url.pathname === "/api/me/password" && request.method === "POST") {
+            return jsonHeaders(await postChangePassword(request, env, user));
+          }
+          if (url.pathname === "/api/me/account" && request.method === "DELETE") {
+            return jsonHeaders(await deleteMyAccount(request, env, user));
+          }
           if (url.pathname === "/api/me/friends" && request.method === "GET") {
             return jsonHeaders(await getMyFriends(env, user));
           }
@@ -302,7 +308,8 @@ export default {
       url.pathname === "/profile"     || url.pathname.startsWith("/profile/") ||
       url.pathname === "/u"           || url.pathname.startsWith("/u/") ||
       url.pathname === "/meds"        || url.pathname.startsWith("/meds/") ||
-      url.pathname === "/documents"   || url.pathname.startsWith("/documents/")
+      url.pathname === "/documents"   || url.pathname.startsWith("/documents/") ||
+      url.pathname === "/security"    || url.pathname.startsWith("/security/")
     ) {
       const session = await readSession(request, env);
       if (!session) {
@@ -3916,6 +3923,90 @@ function profileResponse(row, extras = {}) {
 }
 
 // --- GET /api/me/profile -------------------------------------------------
+// --- POST /api/me/password — change your own password ------------------
+async function postChangePassword(request, env, user) {
+  if (!env.SESSION_SECRET) return json({ error: "Authentication not configured" }, 503);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const current = typeof body.currentPassword === "string" ? body.currentPassword : "";
+  const next    = typeof body.newPassword === "string" ? body.newPassword : "";
+
+  if (!current || !next) return json({ error: "Both current and new passwords are required." }, 400);
+  if (next.length < 10) return json({ error: "New password must be at least 10 characters." }, 400);
+  if (next.length > MAX_PASSWORD_LEN) return json({ error: "New password is too long." }, 400);
+  if (next === current) return json({ error: "Choose a new password different from the current one." }, 400);
+
+  // Only DB-backed accounts can change their password — env-var admin
+  // logins are managed via wrangler secrets, not this endpoint.
+  const row = await env.DB.prepare(
+    "SELECT id, password_hash, password_salt FROM users WHERE id = ?"
+  ).bind(user.id).first().catch(() => null);
+  if (!row?.password_hash || !row?.password_salt) {
+    return json({
+      error: "This account doesn't support password change here. Admin logins are managed via Cloudflare secrets.",
+    }, 400);
+  }
+
+  const ok = await verifyPassword(current, row.password_hash, row.password_salt);
+  if (!ok) {
+    await sleep(LOGIN_FAIL_DELAY_MS);
+    return json({ error: "Current password is incorrect." }, 401);
+  }
+
+  // Re-hash with a fresh salt — keeps the hash impossible to predict
+  // even if an old salt ever leaks.
+  const { hash, salt } = await hashPassword(next);
+  await env.DB.prepare(
+    "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?"
+  ).bind(hash, salt, user.id).run();
+
+  // Invalidate every existing OTP challenge tied to this user so a stale
+  // one can't be used to mint a session after a password change.
+  try {
+    await env.DB.prepare(
+      "UPDATE login_otp SET used_at = COALESCE(used_at, ?) WHERE user_id = ?"
+    ).bind(nowSec(), user.id).run();
+  } catch { /* table may not exist on a very fresh install */ }
+
+  return json({ ok: true });
+}
+
+// --- DELETE /api/me/account — irreversible account wipe -----------------
+async function deleteMyAccount(request, env, user) {
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const confirm = typeof body.confirm === "string" ? body.confirm : "";
+  if (confirm !== "DELETE") {
+    return json({ error: 'Type "DELETE" exactly to confirm.' }, 400);
+  }
+
+  // For DB users, also verify their password first so a hijacked session
+  // can't nuke the account.
+  const row = await env.DB.prepare(
+    "SELECT id, password_hash, password_salt FROM users WHERE id = ?"
+  ).bind(user.id).first().catch(() => null);
+  if (row?.password_hash) {
+    const pw = typeof body.password === "string" ? body.password : "";
+    if (!pw) return json({ error: "Password required to delete this account." }, 400);
+    const ok = await verifyPassword(pw, row.password_hash, row.password_salt);
+    if (!ok) {
+      await sleep(LOGIN_FAIL_DELAY_MS);
+      return json({ error: "Password is incorrect." }, 401);
+    }
+  }
+
+  // All user-owned tables have ON DELETE CASCADE → one row removes
+  // everything. (Documents in R2 are left behind by design — clean those
+  // up via the documents page first, or via an admin job.)
+  try { await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id).run(); }
+  catch (err) { console.error("account delete failed:", err?.message); return json({ error: "Couldn't delete right now." }, 500); }
+
+  // Clear the session cookie on the way out.
+  const headers = new Headers(JSON_HEADERS);
+  headers.append("Set-Cookie", buildCookie(SESSION_COOKIE, "", request, 0));
+  return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+}
+
 async function getMyProfile(env, user) {
   await ensureProfileSchema(env);
   const row = await env.DB.prepare(
