@@ -1188,7 +1188,54 @@ const PAIN_SYMPTOMS = new Set([
   "painful_urination", "painful_bowel", "painful_sex",
 ]);
 
+// Aggregate runtime bootstrap. Each underlying ensure* function is already
+// idempotent + boot-cached, so calling this on every signed-in request is
+// effectively free after the first. Running here means a fresh deploy with
+// new tables/columns "just works" without anyone touching the D1 console.
+let _bootstrapDone = false;
+let _bootstrapPromise = null;
+async function bootstrapSchema(env) {
+  if (_bootstrapDone) return;
+  if (_bootstrapPromise) return _bootstrapPromise;
+  _bootstrapPromise = (async () => {
+    await Promise.all([
+      ensureCommunitySchema(env),
+      ensureProfileSchema(env),
+      ensureStoryTable(env),
+      ensureMedSchema(env),
+      ensureDocSchema(env),
+      ensurePetPoopColumn(env),
+    ]);
+    _bootstrapDone = true;
+  })();
+  return _bootstrapPromise;
+}
+
+// Force-run for admin debugging. Resets the cache so this isolate re-runs
+// the whole bootstrap and reports any failures.
+async function adminBootstrapSchema(env) {
+  _bootstrapDone = false;
+  _bootstrapPromise = null;
+  const results = [];
+  const run = async (name, fn) => {
+    try { await fn(env); results.push({ name, ok: true }); }
+    catch (err) { results.push({ name, ok: false, error: String(err?.message || err) }); }
+  };
+  await run("community",  ensureCommunitySchema);
+  await run("profile",    ensureProfileSchema);
+  await run("story",      ensureStoryTable);
+  await run("medications", ensureMedSchema);
+  await run("documents",  ensureDocSchema);
+  await run("pet_columns", ensurePetPoopColumn);
+  return json({ ok: true, results });
+}
+
 async function getOrCreateUser(env, username) {
+  // Schema gets bootstrapped on every cold isolate before we touch tables
+  // that might still be missing — saves us hand-running D1 console commands
+  // after each deploy. Cheap (no-ops once tables exist).
+  await bootstrapSchema(env);
+
   // Look up by username; create with deterministic id on first hit.
   let row = await env.DB
     .prepare("SELECT id, username, display_name, timezone FROM users WHERE username = ?")
@@ -4485,6 +4532,13 @@ async function handleAcp(request, env, url) {
 
   if (path === "/me" && request.method === "GET") {
     return json({ ok: true, admin: true });
+  }
+
+  // Force-run the schema bootstrap and report per-step results. Useful
+  // after pulling a release that adds new tables on a host you don't
+  // have CLI access to.
+  if (path === "/bootstrap" && request.method === "POST") {
+    return await adminBootstrapSchema(env);
   }
 
   if (path === "/users" && request.method === "GET") {

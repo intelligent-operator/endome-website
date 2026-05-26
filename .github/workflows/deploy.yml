@@ -1,9 +1,20 @@
-# Optional GitHub Actions deploy. The Cloudflare Workers GitHub integration
-# (configured in the CF dashboard) handles deploys automatically, so you only
-# need this workflow if you'd rather drive deploys from GitHub Actions.
+# Deploys EndoMe to Cloudflare Workers on every push to main.
+# Runs `wrangler d1 migrations apply` first so any new SQL ships
+# alongside the code that needs it — no more "open the D1 console
+# and paste a command" after each release.
 #
-# To enable: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repo secrets
-# and remove the `if: false` guard below.
+# Setup (one-time):
+#   1. Cloudflare dashboard → My Profile → API Tokens → Create Token.
+#      Use the "Edit Cloudflare Workers" template; add `D1: Edit`
+#      under Account permissions. Save the token.
+#   2. Cloudflare dashboard → Workers Overview → copy the Account ID
+#      from the right-hand sidebar.
+#   3. GitHub repo → Settings → Secrets and variables → Actions →
+#      "New repository secret":
+#        - CLOUDFLARE_API_TOKEN  (the token from step 1)
+#        - CLOUDFLARE_ACCOUNT_ID (the ID from step 2)
+#   4. Optional: disable Cloudflare's own GitHub integration in the
+#      Workers dashboard if you don't want two deploys per push.
 
 name: Deploy
 
@@ -13,16 +24,24 @@ on:
 
 jobs:
   deploy:
-    if: false
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - run: npm ci
-      - name: Deploy to Cloudflare Workers
+      - name: Apply D1 migrations
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply endome-db --remote
+      - name: Deploy worker + assets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
