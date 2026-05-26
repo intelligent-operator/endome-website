@@ -446,8 +446,13 @@ body.is-signed-in .nav-when-out{display:none !important}
   backdrop-filter:blur(6px);
 }
 .perk-ico{
-  width:32px;height:32px;border-radius:10px;
+  width:38px;height:38px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.65);
+}
+.perk-ico svg{
+  width:22px !important;height:22px !important;
+  display:block;
 }
 .perk strong{display:block;font-size:12px;font-weight:700;color:#2b1922;line-height:1.2}
 .perk span{display:block;font-size:11px;color:#7a5f6c;line-height:1.2}
@@ -803,36 +808,92 @@ body.modal-open{overflow:hidden}
 .dgraph-next{font-size:13px;color:#5a3a48;text-align:right;flex:1}
 .dgraph-next strong{color:#ff4e8a;font-weight:800}
 
+/* Zoom toggle in the header */
+.dgraph-zoom{display:inline-flex;background:#fff5f8;border-radius:999px;padding:3px;gap:2px;margin-left:auto}
+.dg-zoom-btn{
+  background:transparent;border:none;cursor:pointer;font-family:inherit;
+  font-size:11px;font-weight:700;color:#7a5f6c;padding:6px 12px;border-radius:999px;
+  transition:background .14s, color .14s;
+}
+.dg-zoom-btn:hover{color:#dc2626}
+.dg-zoom-btn.on{background:#fff;color:#dc2626;box-shadow:0 1px 4px rgba(220,38,38,.15)}
+
+/* SVG wrap holds the chart + the floating tooltip, both in the same offset parent. */
+.dgraph-svg-wrap{position:relative;margin-top:6px}
 .dgraph{
   display:block;width:100%;height:auto;
   font-family:Poppins,sans-serif;
 }
+/* Red dotted target line */
 .dg-target{
-  stroke:#ffd6e0;stroke-width:1.5;fill:none;stroke-dasharray:4 6;
+  stroke:#dc2626;stroke-width:2;fill:none;
+  stroke-dasharray:2 6;stroke-linecap:round;stroke-linejoin:round;
+  opacity:.85;
 }
-.dg-stroke{stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
-.dg-marker{cursor:pointer;transition:transform .15s;transform-origin:center}
-.dg-marker:hover,.dg-marker:focus{transform:scale(1.08);outline:none}
-.dg-marker.is-active circle{animation:dg-pulse 1.8s ease-in-out infinite}
-@keyframes dg-pulse{
-  0%,100%{filter:drop-shadow(0 0 0 rgba(255,77,138,.35))}
-  50%{filter:drop-shadow(0 0 10px rgba(255,77,138,.55))}
+/* Green raised line */
+.dg-raised{
+  stroke:#22c55e;stroke-width:3.5;fill:none;
+  stroke-linejoin:round;stroke-linecap:round;
+  filter:drop-shadow(0 2px 6px rgba(34,197,94,.25));
+  transition:d 0.6s ease;
 }
+.dg-area{transition:d 0.6s ease}
+/* Markers + hover halos */
+.dg-marker{cursor:pointer;outline:none}
+.dg-marker-hit{pointer-events:all}
+.dg-marker-circle{
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1), filter .18s;
+  transform-origin:center;transform-box:fill-box;
+}
+.dg-marker.is-hover .dg-marker-circle,
+.dg-marker:focus .dg-marker-circle{
+  transform:scale(1.18);
+  filter:drop-shadow(0 3px 10px rgba(220,38,38,.4));
+}
+.dg-marker.is-reached.is-hover .dg-marker-circle,
+.dg-marker.is-reached:focus .dg-marker-circle{
+  filter:drop-shadow(0 3px 10px rgba(34,197,94,.4));
+}
+.dg-marker-halo{
+  transform-origin:center;transform-box:fill-box;
+  animation:dg-halo 1.8s ease-in-out infinite;
+}
+@keyframes dg-halo{
+  0%,100%{transform:scale(1);opacity:.4}
+  50%{transform:scale(1.18);opacity:.05}
+}
+/* Cursor guideline + tracked dot */
+.dg-cursor{stroke:#dc2626;stroke-width:1.5;stroke-dasharray:3 4;opacity:.4;pointer-events:none}
+.dg-cursor-dot{fill:#22c55e;stroke:#fff;stroke-width:2;pointer-events:none}
 
+/* Tooltip — anchored above the marker, never inside the SVG event tree. */
 .dgraph-tooltip{
-  position:absolute;transform:translate(-50%,-100%);
-  background:#2b1922;color:#fff;border-radius:12px;padding:10px 14px;
+  position:absolute;transform:translate(-50%,-100%) translateY(-18px);
+  background:#1f1218;color:#fff;border-radius:12px;padding:10px 14px;
   max-width:280px;font-size:12px;line-height:1.5;
-  box-shadow:0 14px 36px rgba(0,0,0,.25);
+  box-shadow:0 14px 36px rgba(0,0,0,.32);
   z-index:10;pointer-events:none;
+  opacity:0;transition:opacity .12s ease, transform .12s ease;
+  white-space:normal;
 }
+.dgraph-tooltip:not([hidden]){opacity:1;transform:translate(-50%,-100%) translateY(-14px)}
 .dgraph-tooltip::after{
   content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);
-  border-style:solid;border-width:8px 7px 0 7px;border-color:#2b1922 transparent transparent transparent;
+  border-style:solid;border-width:8px 7px 0 7px;border-color:#1f1218 transparent transparent transparent;
 }
 .dgraph-tooltip strong{display:block;font-size:13px;font-weight:800;margin-bottom:3px}
 .dgraph-tooltip .tip-amount{display:block;font-size:11px;color:#ffb380;font-weight:700;margin-bottom:6px}
 .dgraph-tooltip p{margin:0;font-size:12px;opacity:.92}
+
+/* Legend strip */
+.dgraph-legend{
+  display:flex;justify-content:center;gap:18px;
+  margin:8px 0 4px;font-size:11px;color:#5a3a48;font-weight:600;
+}
+.dgl-item{display:inline-flex;align-items:center;gap:6px}
+.dgl-swatch{display:inline-block;width:18px;height:3px;border-radius:2px}
+.dgl-swatch.dgl-target{background:repeating-linear-gradient(90deg,#dc2626 0 3px,transparent 3px 7px)}
+.dgl-swatch.dgl-raised{background:#22c55e}
 
 /* Instant donate row */
 .instant-donate{
