@@ -516,10 +516,28 @@ function openModal(name) {
   modal.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  // Fresh slate every open for the symptom modal — last session's picks
+  // shouldn't haunt the next entry.
+  if (name === "symptom") resetMultiState(modal);
   prefillModal(name);
   if (name === "cycleWeek") renderCycleWeekModal();
   const firstInput = modal.querySelector("button[data-val], input, textarea");
   setTimeout(() => firstInput?.focus(), 80);
+}
+
+function resetMultiState(modal) {
+  for (const group of modal.querySelectorAll("[data-multi]")) {
+    group.dataset.value = "";
+    for (const b of group.children) {
+      if (b.tagName === "BUTTON") {
+        b.classList.remove("on");
+        b.setAttribute("aria-pressed", "false");
+      }
+    }
+    updateMultiCount(group);
+  }
+  // Also clear the hide-when sections so the form starts collapsed.
+  for (const el of modal.querySelectorAll("[data-show-when]")) el.hidden = true;
 }
 function closeAllModals() {
   document.querySelectorAll(".modal.open").forEach((m) => {
@@ -554,7 +572,25 @@ function toggleMulti(group, value) {
   const set = new Set((group.dataset.value || "").split(",").filter(Boolean));
   if (set.has(value)) set.delete(value); else set.add(value);
   group.dataset.value = [...set].join(",");
-  group.querySelectorAll("button").forEach((b) => b.classList.toggle("on", set.has(b.dataset.val)));
+  // Only flip the .on class on direct-child buttons of this group, so a nested
+  // group (if any) doesn't accidentally get its state nuked.
+  for (const b of group.children) {
+    if (b.tagName === "BUTTON") {
+      b.classList.toggle("on", set.has(b.dataset.val));
+      b.setAttribute("aria-pressed", set.has(b.dataset.val) ? "true" : "false");
+    }
+  }
+  updateMultiCount(group);
+}
+
+function updateMultiCount(group) {
+  const key = group.dataset.multi;
+  if (!key) return;
+  const count = (group.dataset.value || "").split(",").filter(Boolean).length;
+  document.querySelectorAll(`[data-multi-count-for="${key}"]`).forEach((el) => {
+    el.hidden = count === 0;
+    el.textContent = el.classList.contains("inline") ? `${count}` : `${count} selected`;
+  });
 }
 
 // --- Counters (+/-) -------------------------------------------------------
@@ -572,12 +608,24 @@ function bumpCounter(form, target, delta, opts = {}) {
 }
 
 document.addEventListener("click", (e) => {
+  // Multi-select chips come first: they're the most specific case and we
+  // never want a misfire to fall through to single-select behaviour.
+  const multiBtnDirect = e.target.closest("button");
+  if (multiBtnDirect && multiBtnDirect.parentElement?.hasAttribute("data-multi")) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMulti(multiBtnDirect.parentElement, multiBtnDirect.dataset.val);
+    onPickerChange(multiBtnDirect);
+    return;
+  }
   const scaleBtn = e.target.closest("[data-scale] button");
-  if (scaleBtn) { selectScale(scaleBtn.parentElement, scaleBtn.dataset.val); onPickerChange(scaleBtn); return; }
+  if (scaleBtn && scaleBtn.parentElement?.hasAttribute("data-scale")) {
+    selectScale(scaleBtn.parentElement, scaleBtn.dataset.val); onPickerChange(scaleBtn); return;
+  }
   const chipBtn = e.target.closest("[data-chip] button");
-  if (chipBtn) { selectChip(chipBtn.parentElement, chipBtn.dataset.val); onPickerChange(chipBtn); return; }
-  const multiBtn = e.target.closest("[data-multi] button");
-  if (multiBtn) { toggleMulti(multiBtn.parentElement, multiBtn.dataset.val); onPickerChange(multiBtn); return; }
+  if (chipBtn && chipBtn.parentElement?.hasAttribute("data-chip")) {
+    selectChip(chipBtn.parentElement, chipBtn.dataset.val); onPickerChange(chipBtn); return;
+  }
   const cDecr = e.target.closest("[data-counter-decr]");
   if (cDecr) {
     const form = cDecr.closest("form");

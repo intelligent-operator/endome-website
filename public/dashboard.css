@@ -652,12 +652,27 @@
 /* Chip variants */
 .chip-pick.wrap{display:flex;flex-wrap:wrap;gap:6px}
 .chip-pick.multi button{position:relative}
-.chip-pick.multi button.on::after{
-  content:"";position:absolute;top:-4px;right:-4px;
-  width:14px;height:14px;border-radius:50%;
-  background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12l4 4L19 6' stroke='%23ff4e8a' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/10px no-repeat;
-  box-shadow:0 2px 4px rgba(0,0,0,.15);
+.chip-pick.multi button.on{
+  /* Slight lift + ring so it's obvious the chip is selected and others still are too. */
+  transform:translateY(-1px);
+  box-shadow:0 4px 10px rgba(255,77,138,.28), 0 0 0 2px #ffd6e0;
 }
+.chip-pick.multi button.on::after{
+  content:"✓";position:absolute;top:-6px;right:-6px;
+  width:18px;height:18px;border-radius:50%;
+  background:#fff;color:#ff4e8a;font-size:11px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.18);
+}
+
+/* "n selected" badge next to multi group titles + labels. */
+.multi-count{
+  display:inline-block;background:#ff4e8a;color:#fff;
+  font-size:11px;font-weight:700;letter-spacing:.02em;
+  padding:2px 9px;border-radius:999px;margin-left:8px;
+  text-transform:none;
+}
+.multi-count.inline{padding:1px 8px;font-size:10px}
 
 /* Counter (+/-) */
 .counter-field > label{display:block;font-size:12px;font-weight:600;color:#5a3a48;margin-bottom:6px}
