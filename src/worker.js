@@ -4643,24 +4643,23 @@ const DONATION_MAX_CENTS = 50000000; // $500k ceiling per single donation
 const MAX_DONOR_NAME_LEN = 60;
 const MAX_DONOR_MSG_LEN  = 240;
 
-// The roadmap. Every milestone funds a concrete research action — no
-// awareness campaigns, no events. Targets are cumulative-builder steps:
-// we ship each one when the running total crosses the line.
+// The roadmap. Every step funds a concrete piece of cure-focused research.
+// Amounts mirror real-world costs in AU/UK academic research budgets:
+// scientist salaries (incl. on-costs), wet-lab assays, contract research,
+// and small investigator-led repurposed-drug pilots.
 const DONATION_MILESTONES = [
-  { key: "ai-engine",       targetCents:   1000000, emoji: "🤖", title: "AI Research Engine, online 24/7",
-    summary: "Stand up an always-on AI pipeline: ingests every new endometriosis paper, trial registration and consented patient log daily, and surfaces patterns no individual researcher has time to spot. The engine never sleeps." },
-  { key: "open-dashboard",  targetCents:   2500000, emoji: "📊", title: "Open Research Dashboard",
-    summary: "Make the engine's findings public. Researchers and clinicians can query it, every claim is cited to the source study, and the EndoMe community can see what's emerging in real time." },
-  { key: "part-time-sci",   targetCents:   5000000, emoji: "🧪", title: "Part-Time Research Scientist",
-    summary: "Hire a PhD-trained research scientist three days a week for a year. Their job: pair with the AI engine, turn its hypotheses into runnable experiments, and start replicating the most promising results." },
-  { key: "full-time-sci",   targetCents:  10000000, emoji: "🔬", title: "Full-Time Research Scientist",
-    summary: "Scale to a full-time research scientist with travel + lab partnership budget. One job description, one line: shorten diagnosis from 7 years and find treatments that actually work." },
-  { key: "imaging-ai",      targetCents:  25000000, emoji: "🩻", title: "Imaging AI Partnership",
-    summary: "Co-fund a study with a radiology department to train a model on consented MRI and ultrasound scans, learning to spot endo lesions earlier than the human eye. Open-weighted, reproducible." },
-  { key: "drug-repurpose",  targetCents:  50000000, emoji: "💊", title: "Drug Repurposing Screen",
-    summary: "Run a virtual + in-vitro screen of every FDA-approved drug against endo molecular targets identified by the engine. Top hits go straight into a wet-lab pilot — the fastest known path to a new treatment." },
-  { key: "clinical-study",  targetCents: 100000000, emoji: "🏥", title: "Multi-Site Clinical Validation",
-    summary: "Fund a community-recruited, multi-site observational study to validate the engine's highest-confidence findings in real patients. Results published open-access. This is the step that turns 'promising' into 'proven'." },
+  { key: "ai-engine",     targetCents:   1000000, emoji: "🤖", title: "AI Research Engine, online 24/7",
+    summary: "Stand up an always-on AI pipeline that ingests every new endometriosis paper, trial registration and consented patient log daily, looking for molecular pathways, drug targets, and overlap with diseases we already treat. Compute + tooling for six months." },
+  { key: "target-map",    targetCents:   3000000, emoji: "🎯", title: "Endo Drug-Target Map",
+    summary: "Use the engine to systematically map every known endometriosis molecular pathway and rank druggable targets by feasibility. The prioritised list is published open-access — the first public map of what to actually attack." },
+  { key: "scientist-yr",  targetCents:   7500000, emoji: "🧪", title: "Full-Year Research Scientist",
+    summary: "Fund a research scientist for one full year (salary + on-costs at AU/UK rates). Their only job: move the engine's hypotheses forward — pairing AI findings with literature, designing experiments, and securing lab partners." },
+  { key: "wet-lab",       targetCents:  20000000, emoji: "🔬", title: "Wet-Lab Validation",
+    summary: "Partner with an academic lab to test the top 10 drug-repurposing candidates against endometrial tissue samples in vitro. The first measurable answer to 'does this actually affect endo cells?'" },
+  { key: "preclinical",   targetCents:  50000000, emoji: "🧬", title: "Lead Optimisation + Animal Pilot",
+    summary: "Take the strongest one or two hits from the wet-lab into preclinical optimisation and a small animal study — the standard last step before any human trial." },
+  { key: "first-trial",   targetCents: 100000000, emoji: "🏥", title: "First-In-Patient Pilot Trial",
+    summary: "Multi-site, open-label investigator-led pilot trial (~30 patients) of the most promising repurposed candidate. Recruited transparently from the EndoMe community. Every protocol public, every result open-access. This is the gateway to a real treatment." },
 ];
 
 let _donationsSchemaChecked = false;
