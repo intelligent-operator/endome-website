@@ -546,18 +546,58 @@
   <!-- =========================== RESEARCH / DONATE =========================== -->
   <section class="research" id="research">
     <div class="research-inner">
-      <p class="research-eyebrow">Support endometriosis research</p>
+      <p class="research-eyebrow">Fund the research, not the awareness</p>
       <h2 class="section-title">From 7 years to <span class="brand">7 weeks</span>.</h2>
-      <p class="research-blurb">200 million people. The average diagnostic delay is seven years. We're crowdfunding a roadmap that ends with a full-time AI-powered researcher hunting for a cure. Six milestones, all real and measurable — every dollar moves the line.</p>
-      <ul class="research-mini-roadmap">
-        <li><span>📣</span> Awareness packs to 5,000 GPs &amp; clinics</li>
-        <li><span>🩺</span> Sponsor 50 first specialist consults</li>
-        <li><span>🗂</span> Open-source endo symptom dataset</li>
-        <li><span>🤖</span> AI diagnosis pilot study</li>
-        <li><span>🎓</span> Junior endo research fellowship</li>
-        <li><span>🔬</span> Full-time AI researcher chasing a cure</li>
-      </ul>
-      <a class="research-cta" href="/donate">💖 See the roadmap &amp; donate →</a>
+      <p class="research-blurb">Lots of non-profits run events and print pamphlets. We act. Six concrete milestones, public progress, real outcomes — every dollar moves the line.</p>
+
+      <!-- Interactive donation graph -->
+      <div class="dgraph-wrap" id="dgraph-wrap">
+        <div class="dgraph-stats">
+          <div>
+            <strong class="dgraph-raised" id="dgraph-raised">$0</strong>
+            <span class="dgraph-raised-label">raised so far</span>
+          </div>
+          <div class="dgraph-next" id="dgraph-next">Loading…</div>
+        </div>
+        <svg class="dgraph" id="dgraph" viewBox="0 0 800 280" preserveAspectRatio="none" aria-label="Donation progress toward each milestone">
+          <defs>
+            <linearGradient id="dg-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#ff4e8a" stop-opacity="0.35"/>
+              <stop offset="100%" stop-color="#ff4e8a" stop-opacity="0.02"/>
+            </linearGradient>
+            <linearGradient id="dg-line" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#ff4e8a"/>
+              <stop offset="100%" stop-color="#ff7aa6"/>
+            </linearGradient>
+          </defs>
+          <!-- Gridlines -->
+          <g class="dg-grid"></g>
+          <!-- Target curve (dashed, full roadmap) -->
+          <path class="dg-target" id="dg-target" />
+          <!-- Filled "raised" area -->
+          <path class="dg-area" id="dg-area" fill="url(#dg-fill)" />
+          <path class="dg-stroke" id="dg-stroke" stroke="url(#dg-line)" fill="none" />
+          <!-- Milestone markers (rendered by JS) -->
+          <g id="dg-markers"></g>
+        </svg>
+        <div class="dgraph-tooltip" id="dgraph-tooltip" hidden></div>
+      </div>
+
+      <!-- Instant donate (no login required) -->
+      <div class="instant-donate" id="instant-donate">
+        <p class="instant-donate-label">One-tap donate via Stripe</p>
+        <div class="instant-amounts" id="instant-amounts">
+          <button type="button" class="amt-chip" data-amount="500">$5</button>
+          <button type="button" class="amt-chip" data-amount="1000">$10</button>
+          <button type="button" class="amt-chip on" data-amount="2500">$25</button>
+          <button type="button" class="amt-chip" data-amount="5000">$50</button>
+          <button type="button" class="amt-chip" data-amount="10000">$100</button>
+          <input type="number" class="amt-custom" id="amt-custom" min="2" max="500000" step="1" placeholder="Custom $" />
+        </div>
+        <button class="instant-donate-go" id="instant-donate-go">Donate <span id="instant-amount-label">$25</span> →</button>
+        <p class="instant-donate-fine">Anyone can donate — no account needed. 100% goes to the roadmap (Stripe processing aside). <a href="/donate">See the full breakdown &amp; donor wall →</a></p>
+        <p class="form-status" id="instant-donate-status" role="status"></p>
+      </div>
     </div>
   </section>
 
@@ -684,5 +724,6 @@
   </footer>
 
   <script src="/app.js" defer></script>
+  <script src="/home-donate.js?v=1" defer></script>
 </body>
 </html>
