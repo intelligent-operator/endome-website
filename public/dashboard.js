@@ -533,23 +533,75 @@ async function renderSymptomsWeekModal() {
   }
   const max = Math.max(1, ...days.map((d) => d.symptomCount || 0));
   const total = days.reduce((s, d) => s + (d.symptomCount || 0), 0);
+  const todayISO = todayLocalDate();
   const bars = days.map((d) => {
     const n = d.symptomCount || 0;
     const h = (n / max) * 100;
     const dayLabel = ["S","M","T","W","T","F","S"][new Date(d.date + "T00:00:00").getDay()];
     const date = d.date.slice(5);
-    return `<div class="cw-bar-col">
+    const disabled = n === 0;
+    return `<button type="button" class="cw-bar-col cw-bar-btn ${d.date === todayISO ? "is-today" : ""}" data-day="${d.date}" aria-label="Open ${date} (${n} symptoms)"${disabled ? " aria-disabled='true'" : ""}>
       <div class="cw-bar-wrap"><div class="cw-bar" style="height:${h}%;background:linear-gradient(180deg,#ff4e8a,#ffb380)" title="${date}: ${n} symptom${n===1?"":"s"}"></div></div>
       <span class="cw-day">${dayLabel}</span>
       <span class="cw-count">${n}</span>
-    </div>`;
+    </button>`;
   }).join("");
   body.innerHTML = `
     <div class="cw-metric">
-      <div class="cw-metric-head"><strong>Symptom entries</strong> <span class="cw-meta">last 7 days</span></div>
-      <div class="cw-bars">${bars}</div>
+      <div class="cw-metric-head"><strong>Symptom entries</strong> <span class="cw-meta">tap a day to see the details</span></div>
+      <div class="cw-bars cw-bars-tappable">${bars}</div>
+    </div>
+    <div id="cw-day-detail" class="cw-day-detail">
+      <p class="empty-state small">Tap a day above to expand.</p>
     </div>
     <p class="cw-summary"><strong>${total}</strong> symptom${total === 1 ? "" : "s"} logged across the past week.</p>`;
+
+  // Bind day-bar clicks to load that day's full symptom list.
+  body.querySelectorAll("[data-day]").forEach((btn) => {
+    btn.addEventListener("click", () => loadDayDetail(btn.dataset.day, btn));
+  });
+}
+
+async function loadDayDetail(date, btn) {
+  const out = document.getElementById("cw-day-detail");
+  if (!out) return;
+  // Visual selection on the tapped bar.
+  out.parentElement.querySelectorAll(".cw-bar-btn").forEach((b) => b.classList.toggle("is-selected", b === btn));
+  out.innerHTML = `<p class="empty-state small">Loading…</p>`;
+  try {
+    const data = await getJson(`/api/me/symptoms?from=${encodeURIComponent(date)}&to=${encodeURIComponent(date)}`);
+    const items = data.symptoms || [];
+    if (!items.length) {
+      out.innerHTML = `<p class="empty-state small">Nothing logged on ${prettyDate(date)}.</p>`;
+      return;
+    }
+    out.innerHTML = `
+      <h4 class="cw-day-title">${prettyDate(date)} <span class="cw-day-count">${items.length} entr${items.length===1?"y":"ies"}</span></h4>
+      <ul class="sym-list">
+        ${items.map((s) => {
+          const meta = SYMPTOM_META[s.symptom] || { icon: "•", label: s.symptom };
+          const tags = [];
+          if (s.pain_type) String(s.pain_type).split(",").filter(Boolean).forEach((p) => tags.push(`🩸 ${p}`));
+          if (s.location)  String(s.location).split(",").map((l) => l.trim()).filter(Boolean).forEach((l) => tags.push(`📍 ${l}`));
+          return `<li class="sym-row">
+            <div class="sym-ico" title="${meta.label}">${meta.icon}</div>
+            <div class="sym-main">
+              <div class="sym-top"><strong>${meta.label}</strong> <span class="sev sev-${s.severity}">${s.severity}/5</span></div>
+              ${s.notes ? `<p class="sym-notes">${escapeHtml(s.notes)}</p>` : ""}
+              ${tags.length ? `<div class="sym-tags">${tags.map(escapeHtml).join(" ")}</div>` : ""}
+            </div>
+            <div class="sym-time">${relTime(s.logged_at)}</div>
+          </li>`;
+        }).join("")}
+      </ul>`;
+  } catch (err) {
+    out.innerHTML = `<p class="empty-state small">Couldn't load that day's symptoms.</p>`;
+  }
+}
+
+function prettyDate(iso) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
 }
 
 // --- Medication log modal (opens from "+ Log medication" sidebar button) --

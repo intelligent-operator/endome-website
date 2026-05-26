@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=5" />
-  <link rel="stylesheet" href="/meds.css?v=1" />
+  <link rel="stylesheet" href="/meds.css?v=2" />
 </head>
 <body class="dash-body">
   <div id="page-loader" class="page-loader">
@@ -84,6 +84,19 @@
         </ul>
       </section>
 
+      <!-- ===== Glossary: searchable catalog of meds + vitamins ===== -->
+      <section class="community-section" id="glossary-section">
+        <div class="section-head">
+          <h2>Glossary</h2>
+          <span class="section-hint">Searchable list of endo + women's health meds and vitamins</span>
+        </div>
+        <div class="glossary-toolbar">
+          <input type="search" id="glossary-search" placeholder="Search: ibuprofen, magnesium, dienogest, NAC…" />
+          <div class="glossary-filters" id="glossary-filters"></div>
+        </div>
+        <ul class="glossary-list" id="glossary-list"></ul>
+      </section>
+
       <!-- Add / Edit modal -->
       <div class="modal" id="med-modal" aria-hidden="true" role="dialog">
         <div class="modal-backdrop" data-close-modal></div>
@@ -97,8 +110,9 @@
           <form id="med-form" novalidate>
             <input type="hidden" name="id" />
             <div class="field-grid-2">
-              <label class="field"><span>Name <em>(required)</em></span>
-                <input type="text" name="name" required maxlength="120" placeholder="e.g. Ibuprofen, Vitamin D" />
+              <label class="field med-autocomplete-wrap"><span>Name <em>(start typing — pick from the list to auto-fill)</em></span>
+                <input type="text" name="name" required maxlength="120" placeholder="e.g. Ibuprofen, Vitamin D, Magnesium" autocomplete="off" id="med-name-input" />
+                <ul class="med-autocomplete" id="med-autocomplete" hidden></ul>
               </label>
               <label class="field"><span>Kind</span>
                 <select name="kind">
@@ -181,6 +195,7 @@
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
-  <script src="/meds.js?v=1" defer></script>
+  <script src="/med-catalog.js?v=1" defer></script>
+  <script src="/meds.js?v=2" defer></script>
 </body>
 </html>

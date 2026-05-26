@@ -400,6 +400,23 @@
 .cw-count{font-size:10px;color:#ff4e8a;font-weight:700;margin-top:-1px}
 .cw-summary{margin:0;text-align:center;font-size:12px;color:#7a5f6c}
 
+/* Tappable bars in the symptoms-week chart */
+.cw-bars-tappable .cw-bar-btn{
+  background:none;border:none;cursor:pointer;padding:0;font:inherit;
+  display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;
+  border-radius:8px;transition:background .12s, transform .12s;
+}
+.cw-bars-tappable .cw-bar-btn:hover{background:#fff5f8;transform:translateY(-1px)}
+.cw-bars-tappable .cw-bar-btn.is-today .cw-day{color:#ff4e8a;font-weight:700}
+.cw-bars-tappable .cw-bar-btn.is-selected{background:#ffeaf2}
+.cw-bars-tappable .cw-bar-btn[aria-disabled="true"]{cursor:default;opacity:.7}
+.cw-day-detail{margin-top:12px;min-height:60px}
+.cw-day-title{
+  margin:0 0 10px;font-size:14px;font-weight:700;color:#2b1922;
+  display:flex;align-items:baseline;gap:8px;
+}
+.cw-day-count{font-size:11px;font-weight:600;color:#7a5f6c}
+
 /* Today's symptoms card → clickable to open week chart */
 .today-symptoms.is-clickable{cursor:pointer;transition:transform .12s, box-shadow .14s, border-color .14s;border:1px solid transparent}
 .today-symptoms.is-clickable:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(255,77,138,.08);border-color:#ffd6e0}

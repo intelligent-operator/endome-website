@@ -1,5 +1,5 @@
-// /meds — manage user's medications + log doses.
-console.info("EndoMe meds build v1");
+// /meds — manage user's medications + log doses + searchable catalog.
+console.info("EndoMe meds build v2");
 
 (() => {
   const FREQ_LABEL = {
@@ -223,6 +223,150 @@ console.info("EndoMe meds build v1");
       status.className = "form-status err";
     }
   });
+
+  // ====================================================================
+  // CATALOG — autocomplete in the Add form + searchable glossary section
+  // ====================================================================
+  const catalog = Array.isArray(window.MED_CATALOG) ? window.MED_CATALOG : [];
+
+  // --- Autocomplete on the Name input -----------------------------------
+  const nameInput  = document.getElementById("med-name-input");
+  const acList     = document.getElementById("med-autocomplete");
+  let acHover = -1;
+
+  if (nameInput && acList) {
+    nameInput.addEventListener("input", () => paintAutocomplete(nameInput.value.trim()));
+    nameInput.addEventListener("focus", () => paintAutocomplete(nameInput.value.trim()));
+    nameInput.addEventListener("keydown", (e) => {
+      if (acList.hidden) return;
+      const items = acList.querySelectorAll("li");
+      if (e.key === "ArrowDown") { e.preventDefault(); acHover = Math.min(items.length - 1, acHover + 1); paintHover(items); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); acHover = Math.max(0, acHover - 1); paintHover(items); }
+      else if (e.key === "Enter" && acHover >= 0) { e.preventDefault(); items[acHover]?.click(); }
+      else if (e.key === "Escape") { acList.hidden = true; }
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".med-autocomplete-wrap")) acList.hidden = true;
+    });
+  }
+
+  function paintAutocomplete(query) {
+    if (!acList) return;
+    const q = query.toLowerCase();
+    let matches;
+    if (!q) {
+      // Show a curated top-of-list when the field is empty/focused.
+      matches = catalog.filter((c) => ["Ibuprofen","Paracetamol","Magnesium","Vitamin D","Omega-3","Iron","NAC (N-Acetyl Cysteine)","PEA (Palmitoylethanolamide)","Dienogest"].includes(c.name));
+    } else {
+      matches = catalog.filter((c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.aliases || []).some((a) => a.toLowerCase().includes(q)) ||
+        (c.category || "").toLowerCase().includes(q)
+      );
+    }
+    matches = matches.slice(0, 10);
+    acHover = -1;
+    if (!matches.length) { acList.hidden = true; return; }
+    acList.innerHTML = matches.map((m) => `
+      <li data-name="${escapeHtml(m.name)}">
+        <span class="ac-name">${escapeHtml(m.name)}</span>
+        <span class="ac-meta">${escapeHtml(m.category || "")} · ${escapeHtml(m.kind)}</span>
+      </li>`).join("");
+    acList.querySelectorAll("li").forEach((li) => {
+      li.addEventListener("click", () => applyCatalogEntry(catalog.find((c) => c.name === li.dataset.name)));
+    });
+    acList.hidden = false;
+  }
+  function paintHover(items) {
+    items.forEach((it, i) => it.classList.toggle("is-hover", i === acHover));
+  }
+
+  function applyCatalogEntry(entry) {
+    if (!entry) return;
+    const form = document.getElementById("med-form");
+    form.name.value = entry.name;
+    form.kind.value = entry.kind || "medication";
+    if (entry.defaultDose && !form.dose.value)        form.dose.value = entry.defaultDose;
+    if (entry.defaultFreq && form.frequency)          form.frequency.value = entry.defaultFreq;
+    if (entry.minHoursBetween != null && !form.minHoursBetween.value)
+      form.minHoursBetween.value = entry.minHoursBetween;
+    acList.hidden = true;
+  }
+
+  // --- Glossary section: filters + search list --------------------------
+  const glossarySearch  = document.getElementById("glossary-search");
+  const glossaryFilters = document.getElementById("glossary-filters");
+  const glossaryList    = document.getElementById("glossary-list");
+  let glossaryCategory = "All";
+
+  if (glossaryFilters && glossaryList) {
+    const cats = ["All", ...Array.from(new Set(catalog.map((c) => c.category || "Other")))];
+    glossaryFilters.innerHTML = cats.map((c) =>
+      `<button class="glossary-chip ${c === "All" ? "on" : ""}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("");
+    glossaryFilters.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-cat]");
+      if (!chip) return;
+      glossaryCategory = chip.dataset.cat;
+      glossaryFilters.querySelectorAll(".glossary-chip").forEach((b) => b.classList.toggle("on", b === chip));
+      renderGlossary();
+    });
+    glossarySearch.addEventListener("input", () => renderGlossary());
+    renderGlossary();
+  }
+
+  function renderGlossary() {
+    if (!glossaryList) return;
+    const q = (glossarySearch.value || "").trim().toLowerCase();
+    let items = catalog;
+    if (glossaryCategory !== "All") items = items.filter((c) => (c.category || "Other") === glossaryCategory);
+    if (q) items = items.filter((c) =>
+      c.name.toLowerCase().includes(q) ||
+      (c.aliases || []).some((a) => a.toLowerCase().includes(q)) ||
+      (c.summary || "").toLowerCase().includes(q));
+    items = items.slice(0, 100);
+    if (!items.length) {
+      glossaryList.innerHTML = `<li class="empty-state">Nothing matches "${escapeHtml(glossarySearch.value || "")}".</li>`;
+      return;
+    }
+    glossaryList.innerHTML = items.map(glossaryItem).join("");
+    glossaryList.querySelectorAll("[data-add-from-glossary]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const entry = catalog.find((c) => c.name === btn.dataset.addFromGlossary);
+        if (!entry) return;
+        openMedModal(null);
+        applyCatalogEntry(entry);
+      });
+    });
+    // Toggle expand
+    glossaryList.querySelectorAll(".glossary-item-head").forEach((head) => {
+      head.addEventListener("click", () => head.parentElement.classList.toggle("is-open"));
+    });
+  }
+
+  function glossaryItem(c) {
+    const aliases = (c.aliases || []).slice(0, 4).join(", ");
+    const KIND_ICO = { medication: "💊", vitamin: "🌿", supplement: "🧴", herbal: "🍃" };
+    return `<li class="glossary-item">
+      <div class="glossary-item-head" role="button" tabindex="0">
+        <span class="glossary-ico">${KIND_ICO[c.kind] || "💊"}</span>
+        <div class="glossary-info">
+          <strong>${escapeHtml(c.name)}</strong>
+          <span class="glossary-meta">${escapeHtml(c.category || "")} · ${escapeHtml(c.kind)}${aliases ? " · also: " + escapeHtml(aliases) : ""}</span>
+        </div>
+        <span class="glossary-toggle" aria-hidden="true">▾</span>
+      </div>
+      <div class="glossary-body">
+        <p>${escapeHtml(c.summary || "")}</p>
+        <div class="glossary-row">
+          ${c.defaultDose ? `<span class="glossary-pill">Default: ${escapeHtml(c.defaultDose)}</span>` : ""}
+          ${c.defaultFreq ? `<span class="glossary-pill">${escapeHtml(FREQ_LABEL[c.defaultFreq] || c.defaultFreq)}</span>` : ""}
+          ${c.minHoursBetween != null ? `<span class="glossary-pill">Min ${c.minHoursBetween}h between</span>` : ""}
+        </div>
+        <button class="btn btn-primary small" data-add-from-glossary="${escapeHtml(c.name)}">+ Add to my list</button>
+      </div>
+    </li>`;
+  }
 
   // --- Helpers ---------------------------------------------------------
   async function fetchJson(url, init = {}) {
