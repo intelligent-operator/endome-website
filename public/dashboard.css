@@ -397,7 +397,30 @@
   transition:height .35s ease;
 }
 .cw-day{font-size:10px;color:#7a5f6c;font-weight:600}
+.cw-count{font-size:10px;color:#ff4e8a;font-weight:700;margin-top:-1px}
 .cw-summary{margin:0;text-align:center;font-size:12px;color:#7a5f6c}
+
+/* Today's symptoms card → clickable to open week chart */
+.today-symptoms.is-clickable{cursor:pointer;transition:transform .12s, box-shadow .14s, border-color .14s;border:1px solid transparent}
+.today-symptoms.is-clickable:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(255,77,138,.08);border-color:#ffd6e0}
+.today-symptoms.is-clickable:focus-visible{outline:2px solid #ff4e8a;outline-offset:2px}
+
+/* Medication quick-log modal */
+.med-quicklog-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+.med-quick-row{
+  display:flex;align-items:center;gap:12px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:14px;padding:12px 14px;
+}
+.med-quick-info{flex:1;min-width:0}
+.med-quick-info strong{display:block;font-size:14px;color:#2b1922}
+.med-quick-meta{font-size:11px;color:#7a5f6c}
+.med-modal-foot{text-align:center;margin:14px 0 0;font-size:13px}
+.med-modal-foot a{color:#ff4e8a;text-decoration:none;font-weight:600}
+.med-modal-foot a:hover{text-decoration:underline}
+
+/* Sidebar nav: handle ghost-variant pill button. */
+.pill-btn.ghost{background:#fff5f8;color:#ff4e8a;border:1px solid #ffd6e0;margin-top:6px}
+.pill-btn.ghost:hover{background:#ffeaf2}
 
 /* EndoPet poop indicator */
 .ep-poop-hint{
@@ -425,7 +448,63 @@
 .pet[data-pet="luna"]{--pet-light:#ffb6c8;--pet-mid:#ff9bb3}
 .pet:not([data-pet="luna"]):not([data-pet="poppy"]):not([data-pet="mochi"]):not([data-pet="sunny"]):not([data-pet="coco"]):not([data-pet="kiki"]){--pet-light:#ffb6c8;--pet-mid:#ff9bb3}
 .pet .pet-svg{display:block;width:100%;height:100%;animation:pet-idle 4.4s ease-in-out infinite}
-.ep-big-art.pet{display:flex;align-items:center;justify-content:center;min-height:170px}
+/* Smaller, "close-up glimpse" pet on the dashboard — animated + alive. */
+.ep-big-art.pet{
+  position:relative;display:flex;align-items:flex-end;justify-content:center;
+  min-height:140px;padding:10px 10px 6px;
+  background:radial-gradient(ellipse at 50% 70%, #ffe7ef 0%, #fff5f8 70%);
+  overflow:hidden;
+}
+.ep-pet-stage{position:relative;width:100px;height:120px;display:flex;align-items:flex-end;justify-content:center}
+.ep-pet-stage .pet-svg{width:100%;height:100%;animation:pet-idle 4.4s ease-in-out infinite, pet-breathe 3.2s ease-in-out infinite}
+@keyframes pet-breathe{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.025)}
+}
+/* "Live" gesture classes added briefly by the JS scheduler. */
+.ep-big-art.pet.pet-hop .ep-pet-stage .pet-svg{animation:pet-hop .9s ease-in-out, pet-breathe 3.2s ease-in-out infinite}
+.ep-big-art.pet.pet-tilt-l .ep-pet-stage .pet-svg{animation:pet-tilt-l .9s ease-in-out, pet-breathe 3.2s ease-in-out infinite}
+.ep-big-art.pet.pet-tilt-r .ep-pet-stage .pet-svg{animation:pet-tilt-r .9s ease-in-out, pet-breathe 3.2s ease-in-out infinite}
+.ep-big-art.pet.pet-blink .ep-pet-stage{filter:brightness(.96)}
+@keyframes pet-hop{
+  0%,100%{transform:translateY(0)}
+  35%{transform:translateY(-10px) scale(1.03)}
+  60%{transform:translateY(2px) scale(.98)}
+}
+@keyframes pet-tilt-l{
+  0%,100%{transform:rotate(0)}
+  50%{transform:rotate(-7deg)}
+}
+@keyframes pet-tilt-r{
+  0%,100%{transform:rotate(0)}
+  50%{transform:rotate(7deg)}
+}
+
+/* Click-to-clean poop on the pet stage. */
+.ep-poop-spot{
+  position:absolute;width:32px;height:32px;border:none;background:transparent;
+  font-size:26px;line-height:1;padding:0;cursor:pointer;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.25));
+  transition:transform .15s, opacity .25s;
+  animation:poop-wiggle 2.6s ease-in-out infinite;
+  z-index:2;
+}
+.ep-poop-spot:hover{transform:scale(1.15) rotate(-6deg)}
+.ep-poop-spot.is-cleaning{
+  transform:translateY(-20px) scale(.4) rotate(40deg);
+  opacity:0;
+}
+@keyframes poop-wiggle{
+  0%,100%{transform:rotate(0)}
+  25%{transform:rotate(-4deg)}
+  75%{transform:rotate(4deg)}
+}
+.ep-poop-hint-live{
+  position:absolute;left:8px;right:8px;bottom:6px;
+  background:#fff5e6;border:1px solid #ffe1c0;border-radius:10px;
+  padding:5px 10px;font-size:11px;color:#c2811a;text-align:center;
+  font-weight:600;z-index:1;
+}
 .ep-mini .ep-art.pet{display:flex;align-items:center;justify-content:center}
 @keyframes pet-idle{
   0%,100%{transform:translateY(0) rotate(-1deg)}

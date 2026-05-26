@@ -95,6 +95,38 @@ export default {
           if (!env.DB) return json({ error: "Storage not configured" }, 503);
           const user = await getOrCreateUser(env, session.u);
 
+          // --- Medications ------------------------------------------------
+          if (url.pathname === "/api/me/medications" && request.method === "GET") {
+            return jsonHeaders(await getMedications(env, user));
+          }
+          if (url.pathname === "/api/me/medications" && request.method === "POST") {
+            return jsonHeaders(await createMedication(request, env, user));
+          }
+          const medMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)(?:\/(\w+))?$/);
+          if (medMatch) {
+            const id = +medMatch[1];
+            const action = medMatch[2];
+            if (!action      && request.method === "PUT")    return jsonHeaders(await updateMedication(request, env, user, id));
+            if (!action      && request.method === "DELETE") return jsonHeaders(await deleteMedication(env, user, id));
+            if (action === "log"  && request.method === "POST") return jsonHeaders(await logMedicationDose(request, env, user, id));
+            if (action === "logs" && request.method === "GET")  return jsonHeaders(await getMedicationLogs(env, user, id));
+          }
+
+          // --- Documents (private file storage in R2) ---------------------
+          if (url.pathname === "/api/me/documents" && request.method === "GET") {
+            return jsonHeaders(await listDocuments(env, user));
+          }
+          if (url.pathname === "/api/me/documents" && request.method === "POST") {
+            return jsonHeaders(await uploadDocument(request, env, user));
+          }
+          const docMatch = url.pathname.match(/^\/api\/me\/documents\/(\d+)(?:\/(\w+))?$/);
+          if (docMatch) {
+            const id = +docMatch[1];
+            const action = docMatch[2];
+            if (!action       && request.method === "DELETE") return await deleteDocument(env, user, id);
+            if (action === "file" && request.method === "GET") return await streamDocument(env, user, id);
+          }
+
           if (url.pathname === "/api/me/today" && request.method === "GET") {
             return jsonHeaders(await getMeToday(request, env, user));
           }
@@ -268,7 +300,9 @@ export default {
       url.pathname === "/pet"         || url.pathname.startsWith("/pet/") ||
       url.pathname === "/community"   || url.pathname.startsWith("/community/") ||
       url.pathname === "/profile"     || url.pathname.startsWith("/profile/") ||
-      url.pathname === "/u"           || url.pathname.startsWith("/u/")
+      url.pathname === "/u"           || url.pathname.startsWith("/u/") ||
+      url.pathname === "/meds"        || url.pathname.startsWith("/meds/") ||
+      url.pathname === "/documents"   || url.pathname.startsWith("/documents/")
     ) {
       const session = await readSession(request, env);
       if (!session) {
@@ -1146,7 +1180,7 @@ const ALLOWED_EVENING_SYMPTOMS = new Set([
 ]);
 const ALLOWED_APPETITE = new Set(["low", "normal", "high"]);
 const ALLOWED_PAIN_TYPES = new Set([
-  "sharp", "dull", "burning", "aching", "throbbing", "cramping", "stabbing", "shooting", "pressure",
+  "sharp", "dull", "deep", "burning", "aching", "throbbing", "cramping", "stabbing", "shooting", "pressure", "twisting", "pulling",
 ]);
 // Pain-type field only makes sense for these symptom ids.
 const PAIN_SYMPTOMS = new Set([
@@ -1646,9 +1680,16 @@ async function postPetFeed(env, user) {
   const hunger    = Math.max(0, live.hunger - randInt(38, 52));
   const happiness = Math.min(100, live.happiness + randInt(5, 12));
   const now = nowSec();
-  await env.DB.prepare(
-    "UPDATE pets SET hunger = ?, happiness = ?, last_fed_at = ?, updated_at = ? WHERE user_id = ?"
-  ).bind(hunger, happiness, now, now, user.id).run();
+  const meals = (pet.meals_since_clean || 0) + 1;
+  try {
+    await env.DB.prepare(
+      "UPDATE pets SET hunger = ?, happiness = ?, last_fed_at = ?, meals_since_clean = ?, updated_at = ? WHERE user_id = ?"
+    ).bind(hunger, happiness, now, meals, now, user.id).run();
+  } catch {
+    await env.DB.prepare(
+      "UPDATE pets SET hunger = ?, happiness = ?, last_fed_at = ?, updated_at = ? WHERE user_id = ?"
+    ).bind(hunger, happiness, now, now, user.id).run();
+  }
   return getMePet(env, user);
 }
 
@@ -1711,7 +1752,7 @@ async function postPetClean(env, user) {
   while (xp >= level * 100) { xp -= level * 100; level += 1; }
   try {
     await env.DB.prepare(
-      "UPDATE pets SET happiness = ?, xp = ?, level = ?, last_cleaned_at = ?, updated_at = ? WHERE user_id = ?"
+      "UPDATE pets SET happiness = ?, xp = ?, level = ?, last_cleaned_at = ?, meals_since_clean = 0, updated_at = ? WHERE user_id = ?"
     ).bind(happiness, xp, level, now, now, user.id).run();
   } catch (err) {
     // Column might not exist if ensurePetPoopColumn lost the race. Fallback.
@@ -1729,27 +1770,39 @@ let _petPoopColumnChecked = false;
 async function ensurePetPoopColumn(env) {
   if (_petPoopColumnChecked) return;
   _petPoopColumnChecked = true;
-  try {
-    await env.DB.prepare("ALTER TABLE pets ADD COLUMN last_cleaned_at INTEGER").run();
-  } catch { /* column already exists or table missing — ignore */ }
+  for (const sql of [
+    "ALTER TABLE pets ADD COLUMN last_cleaned_at INTEGER",
+    "ALTER TABLE pets ADD COLUMN meals_since_clean INTEGER NOT NULL DEFAULT 0",
+  ]) {
+    try { await env.DB.prepare(sql).run(); } catch { /* already exists */ }
+  }
 }
 
 // Pet has poop when it's been a few hours since the last feed and we haven't
 // cleaned up since that feed. Each feed has its own randomised "poop time"
 // derived from last_fed_at so we don't need extra storage.
 function petHasPoop(pet) {
-  if (!pet?.last_fed_at) return false;
+  if (!pet) return false;
   const now = nowSec();
-  // Deterministic per-feed delay between 90 and 240 minutes.
-  const seed = pet.last_fed_at % 151;
-  const delaySec = (90 + seed) * 60;
+  const cleanedAt = pet.last_cleaned_at || 0;
+
+  // Path 1 — "ate too much": three or more meals stacked up between cleans.
+  // Random 25% chance per extra meal that one of them produces a mess, but
+  // it's deterministic per pet so refreshes don't flip the state.
+  const meals = pet.meals_since_clean || 0;
+  if (meals >= 3) return true;
+  if (meals === 2 && pet.last_fed_at && now > pet.last_fed_at + 20 * 60) {
+    const seed = (pet.last_fed_at ^ (pet.id || 0)) % 100;
+    if (seed < 35) return true; // 35% chance after 2 stacked meals + 20 min
+  }
+
+  // Path 2 — normal pet-like routine, a few hours after a meal.
+  if (!pet.last_fed_at) return false;
+  const delaySec = (90 + (pet.last_fed_at % 151)) * 60;  // 90–240 min
   const poopAt = pet.last_fed_at + delaySec;
   if (now < poopAt) return false;
-  // Cleaned after the poop appeared? Then we're clean.
-  const cleanedAt = pet.last_cleaned_at || 0;
   if (cleanedAt >= poopAt) return false;
-  // Too long after — assume it's faded away (don't grief the user forever).
-  if (now > poopAt + 36 * 3600) return false;
+  if (now > poopAt + 36 * 3600) return false; // gives up after a day-and-a-half
   return true;
 }
 
@@ -3952,6 +4005,400 @@ async function deleteFriendship(env, user, otherId) {
   await env.DB.prepare(
     "DELETE FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
   ).bind(a, b).run();
+  return json({ ok: true });
+}
+
+// =============================================================================
+// MEDICATIONS — what the user takes + dose-cooldown reminders.
+// =============================================================================
+
+const ALLOWED_MED_KINDS = new Set(["medication", "vitamin", "supplement", "herbal"]);
+const ALLOWED_MED_FREQS = new Set([
+  "as_needed", "once_daily", "twice_daily", "three_times_daily", "every_6h", "every_8h", "every_12h", "weekly", "other",
+]);
+const MAX_MEDS_PER_USER = 40;
+
+// Insights pulled from generic OTC + endo-aware guidance. Light, factual,
+// non-prescriptive — and shown alongside a "talk to your doctor" hint.
+const MED_INSIGHTS = [
+  { match: /ibuprofen|nurofen|advil/i, summary:
+    "NSAID. Blocks prostaglandins, which drive period cramps and inflammation. Often the first thing tried for endo pain; works best taken at the very first sign of pain. Watch for stomach upset — take with food." },
+  { match: /naproxen|naprogesic|aleve/i, summary:
+    "Long-acting NSAID. Lasts 8–12 hours so fewer doses needed than ibuprofen. Same anti-prostaglandin mechanism — useful for sustained period pain." },
+  { match: /paracetamol|panadol|acetaminophen|tylenol/i, summary:
+    "Pain reliever, not an anti-inflammatory. Often layered with an NSAID for endo flares. Maximum 4g per day in healthy adults." },
+  { match: /mefenamic|ponstan/i, summary:
+    "NSAID specifically licensed in many countries for period pain. Useful when ibuprofen isn't enough." },
+  { match: /norethisterone|primolut/i, summary:
+    "Progestin used to delay periods or manage heavy bleeding linked to endo. Suppresses ovulation when taken continuously." },
+  { match: /dienogest|visanne/i, summary:
+    "Progestin specifically approved for endometriosis. Suppresses endo lesion activity and reduces pelvic pain over months of use." },
+  { match: /tranexamic|cyklokapron/i, summary:
+    "Reduces heavy menstrual bleeding. Doesn't change pain, but can make heavy periods more manageable." },
+  { match: /magnesium/i, summary:
+    "Muscle relaxant. Some evidence it eases cramps and improves sleep. Glycinate or citrate forms are gentler on the gut than oxide." },
+  { match: /vitamin\s*d|cholecalciferol/i, summary:
+    "Many people with endo are low in vitamin D. Supports immune balance, mood and bone health. Get a blood level before high-dose supplementing." },
+  { match: /vitamin\s*c|ascorbic/i, summary:
+    "Antioxidant + supports iron absorption — useful alongside iron supplements if heavy periods leave you low. Aim for natural sources too." },
+  { match: /vitamin\s*b|b\-?complex|b12|folate|folic/i, summary:
+    "Energy, nerve and red-blood-cell support. B6 may help PMS; folate matters if you might conceive." },
+  { match: /iron|ferrous|maltofer/i, summary:
+    "Replaces iron lost to heavy periods. Take with vitamin C and away from tea/coffee for better absorption. Constipation is the most common side effect." },
+  { match: /omega|fish\s*oil|epa|dha/i, summary:
+    "Anti-inflammatory fatty acids. A small evidence base for reducing period pain over consistent use of 3+ months." },
+  { match: /turmeric|curcumin/i, summary:
+    "Plant-based anti-inflammatory. Use a formulation with piperine or a lipid carrier for absorption. Talk to your doctor if you're on blood thinners." },
+  { match: /probiotic/i, summary:
+    "Gut health is closely tied to immune + hormone balance. May help endo-belly bloating for some — give it 8+ weeks to judge." },
+  { match: /melatonin/i, summary:
+    "Sleep regulator. Small studies suggest it may reduce chronic pelvic pain in endometriosis. Start low — even 0.5 mg can help." },
+  { match: /zoladex|goserelin|lupron|leuprolide/i, summary:
+    "GnRH agonist — induces a temporary 'medical menopause' to shrink endo lesions. Add-back therapy is usually needed to manage menopausal side effects." },
+];
+
+function medInsightFor(name) {
+  if (!name) return null;
+  for (const i of MED_INSIGHTS) if (i.match.test(name)) return i.summary;
+  return null;
+}
+
+// Best-effort schema bootstrap for medications + medication_logs.
+let _medSchemaChecked = false;
+async function ensureMedSchema(env) {
+  if (_medSchemaChecked) return;
+  _medSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS medications (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  name TEXT NOT NULL," +
+    "  kind TEXT," +
+    "  dose TEXT," +
+    "  dose_mg REAL," +
+    "  frequency TEXT," +
+    "  min_hours_between REAL," +
+    "  brand TEXT," +
+    "  link TEXT," +
+    "  notes TEXT," +
+    "  is_active INTEGER NOT NULL DEFAULT 1," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_medications_user ON medications(user_id, is_active)",
+    "CREATE TABLE IF NOT EXISTS medication_logs (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  medication_id INTEGER NOT NULL," +
+    "  taken_at INTEGER NOT NULL," +
+    "  dose_text TEXT," +
+    "  notes TEXT" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_medlogs_med ON medication_logs(medication_id, taken_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_medlogs_user ON medication_logs(user_id, taken_at DESC)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+function medRow(r, lastTakenAt = null) {
+  const next = lastTakenAt && r.min_hours_between
+    ? lastTakenAt + Math.round(r.min_hours_between * 3600)
+    : null;
+  return {
+    id: r.id,
+    name: r.name,
+    kind: r.kind || "medication",
+    dose: r.dose || null,
+    doseMg: r.dose_mg || null,
+    frequency: r.frequency || "as_needed",
+    minHoursBetween: r.min_hours_between || null,
+    brand: r.brand || null,
+    link: r.link || null,
+    notes: r.notes || null,
+    insight: medInsightFor(r.name),
+    isActive: !!r.is_active,
+    createdAt: r.created_at,
+    lastTakenAt,
+    nextAllowedAt: next,
+  };
+}
+
+async function getMedications(env, user) {
+  await ensureMedSchema(env);
+  const meds = await env.DB.prepare(
+    "SELECT m.*, " +
+    "       (SELECT MAX(taken_at) FROM medication_logs WHERE medication_id = m.id) AS last_taken_at " +
+    "FROM medications m " +
+    "WHERE m.user_id = ? AND m.is_active = 1 " +
+    "ORDER BY m.created_at DESC"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  return json({
+    medications: (meds.results || []).map((r) => medRow(r, r.last_taken_at)),
+  });
+}
+
+async function createMedication(request, env, user) {
+  await ensureMedSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+
+  const owned = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM medications WHERE user_id = ? AND is_active = 1"
+  ).bind(user.id).first().catch(() => ({ n: 0 }));
+  if ((owned?.n || 0) >= MAX_MEDS_PER_USER) {
+    return json({ error: "You've reached the medication limit. Remove an old one first." }, 403);
+  }
+
+  const fields = parseMedFields(body);
+  if (!fields.name) return json({ error: "Medication name is required." }, 400);
+
+  const now = nowSec();
+  const res = await env.DB.prepare(
+    "INSERT INTO medications (user_id, name, kind, dose, dose_mg, frequency, min_hours_between, brand, link, notes, is_active, created_at, updated_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+  ).bind(
+    user.id, fields.name, fields.kind, fields.dose, fields.doseMg,
+    fields.frequency, fields.minHoursBetween, fields.brand, fields.link, fields.notes,
+    now, now
+  ).run();
+  return json({ ok: true, id: res.meta?.last_row_id });
+}
+
+async function updateMedication(request, env, user, id) {
+  await ensureMedSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const fields = parseMedFields(body);
+  // Confirm ownership.
+  const owned = await env.DB.prepare(
+    "SELECT id FROM medications WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Medication not found" }, 404);
+
+  const sets = [];
+  const binds = [];
+  for (const [k, col] of [
+    ["name", "name"], ["kind", "kind"], ["dose", "dose"], ["doseMg", "dose_mg"],
+    ["frequency", "frequency"], ["minHoursBetween", "min_hours_between"],
+    ["brand", "brand"], ["link", "link"], ["notes", "notes"],
+  ]) {
+    if (k in fields) { sets.push(`${col} = ?`); binds.push(fields[k]); }
+  }
+  if (!sets.length) return json({ error: "Nothing to update." }, 400);
+  sets.push("updated_at = ?");
+  binds.push(nowSec(), id, user.id);
+  await env.DB.prepare(
+    `UPDATE medications SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`
+  ).bind(...binds).run();
+  return json({ ok: true });
+}
+
+async function deleteMedication(env, user, id) {
+  await ensureMedSchema(env);
+  await env.DB.prepare(
+    "UPDATE medications SET is_active = 0, updated_at = ? WHERE id = ? AND user_id = ?"
+  ).bind(nowSec(), id, user.id).run();
+  return json({ ok: true });
+}
+
+async function logMedicationDose(request, env, user, id) {
+  await ensureMedSchema(env);
+  const body = await readJsonSafe(request) || {};
+  const med = await env.DB.prepare(
+    "SELECT id, name, min_hours_between FROM medications WHERE id = ? AND user_id = ? AND is_active = 1"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!med) return json({ error: "Medication not found" }, 404);
+
+  // Cooldown check — only enforce if min_hours_between is set.
+  if (med.min_hours_between) {
+    const last = await env.DB.prepare(
+      "SELECT taken_at FROM medication_logs WHERE medication_id = ? ORDER BY taken_at DESC LIMIT 1"
+    ).bind(id).first().catch(() => null);
+    if (last) {
+      const next = last.taken_at + med.min_hours_between * 3600;
+      if (next > nowSec()) {
+        const mins = Math.ceil((next - nowSec()) / 60);
+        return json({ error: `Too soon — wait ${mins} more minute${mins===1?"":"s"} before the next dose.` }, 409);
+      }
+    }
+  }
+  const doseText = sanitizeText(body.doseText, 60);
+  const notes    = sanitizeText(body.notes, 500);
+  await env.DB.prepare(
+    "INSERT INTO medication_logs (user_id, medication_id, taken_at, dose_text, notes) VALUES (?, ?, ?, ?, ?)"
+  ).bind(user.id, id, nowSec(), doseText, notes).run();
+  return json({ ok: true, name: med.name });
+}
+
+async function getMedicationLogs(env, user, id) {
+  await ensureMedSchema(env);
+  const logs = await env.DB.prepare(
+    "SELECT id, taken_at, dose_text, notes FROM medication_logs " +
+    "WHERE medication_id = ? AND user_id = ? ORDER BY taken_at DESC LIMIT 100"
+  ).bind(id, user.id).all().catch(() => ({ results: [] }));
+  return json({ logs: logs.results || [] });
+}
+
+function parseMedFields(body) {
+  const out = {};
+  if ("name" in body)              out.name = sanitizeText(body.name, 120) || null;
+  if ("kind" in body)              out.kind = ALLOWED_MED_KINDS.has(body.kind) ? body.kind : "medication";
+  if ("dose" in body)              out.dose = sanitizeText(body.dose, 40) || null;
+  if ("doseMg" in body)            out.doseMg = (body.doseMg == null || body.doseMg === "") ? null : Math.max(0, Math.min(10000, +body.doseMg || 0));
+  if ("frequency" in body)         out.frequency = ALLOWED_MED_FREQS.has(body.frequency) ? body.frequency : "as_needed";
+  if ("minHoursBetween" in body)   out.minHoursBetween = (body.minHoursBetween == null || body.minHoursBetween === "") ? null : Math.max(0, Math.min(168, +body.minHoursBetween || 0));
+  if ("brand" in body)             out.brand = sanitizeText(body.brand, 80) || null;
+  if ("link" in body)              out.link  = sanitizeUrl(body.link);
+  if ("notes" in body)             out.notes = sanitizeText(body.notes, 1000) || null;
+  return out;
+}
+
+// Allow http/https only; reject anything that could be a javascript: or data: URL.
+function sanitizeUrl(v) {
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 500) return null;
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.toString();
+  } catch { return null; }
+}
+
+// =============================================================================
+// DOCUMENTS — private file storage backed by Cloudflare R2.
+// Each user can only ever see their own. R2 keys are namespaced under
+// `users/<user_id>/...` so accidental cross-user reads are not possible.
+// =============================================================================
+
+const MAX_DOC_BYTES = 20 * 1024 * 1024;   // 20 MB upload cap
+const ALLOWED_DOC_KINDS = new Set(["ultrasound", "report", "lab", "image", "scan", "letter", "prescription", "other"]);
+const ALLOWED_DOC_TYPES = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/heic", "image/heif",
+  "application/pdf",
+  "text/plain", "text/csv",
+]);
+
+let _docSchemaChecked = false;
+async function ensureDocSchema(env) {
+  if (_docSchemaChecked) return;
+  _docSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS documents (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  r2_key TEXT NOT NULL UNIQUE," +
+    "  filename TEXT NOT NULL," +
+    "  content_type TEXT," +
+    "  size_bytes INTEGER," +
+    "  kind TEXT," +
+    "  notes TEXT," +
+    "  uploaded_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user_id, uploaded_at DESC)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+function requireDocsBinding(env) {
+  return !!env.DOCS && typeof env.DOCS.put === "function";
+}
+
+async function listDocuments(env, user) {
+  await ensureDocSchema(env);
+  const rows = await env.DB.prepare(
+    "SELECT id, filename, content_type, size_bytes, kind, notes, uploaded_at " +
+    "FROM documents WHERE user_id = ? ORDER BY uploaded_at DESC LIMIT 200"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  return json({
+    ok: true,
+    storageReady: requireDocsBinding(env),
+    documents: (rows.results || []).map((r) => ({
+      id: r.id, filename: r.filename, contentType: r.content_type,
+      sizeBytes: r.size_bytes, kind: r.kind, notes: r.notes,
+      uploadedAt: r.uploaded_at,
+    })),
+  });
+}
+
+async function uploadDocument(request, env, user) {
+  await ensureDocSchema(env);
+  if (!requireDocsBinding(env)) {
+    return json({
+      error: "Document storage isn't configured yet. An admin needs to add an R2 bucket binding called `DOCS` to wrangler.toml.",
+    }, 503);
+  }
+
+  // Pull metadata from headers — the body is the raw file bytes.
+  const filename = sanitizeText(request.headers.get("x-filename") || "", 200) || "upload.bin";
+  const kindRaw  = (request.headers.get("x-kind") || "other").toLowerCase();
+  const kind     = ALLOWED_DOC_KINDS.has(kindRaw) ? kindRaw : "other";
+  const notes    = sanitizeText(request.headers.get("x-notes") || "", 500);
+  const contentType = request.headers.get("content-type") || "application/octet-stream";
+  if (!ALLOWED_DOC_TYPES.has(contentType.split(";")[0].trim())) {
+    return json({ error: "Unsupported file type. Use PDF, images, or plain text." }, 415);
+  }
+  const declared = +request.headers.get("content-length") || 0;
+  if (declared && declared > MAX_DOC_BYTES) {
+    return json({ error: "File too big — max 20 MB per upload." }, 413);
+  }
+
+  const buf = await request.arrayBuffer();
+  if (buf.byteLength === 0) return json({ error: "File is empty." }, 400);
+  if (buf.byteLength > MAX_DOC_BYTES) return json({ error: "File too big — max 20 MB per upload." }, 413);
+
+  // Generate a random, unguessable key namespaced under the user. Means a
+  // hostile party can't enumerate someone else's docs even if R2 were ever
+  // misconfigured for public reads.
+  const rand = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+    .map((b) => b.toString(16).padStart(2, "0")).join("");
+  const safeName = filename.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "upload";
+  const r2Key = `users/${user.id}/${nowSec()}-${rand}-${safeName}`;
+
+  await env.DOCS.put(r2Key, buf, {
+    httpMetadata: { contentType },
+    customMetadata: { userId: user.id, filename, kind, uploadedAt: String(nowSec()) },
+  });
+
+  const res = await env.DB.prepare(
+    "INSERT INTO documents (user_id, r2_key, filename, content_type, size_bytes, kind, notes, uploaded_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(user.id, r2Key, filename, contentType, buf.byteLength, kind, notes, nowSec()).run();
+  return json({ ok: true, id: res.meta?.last_row_id, filename, kind, sizeBytes: buf.byteLength });
+}
+
+async function streamDocument(env, user, id) {
+  await ensureDocSchema(env);
+  if (!requireDocsBinding(env)) return json({ error: "Document storage not configured" }, 503);
+  const row = await env.DB.prepare(
+    "SELECT r2_key, filename, content_type FROM documents WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!row) return new Response("Not found", { status: 404 });
+
+  const obj = await env.DOCS.get(row.r2_key);
+  if (!obj) return new Response("File missing", { status: 404 });
+
+  const headers = new Headers({
+    "Content-Type":        row.content_type || "application/octet-stream",
+    "Content-Disposition": `inline; filename="${row.filename.replace(/"/g, '')}"`,
+    "Cache-Control":       "private, max-age=0, must-revalidate",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy":     "no-referrer",
+  });
+  return new Response(obj.body, { status: 200, headers });
+}
+
+async function deleteDocument(env, user, id) {
+  await ensureDocSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT r2_key FROM documents WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!row) return json({ error: "Document not found" }, 404);
+  if (requireDocsBinding(env)) {
+    try { await env.DOCS.delete(row.r2_key); } catch (err) { console.warn("R2 delete:", err?.message || err); }
+  }
+  await env.DB.prepare("DELETE FROM documents WHERE id = ? AND user_id = ?").bind(id, user.id).run();
   return json({ ok: true });
 }
 

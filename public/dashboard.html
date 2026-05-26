@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="stylesheet" href="/dashboard.css?v=4" />
+  <link rel="stylesheet" href="/dashboard.css?v=5" />
 </head>
 <body class="dash-body">
   <div id="page-loader" class="page-loader">
@@ -57,6 +57,8 @@
         <a class="active" href="/dashboard"><span class="ico">🏠</span> Overview</a>
         <a href="/story"><span class="ico">📖</span> Your Story</a>
         <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/meds"><span class="ico">💊</span> Medications</a>
+        <a href="/documents"><span class="ico">📁</span> Documents</a>
         <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
         <a href="/community"><span class="ico">💬</span> Community</a>
         <a href="/profile"><span class="ico">👤</span> Profile</a>
@@ -65,6 +67,7 @@
         <div class="ci-head"><span>📅</span> <strong>Daily Check-in</strong></div>
         <p>Keep your journey on track.</p>
         <button class="pill-btn" data-modal="symptom">Log Symptom</button>
+        <button class="pill-btn ghost" data-modal="medLog">💊 Log medication</button>
       </div>
       <div class="side-card help">
         <div class="help-ico">🎧</div>
@@ -165,9 +168,11 @@
 
       <!-- Today's symptoms (real data from /api/me/today) -->
       <section>
-        <div class="card today-symptoms">
+        <div class="card today-symptoms is-clickable" id="today-symptoms-card" data-modal="symptomsWeek" role="button" tabindex="0" aria-label="Open symptom week chart">
           <div class="card-head wide">
-            <span><span class="ico-tile pink">📝</span> Today's Symptoms <span class="muted" id="sym-count"></span></span>
+            <span><span class="ico-tile pink">📝</span> Today's Symptoms <span class="muted" id="sym-count"></span>
+              <span class="card-head-cta">View week →</span>
+            </span>
             <button class="pill-btn small" data-modal="symptom">+ Log symptom</button>
           </div>
           <div id="today-symptoms-list">
@@ -183,14 +188,11 @@
         <div class="card-head wide">
           <span><span class="ico-tile pink">🐾</span> Your EndoPet</span>
         </div>
-        <div class="ep-big-art pet" id="ep-big-art" data-pet="luna" data-mood="happy"></div>
-        <div class="ep-poop-row" id="ep-poop-row" hidden>
-          <span class="ep-poop-emoji">💩</span>
-          <div class="ep-poop-text">
-            <strong>Your pet pooped!</strong>
-            <span>Give them a quick clean to keep them happy.</span>
-          </div>
-          <button class="pill-btn small" id="ep-clean-btn" type="button">Clean</button>
+        <div class="ep-big-art pet" id="ep-big-art" data-pet="luna" data-mood="happy">
+          <!-- Pet art + (when needed) a draggable/clickable poop overlay. -->
+          <div class="ep-pet-stage" id="ep-pet-stage"></div>
+          <button class="ep-poop-spot" id="ep-poop-spot" type="button" hidden aria-label="Clean up the poop (drag or click)" title="Click or drag me away to clean">💩</button>
+          <div class="ep-poop-hint-live" id="ep-poop-hint-live" hidden>Tap the 💩 to clean it up — your pet will thank you!</div>
         </div>
         <div class="ep-name"><span data-bind="petName">Luna</span> <span class="edit-ico">✏️</span></div>
         <div class="ep-row">
@@ -471,6 +473,7 @@
           <div class="chip-pick wrap multi" data-multi="painType">
             <button type="button" data-val="sharp">🗡 Sharp</button>
             <button type="button" data-val="dull">🌫 Dull</button>
+            <button type="button" data-val="deep">🕳 Deep</button>
             <button type="button" data-val="burning">🔥 Burning</button>
             <button type="button" data-val="aching">💢 Aching</button>
             <button type="button" data-val="throbbing">💓 Throbbing</button>
@@ -478,6 +481,8 @@
             <button type="button" data-val="stabbing">🩻 Stabbing</button>
             <button type="button" data-val="shooting">⚡ Shooting</button>
             <button type="button" data-val="pressure">🧊 Pressure</button>
+            <button type="button" data-val="twisting">🌀 Twisting</button>
+            <button type="button" data-val="pulling">🪢 Pulling</button>
           </div>
         </div>
 
@@ -696,6 +701,39 @@
     </div>
   </div>
 
-  <script src="/dashboard.js?v=4" defer></script>
+  <!-- MODAL: Symptoms this week -->
+  <div class="modal" id="modal-symptomsWeek" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="symptomsWeek-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card modal-xl">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">📝</span>
+        <h3 id="symptomsWeek-title">Symptoms this week</h3>
+        <p>How often you've logged something each day, plus the symptom mix.</p>
+      </header>
+      <div class="symptoms-week-body" id="symptoms-week-body">
+        <p class="empty-state">Loading…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Log a medication -->
+  <div class="modal" id="modal-medLog" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="medLog-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card modal-xl">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">💊</span>
+        <h3 id="medLog-title">Log a medication</h3>
+        <p>Pick what you took — we'll set the cooldown for next time.</p>
+      </header>
+      <div id="med-log-body">
+        <p class="empty-state">Loading your medications…</p>
+      </div>
+      <p class="med-modal-foot"><a href="/meds">Manage your medications →</a></p>
+    </div>
+  </div>
+
+  <script src="/dashboard.js?v=5" defer></script>
 </body>
 </html>

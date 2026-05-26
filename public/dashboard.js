@@ -199,22 +199,67 @@ const PET_SVGS = {
 function renderPetArt(pet) {
   const type = pet.type && PET_SVGS[pet.type] ? pet.type : "luna";
   const svg = PET_SVGS[type];
-  ["ep-mini-art", "ep-big-art"].forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.innerHTML = svg;
-    el.dataset.pet = type;
-    el.dataset.mood = pet.mood || "happy";
-    el.style.setProperty("--color-shift", `${pet.colorSeed || 0}deg`);
-  });
+  // Mini avatar in the stat card — fills the whole container.
+  const mini = document.getElementById("ep-mini-art");
+  if (mini) {
+    mini.innerHTML = svg;
+    mini.dataset.pet = type;
+    mini.dataset.mood = pet.mood || "happy";
+    mini.style.setProperty("--color-shift", `${pet.colorSeed || 0}deg`);
+  }
+  // Big art on the right rail — render INSIDE a dedicated stage so the poop
+  // overlay and hint can sit alongside the SVG without being clobbered.
+  const big = document.getElementById("ep-big-art");
+  const stage = document.getElementById("ep-pet-stage");
+  if (big && stage) {
+    stage.innerHTML = svg;
+    big.dataset.pet = type;
+    big.dataset.mood = pet.mood || "happy";
+    big.style.setProperty("--color-shift", `${pet.colorSeed || 0}deg`);
+    // Random "live" gestures — a small head-tilt / hop every 8-18s.
+    if (!big.dataset.alive) {
+      big.dataset.alive = "1";
+      scheduleLiveGesture(big);
+    }
+  }
+}
+
+function scheduleLiveGesture(big) {
+  const tick = () => {
+    if (!document.body.contains(big)) return;
+    const moves = ["pet-hop", "pet-tilt-l", "pet-tilt-r", "pet-blink"];
+    const cls = moves[Math.floor(Math.random() * moves.length)];
+    big.classList.add(cls);
+    setTimeout(() => big.classList.remove(cls), 900);
+    setTimeout(tick, 8000 + Math.random() * 10000);
+  };
+  setTimeout(tick, 3000 + Math.random() * 4000);
 }
 
 function renderPetPoop(pet) {
   const hasPoop = !!pet.hasPoop;
   const mini = document.getElementById("ep-mini-poop");
   if (mini) mini.hidden = !hasPoop;
-  const row = document.getElementById("ep-poop-row");
-  if (row) row.hidden = !hasPoop;
+  const spot = document.getElementById("ep-poop-spot");
+  const hint = document.getElementById("ep-poop-hint-live");
+  if (spot) {
+    spot.hidden = !hasPoop;
+    if (hasPoop && !spot.dataset.placed) placePoopRandomly(spot);
+    else if (!hasPoop) { delete spot.dataset.placed; }
+  }
+  if (hint) hint.hidden = !hasPoop;
+}
+
+// Drop the poop somewhere along the bottom-half of the pet area, away from
+// the centre so it doesn't sit on top of the pet's face.
+function placePoopRandomly(spot) {
+  const stage = spot.parentElement;
+  if (!stage) return;
+  const x = 8 + Math.random() * 70;         // % across, 8..78
+  const y = 55 + Math.random() * 32;        // % down, 55..87
+  spot.style.left = `${x}%`;
+  spot.style.top  = `${y}%`;
+  spot.dataset.placed = "1";
 }
 
 // --- Story mini ring (right rail) ----------------------------------------
@@ -475,6 +520,69 @@ async function renderCycleWeekModal() {
     <p class="cw-summary">${symptomTotal} symptom${symptomTotal === 1 ? "" : "s"} logged this week.</p>`;
 }
 
+// --- Symptoms-this-week modal (opens from Today's Symptoms card) ---------
+async function renderSymptomsWeekModal() {
+  const body = document.getElementById("symptoms-week-body");
+  if (!body) return;
+  body.innerHTML = `<p class="empty-state">Loading…</p>`;
+  const week = await loadWeek(true);
+  const days = week?.days || [];
+  if (!days.length) {
+    body.innerHTML = `<p class="empty-state">No symptoms logged yet — your week chart fills in as you log.</p>`;
+    return;
+  }
+  const max = Math.max(1, ...days.map((d) => d.symptomCount || 0));
+  const total = days.reduce((s, d) => s + (d.symptomCount || 0), 0);
+  const bars = days.map((d) => {
+    const n = d.symptomCount || 0;
+    const h = (n / max) * 100;
+    const dayLabel = ["S","M","T","W","T","F","S"][new Date(d.date + "T00:00:00").getDay()];
+    const date = d.date.slice(5);
+    return `<div class="cw-bar-col">
+      <div class="cw-bar-wrap"><div class="cw-bar" style="height:${h}%;background:linear-gradient(180deg,#ff4e8a,#ffb380)" title="${date}: ${n} symptom${n===1?"":"s"}"></div></div>
+      <span class="cw-day">${dayLabel}</span>
+      <span class="cw-count">${n}</span>
+    </div>`;
+  }).join("");
+  body.innerHTML = `
+    <div class="cw-metric">
+      <div class="cw-metric-head"><strong>Symptom entries</strong> <span class="cw-meta">last 7 days</span></div>
+      <div class="cw-bars">${bars}</div>
+    </div>
+    <p class="cw-summary"><strong>${total}</strong> symptom${total === 1 ? "" : "s"} logged across the past week.</p>`;
+}
+
+// --- Medication log modal (opens from "+ Log medication" sidebar button) --
+async function renderMedLogModal() {
+  const body = document.getElementById("med-log-body");
+  if (!body) return;
+  body.innerHTML = `<p class="empty-state">Loading your medications…</p>`;
+  try {
+    const data = await fetch("/api/me/medications", { credentials: "same-origin" }).then((r) => r.json());
+    const meds = data.medications || [];
+    if (!meds.length) {
+      body.innerHTML = `<p class="empty-state">No medications saved yet. <a href="/meds">Add your first medication →</a></p>`;
+      return;
+    }
+    body.innerHTML = `<ul class="med-quicklog-list">${meds.map(medQuickRow).join("")}</ul>`;
+  } catch {
+    body.innerHTML = `<p class="empty-state">Couldn't load medications.</p>`;
+  }
+}
+function medQuickRow(m) {
+  const okNow = !m.nextAllowedAt || (Date.now() / 1000) >= m.nextAllowedAt;
+  const next  = m.nextAllowedAt
+    ? `Next allowed in ${Math.max(1, Math.ceil((m.nextAllowedAt - Date.now() / 1000) / 60))} min`
+    : "Available now";
+  return `<li class="med-quick-row">
+    <div class="med-quick-info">
+      <strong>${escapeHtml(m.name)}</strong>
+      <span class="med-quick-meta">${escapeHtml(m.dose || "—")} · ${okNow ? "✅ Available now" : "⏳ " + next}</span>
+    </div>
+    <button class="btn btn-primary small" data-quick-log="${m.id}" ${okNow ? "" : "disabled"}>Log dose</button>
+  </li>`;
+}
+
 function renderSymptomsTodayHint(count) {
   const card = document.querySelector(".welcome-banner .wb-text");
   if (!card) return;
@@ -540,6 +648,8 @@ function openModal(name) {
   if (name === "symptom") resetMultiState(modal);
   prefillModal(name);
   if (name === "cycleWeek") renderCycleWeekModal();
+  if (name === "symptomsWeek") renderSymptomsWeekModal();
+  if (name === "medLog") renderMedLogModal();
   const firstInput = modal.querySelector("button[data-val], input, textarea");
   setTimeout(() => firstInput?.focus(), 80);
 }
@@ -673,18 +783,52 @@ document.addEventListener("click", (e) => {
     bumpCounter(form, cIncr.dataset.counterTarget, parseFloat(cIncr.dataset.counterIncr), { min: cIncr.dataset.min, max: cIncr.dataset.max });
     return;
   }
-  const cleanBtn = e.target.closest("#ep-clean-btn");
-  if (cleanBtn) {
+  const quickLog = e.target.closest("[data-quick-log]");
+  if (quickLog) {
     e.preventDefault();
-    cleanBtn.disabled = true;
-    api.cleanPet().then(() => {
-      toast("Cleaned ✨ +2 XP", "ok");
+    const id = quickLog.dataset.quickLog;
+    quickLog.disabled = true;
+    quickLog.textContent = "Logging…";
+    fetch(`/api/me/medications/${id}/log`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    }).then((r) => r.json()).then((res) => {
+      if (res.error) throw new Error(res.error);
+      toast(`Logged ${res.name || "dose"} ✨`, "ok");
+      renderMedLogModal();
+    }).catch((err) => {
+      toast(err.message || "Couldn't log dose", "err");
+      quickLog.disabled = false;
+      quickLog.textContent = "Log dose";
+    });
+    return;
+  }
+  const poopSpot = e.target.closest("#ep-poop-spot");
+  if (poopSpot) {
+    e.preventDefault();
+    if (poopSpot.dataset.cleaning) return;
+    poopSpot.dataset.cleaning = "1";
+    poopSpot.classList.add("is-cleaning");
+    api.cleanPet().then((res) => {
+      const gained = res?.gainedXp ?? 2;
+      toast(`Cleaned ✨ +${gained} XP for your pet`, "ok");
+      // Hide immediately so it feels responsive, then re-fetch.
+      poopSpot.hidden = true;
+      delete poopSpot.dataset.placed;
       refresh();
     }).catch((err) => {
       toast(err.message || "Couldn't clean", "err");
-      cleanBtn.disabled = false;
+    }).finally(() => {
+      poopSpot.classList.remove("is-cleaning");
+      delete poopSpot.dataset.cleaning;
     });
     return;
+  }
+  // Keyboard activate today's symptoms / cycle snapshot cards (Enter).
+  if (e.target.id === "today-symptoms-card") {
+    // Treat as click on data-modal so existing logic handles it.
   }
   const open = e.target.closest("[data-modal]");
   if (open) { e.preventDefault(); openModal(open.dataset.modal); return; }
