@@ -229,17 +229,23 @@ body.modal-open{overflow:hidden}
    ===================================================================== */
 .donations-grid{
   display:grid;
-  grid-template-columns:minmax(0,2fr) minmax(280px,1fr);
-  gap:18px;align-items:stretch;margin-bottom:18px;
+  grid-template-columns:minmax(0,2.2fr) minmax(300px,1fr);
+  gap:20px;align-items:stretch;margin-bottom:20px;
 }
 @media (max-width:1080px){.donations-grid{grid-template-columns:1fr;gap:14px}}
 .donations-graph-col,
 .donations-side-col{min-width:0;display:flex;flex-direction:column}
 
-/* Graph card grows to fill its column so its bottom edge matches HoH. */
+/* Graph card grows to fill its column. SVG keeps its aspect ratio so the
+   chart doesn't squash, but the card body itself stretches. */
 .donations-graph-col .dgraph-wrap{flex:1;display:flex;flex-direction:column}
-.donations-graph-col .dgraph-svg-wrap{flex:1;min-height:0;display:flex;align-items:stretch}
-.donations-graph-col .dgraph{flex:1;min-height:240px}
+.donations-graph-col .dgraph-svg-wrap{
+  flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  padding:6px 0;
+}
+.donations-graph-col .dgraph{
+  width:100%;height:auto;min-height:300px;
+}
 
 /* Hall of Heroes — fills column, scrolls if list is long. */
 .donations-board-card{
@@ -254,9 +260,26 @@ body.modal-open{overflow:hidden}
 .donations-board-card .board-list{
   display:flex;flex-direction:column;gap:8px;
   flex:1;min-height:0;overflow-y:auto;padding-right:2px;
+  /* When the only child is the .board-empty placeholder, centre it. */
+  justify-content:flex-start;
 }
+.donations-board-card .board-list:has(.board-empty){justify-content:center;align-items:center}
 .donations-board-card .board-list::-webkit-scrollbar{width:6px}
 .donations-board-card .board-list::-webkit-scrollbar-thumb{background:#ffd6e0;border-radius:6px}
+
+/* Bigger, friendlier empty-state inside the leaderboard card. */
+.board-empty{
+  list-style:none;display:flex;flex-direction:column;align-items:center;gap:8px;
+  background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+  border:1px dashed #ffd6e0;border-radius:14px;
+  padding:24px 18px;text-align:center;width:100%;max-width:280px;
+}
+.board-empty-art{
+  width:54px;height:54px;border-radius:50%;display:grid;place-items:center;
+  font-size:28px;background:#fff;box-shadow:0 6px 18px rgba(255,77,138,.18);
+}
+.board-empty strong{font-size:14px;color:#2b1922;font-weight:800}
+.board-empty span{font-size:12px;color:#7a5f6c;line-height:1.5}
 .donations-board-card .board-row{padding:10px 12px;gap:10px;border-radius:12px}
 .donations-board-card .board-rank{width:26px;height:26px;font-size:11px}
 .donations-board-card .board-body strong{font-size:13px}

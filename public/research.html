@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/styles.css?v=2" />
   <link rel="stylesheet" href="/dashboard.css?v=7" />
   <link rel="stylesheet" href="/profile.css?v=1" />
-  <link rel="stylesheet" href="/donate.css?v=3" />
+  <link rel="stylesheet" href="/donate.css?v=4" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -63,7 +63,6 @@
         <a href="/community"><span class="ico">💬</span> Community</a>
         <a href="/explore"><span class="ico">🌌</span> Research</a>
         <a class="active" href="/research"><span class="ico">🎗</span> Donations</a>
-        <a href="/profile"><span class="ico">👤</span> Profile</a>
       </nav>
     </aside>
 
@@ -125,7 +124,11 @@
             </div>
             <p class="board-card-sub">Top donors. Every amount counts.</p>
             <ol class="board-list" id="board-list">
-              <li class="empty-state small">Loading…</li>
+              <li class="empty-state board-empty">
+                <div class="board-empty-art">🏆</div>
+                <strong>Be the first hero on the wall.</strong>
+                <span>Tap any amount on the donate strip below and your name lands here.</span>
+              </li>
             </ol>
           </section>
         </aside>
@@ -190,6 +193,6 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1" defer></script>
   <script src="/home-donate.js?v=5" defer></script>
-  <script src="/research.js?v=1" defer></script>
+  <script src="/research.js?v=2" defer></script>
 </body>
 </html>

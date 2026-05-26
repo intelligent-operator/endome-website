@@ -22,7 +22,12 @@ console.info("EndoMe research build v1");
       const data = await fetch("/api/donations/leaderboard").then((r) => r.json());
       const donors = data.donors || [];
       if (!donors.length) {
-        el.innerHTML = `<li class="empty-state">Be the first hero on the wall. Tap a donate amount above.</li>`;
+        el.innerHTML = `
+          <li class="empty-state board-empty">
+            <div class="board-empty-art">🏆</div>
+            <strong>Be the first hero on the wall.</strong>
+            <span>Tap any amount on the donate strip below and your name lands here.</span>
+          </li>`;
         return;
       }
       el.innerHTML = donors.map((d, i) => `
