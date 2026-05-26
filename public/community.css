@@ -8,6 +8,155 @@
 @media (max-width:1080px){.community-layout{grid-template-columns:1fr;padding:16px 14px 40px}}
 .community-main{display:flex;flex-direction:column;gap:24px;min-width:0}
 
+/* ---------- Sub-nav (Dashboard · Circles · Stories · Resources) ---------- */
+.community-subnav{
+  display:flex;gap:6px;padding:6px;background:#fff;border:1px solid #ffeaf2;
+  border-radius:14px;box-shadow:0 4px 14px rgba(255,77,138,.05);
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  position:sticky;top:0;z-index:10;
+}
+.csn-tab{
+  flex:1 0 auto;background:transparent;border:none;cursor:pointer;
+  font-family:inherit;font-size:13px;font-weight:600;color:#7a5f6c;
+  padding:10px 16px;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  transition:background .15s, color .15s, transform .12s;
+  white-space:nowrap;
+}
+.csn-tab:hover{background:#fff5f8;color:#ff4e8a}
+.csn-tab.is-active{
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  box-shadow:0 6px 14px rgba(255,77,138,.25);
+}
+.csn-tab.is-active:hover{color:#fff}
+.csn-ico{font-size:14px;line-height:1}
+@media (max-width:560px){
+  .csn-label{display:none}
+  .csn-tab{padding:10px 14px}
+  .csn-ico{font-size:18px}
+}
+
+/* ---------- Stats strip (community dashboard) ---------- */
+.stats-strip{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;
+}
+.stat-tile{
+  display:flex;align-items:center;gap:12px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:14px;
+  padding:14px 16px;box-shadow:0 4px 12px rgba(255,77,138,.05);
+  transition:transform .12s, box-shadow .14s;
+}
+.stat-tile:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(255,77,138,.10)}
+.stat-tile-ico{
+  width:42px;height:42px;border-radius:12px;
+  background:linear-gradient(135deg,#fff0f5,#ffe2eb);
+  display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;
+}
+.stat-tile-body{min-width:0}
+.stat-tile-num{display:block;font-size:22px;font-weight:800;color:#2b1922;letter-spacing:-.4px;line-height:1.1}
+.stat-tile-label{font-size:11px;color:#7a5f6c;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.stat-tile-label em{display:block;font-style:normal;font-size:10px;color:#a08596;text-transform:none;letter-spacing:0;margin-top:2px;font-weight:500}
+.stat-tile.is-week{background:linear-gradient(135deg,#fff5f8,#ffeaf2);border-color:#ffd6e0}
+.stat-tile[data-skel] .stat-tile-num{color:transparent;background:linear-gradient(90deg,#ffeaf2,#ffd6e0,#ffeaf2);background-size:200% 100%;border-radius:6px;animation:skel 1.4s linear infinite}
+@keyframes skel{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ---------- Dashboard grid (Top circles + Recent activity) ---------- */
+.dash-grid-2{display:grid;grid-template-columns:1.2fr 1fr;gap:18px}
+@media (max-width:860px){.dash-grid-2{grid-template-columns:1fr}}
+
+.link-btn{
+  background:transparent;border:none;color:#ff4e8a;font-family:inherit;
+  font-size:13px;font-weight:600;cursor:pointer;padding:6px 10px;border-radius:8px;
+}
+.link-btn:hover{background:#fff5f8}
+
+/* Activity feed */
+.activity-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.activity-item{background:#fff;border:1px solid #ffeaf2;border-radius:14px;overflow:hidden;transition:border-color .15s, transform .12s}
+.activity-item:hover{border-color:#ffd6e0;transform:translateY(-1px)}
+.activity-link{
+  display:flex;gap:12px;padding:12px 14px;text-decoration:none;color:inherit;
+}
+.activity-avatar{
+  width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+}
+.activity-body{flex:1;min-width:0}
+.activity-head{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.activity-head strong{font-size:13px;color:#2b1922}
+.activity-meta{font-size:11px;color:#7a5f6c}
+.activity-body-text{
+  margin:2px 0 4px;font-size:13px;color:#3a2330;line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.activity-time{font-size:11px;color:#a08596}
+
+/* Mini circle card (dashboard top circles) */
+.circles-grid.mini{grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.circles-grid.mini{grid-template-columns:1fr}}
+.circle-card.mini{
+  text-decoration:none;color:inherit;padding:12px 14px;gap:0;
+}
+.circle-card.mini .circle-card-top{gap:10px}
+.circle-card.mini .circle-card-icon{width:38px;height:38px;font-size:18px;border-radius:11px}
+.circle-card.mini .circle-card-name{font-size:14px;margin-bottom:2px}
+.circle-card.mini .circle-card-meta{font-size:11px}
+
+/* Type pill (Open / Private) */
+.type-pill{
+  display:inline-block;background:#e6f7e0;color:#3a9b4b;
+  padding:3px 9px;border-radius:999px;font-size:10px;font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase;
+}
+.type-pill.small{padding:2px 7px;font-size:9px}
+.type-pill.is-private{background:#f3eafc;color:#7a4ec2}
+.circle-hero-card-top .type-pill{background:rgba(255,255,255,.95);color:#2b9b48}
+
+/* Soft hero variant for stories/resources views */
+.community-hero.soft{
+  background:linear-gradient(135deg,#fff5f8,#fff);
+}
+
+/* Coming-soon + resource cards */
+.coming-soon-card{
+  background:#fff;border:1px dashed #ffd6e0;border-radius:18px;
+  padding:32px 24px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;
+}
+.coming-soon-emoji{font-size:42px}
+.coming-soon-card h3{margin:0;font-size:20px;color:#2b1922}
+.coming-soon-card p{margin:0 auto;font-size:14px;color:#5a3a48;max-width:480px;line-height:1.55}
+
+.resources-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.resource-card{
+  background:#fff;border:1px solid #ffeaf2;border-radius:18px;
+  padding:20px;display:flex;flex-direction:column;gap:8px;
+  transition:transform .14s, box-shadow .14s, border-color .14s;
+}
+.resource-card:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(255,77,138,.10);border-color:#ffd6e0}
+.resource-tag{
+  align-self:flex-start;font-size:10px;font-weight:700;color:#ff4e8a;
+  background:#fff5f8;padding:3px 9px;border-radius:999px;letter-spacing:.06em;text-transform:uppercase;
+}
+.resource-card h3{margin:0;font-size:16px;color:#2b1922;line-height:1.3}
+.resource-card p{margin:0;font-size:13px;color:#5a3a48;line-height:1.5;flex:1}
+.resource-soon{
+  align-self:flex-start;font-size:11px;font-weight:600;color:#a08596;
+  background:#fff5f8;padding:3px 10px;border-radius:999px;
+}
+
+/* Circle hero meta: separator dot */
+.dot-sep{color:#d8b9c5}
+
+/* Compose with avatar */
+.compose-prompt{display:flex;gap:10px;align-items:flex-start}
+.compose-prompt .author-avatar{width:32px;height:32px;font-size:12px;flex-shrink:0}
+.compose-prompt textarea{flex:1}
+
+/* Reply button gets a "Comment" label on wider screens */
+.react-btn .react-label{display:none;font-weight:600;font-size:12px;margin-left:2px}
+@media (min-width:520px){.react-btn .react-label{display:inline}}
+
 /* ---------- Hero ---------- */
 .community-hero{
   background:linear-gradient(135deg,#fff5f8 0%, #ffe7ee 50%, #ffd6e0 100%);

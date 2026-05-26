@@ -151,6 +151,9 @@ export default {
           if (url.pathname === "/api/me/community" && request.method === "GET") {
             return jsonHeaders(await getCommunityHub(env, user));
           }
+          if (url.pathname === "/api/me/community/stats" && request.method === "GET") {
+            return jsonHeaders(await getCommunityStats(env, user));
+          }
           if (url.pathname === "/api/me/community/circles" && request.method === "POST") {
             return jsonHeaders(await postCreateCircle(request, env, user));
           }
@@ -3241,6 +3244,113 @@ async function getCommunityHub(env, user) {
   });
 }
 
+// --- /api/me/community/stats ---------------------------------------------
+// Aggregate dashboard for the community landing page. One round-trip per
+// metric — each tolerant of missing tables so a fresh DB doesn't 500 us.
+async function getCommunityStats(env, user) {
+  await ensureOfficialCircle(env);
+  await autoJoinOfficialCircle(env, user.id);
+
+  const weekAgo = nowSec() - 7 * 86400;
+
+  const safe = async (sql, binds = []) => {
+    try {
+      return await env.DB.prepare(sql).bind(...binds).first();
+    } catch (err) {
+      console.warn("stats query failed:", err?.message || err);
+      return null;
+    }
+  };
+  const safeAll = async (sql, binds = []) => {
+    try {
+      return (await env.DB.prepare(sql).bind(...binds).all())?.results || [];
+    } catch (err) {
+      console.warn("stats list failed:", err?.message || err);
+      return [];
+    }
+  };
+
+  const [
+    users, circleCounts, postCounts, replyCount, heartCount,
+    activeWeek, postsWeek, distinctCircleMembers,
+  ] = await Promise.all([
+    safe("SELECT COUNT(*) AS n FROM users"),
+    safe(
+      "SELECT COUNT(*) AS total, " +
+      "       SUM(CASE WHEN is_open = 1 THEN 1 ELSE 0 END) AS open_count, " +
+      "       SUM(CASE WHEN is_open = 0 THEN 1 ELSE 0 END) AS private_count " +
+      "FROM circles"
+    ),
+    safe("SELECT COUNT(*) AS n FROM circle_posts WHERE deleted_at IS NULL"),
+    safe("SELECT COUNT(*) AS n FROM circle_replies WHERE deleted_at IS NULL"),
+    safe("SELECT COUNT(*) AS n FROM circle_reactions WHERE reaction = 'heart'"),
+    safe(
+      "SELECT COUNT(DISTINCT user_id) AS n FROM (" +
+      "  SELECT user_id FROM circle_posts WHERE created_at >= ? AND deleted_at IS NULL " +
+      "  UNION " +
+      "  SELECT user_id FROM circle_replies WHERE created_at >= ? AND deleted_at IS NULL" +
+      ")",
+      [weekAgo, weekAgo]
+    ),
+    safe(
+      "SELECT COUNT(*) AS n FROM circle_posts WHERE created_at >= ? AND deleted_at IS NULL",
+      [weekAgo]
+    ),
+    safe("SELECT COUNT(DISTINCT user_id) AS n FROM circle_members"),
+  ]);
+
+  const topCircles = await safeAll(
+    "SELECT c.id, c.slug, c.name, c.description, c.is_official, c.is_open, " +
+    "       (SELECT COUNT(*) FROM circle_members m WHERE m.circle_id = c.id) AS member_count, " +
+    "       (SELECT COUNT(*) FROM circle_posts p WHERE p.circle_id = c.id AND p.deleted_at IS NULL) AS post_count " +
+    "FROM circles c ORDER BY c.is_official DESC, member_count DESC, post_count DESC LIMIT 4"
+  );
+
+  const recentActivity = await safeAll(
+    "SELECT p.id, p.body, p.created_at, p.is_question, " +
+    "       c.slug AS circle_slug, c.name AS circle_name, c.is_official, " +
+    "       u.display_name AS author_name, u.username AS author_username " +
+    "FROM circle_posts p " +
+    "JOIN circles c ON c.id = p.circle_id " +
+    "LEFT JOIN users u ON u.id = p.user_id " +
+    "WHERE p.deleted_at IS NULL " +
+    "ORDER BY p.created_at DESC LIMIT 6"
+  );
+
+  return json({
+    totals: {
+      members:       users?.n || 0,
+      circleMembers: distinctCircleMembers?.n || 0,
+      circles:       circleCounts?.total || 0,
+      openCircles:   circleCounts?.open_count || 0,
+      privateCircles: circleCounts?.private_count || 0,
+      posts:         postCounts?.n || 0,
+      replies:       replyCount?.n || 0,
+      hearts:        heartCount?.n || 0,
+      stories:       0, // Community Stories aren't writeable yet — wired up when they go live.
+    },
+    thisWeek: {
+      activeMembers: activeWeek?.n || 0,
+      posts:         postsWeek?.n || 0,
+    },
+    topCircles: topCircles.map((c) => ({
+      id: c.id, slug: c.slug, name: c.name, description: c.description,
+      isOfficial: !!c.is_official, isOpen: !!c.is_open,
+      memberCount: c.member_count || 0, postCount: c.post_count || 0,
+    })),
+    recentActivity: recentActivity.map((p) => ({
+      id: p.id,
+      body: String(p.body || "").slice(0, 200),
+      createdAt: p.created_at,
+      isQuestion: !!p.is_question,
+      circleSlug: p.circle_slug,
+      circleName: p.circle_name,
+      circleOfficial: !!p.is_official,
+      authorName: p.author_name || p.author_username || "Someone",
+    })),
+  });
+}
+
 // --- POST /api/me/community/circles --------------------------------------
 async function postCreateCircle(request, env, user) {
   const body = await readJsonSafe(request);
@@ -3286,12 +3396,26 @@ async function getCircleDetail(env, user, slug) {
     circle = await env.DB.prepare(
       "SELECT c.*, " +
       "       (SELECT COUNT(*) FROM circle_members m WHERE m.circle_id = c.id) AS member_count, " +
+      "       (SELECT COUNT(*) FROM circle_posts p WHERE p.circle_id = c.id AND p.deleted_at IS NULL) AS posts_count, " +
       "       (SELECT role FROM circle_members m WHERE m.circle_id = c.id AND m.user_id = ?) AS my_role " +
       "FROM circles c WHERE c.slug = ? LIMIT 1"
     ).bind(user.id, slug).first();
   } catch (err) { console.warn("getCircleDetail:", err?.message); }
 
   if (!circle) return json({ error: "Circle not found" }, 404);
+
+  // The official EndoMe circle is for everyone — auto-join newbies the moment
+  // they open it, so they can post immediately without an extra "Join" tap.
+  if (circle.is_official && !circle.my_role) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO circle_members (circle_id, user_id, role, joined_at) " +
+        "VALUES (?, ?, 'member', ?) ON CONFLICT DO NOTHING"
+      ).bind(circle.id, user.id, nowSec()).run();
+      circle.my_role = "member";
+      circle.member_count = (circle.member_count || 0) + 1;
+    } catch (err) { console.warn("auto-join official circle:", err?.message); }
+  }
 
   let posts = { results: [] };
   try {
@@ -3313,6 +3437,7 @@ async function getCircleDetail(env, user, slug) {
       description: circle.description, isOfficial: !!circle.is_official,
       isOpen: !!circle.is_open, createdAt: circle.created_at,
       memberCount: circle.member_count || 0,
+      postsCount:  circle.posts_count || 0,
       myRole: circle.my_role || null, // null if not a member
     },
     posts: (posts.results || []).map((p) => ({

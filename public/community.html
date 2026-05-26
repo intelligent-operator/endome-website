@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <title>Community – EndoMe</title>
   <meta name="robots" content="noindex,nofollow" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -12,8 +14,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="stylesheet" href="/dashboard.css" />
-  <link rel="stylesheet" href="/community.css" />
+  <link rel="stylesheet" href="/dashboard.css?v=4" />
+  <link rel="stylesheet" href="/community.css?v=2" />
 </head>
 <body class="dash-body">
   <div id="page-loader" class="page-loader">
@@ -57,13 +59,29 @@
     </aside>
 
     <main class="dash-main community-main">
-      <!-- HUB VIEW -->
-      <section id="view-hub" class="community-view">
+      <!-- Community sub-nav (Dashboard · Circles · Community Stories · Resources) -->
+      <nav class="community-subnav" id="community-subnav" role="tablist">
+        <button class="csn-tab" data-tab="dashboard" role="tab">
+          <span class="csn-ico">📊</span><span class="csn-label">Dashboard</span>
+        </button>
+        <button class="csn-tab" data-tab="circles" role="tab">
+          <span class="csn-ico">🌸</span><span class="csn-label">Circles</span>
+        </button>
+        <button class="csn-tab" data-tab="stories" role="tab">
+          <span class="csn-ico">📖</span><span class="csn-label">Community Stories</span>
+        </button>
+        <button class="csn-tab" data-tab="resources" role="tab">
+          <span class="csn-ico">📚</span><span class="csn-label">Resources</span>
+        </button>
+      </nav>
+
+      <!-- ===================== DASHBOARD VIEW (default landing) ===================== -->
+      <section id="view-dashboard" class="community-view">
         <header class="community-hero">
           <div>
             <p class="hero-eyebrow">Community</p>
-            <h1>Where everyone gets it.</h1>
-            <p class="hero-lead">Drop into the main EndoMe circle, or join one of the smaller circles built for specific journeys.</p>
+            <h1>You're not walking this alone.</h1>
+            <p class="hero-lead">A safe corner of the internet built around endo. Drop into the main EndoMe circle, find your smaller crowd, or share what you've learned.</p>
           </div>
           <div class="tier-card" id="tier-card">
             <span class="tier-label" id="tier-label">…</span>
@@ -71,7 +89,79 @@
           </div>
         </header>
 
-        <!-- The official EndoMe circle, pinned to the top when the user is in it. -->
+        <!-- KPI strip -->
+        <section class="stats-strip" id="stats-strip">
+          <article class="stat-tile" data-skel>
+            <div class="stat-tile-ico">👥</div>
+            <div class="stat-tile-body">
+              <strong class="stat-tile-num" id="stat-members">—</strong>
+              <span class="stat-tile-label">members</span>
+            </div>
+          </article>
+          <article class="stat-tile" data-skel>
+            <div class="stat-tile-ico">🌸</div>
+            <div class="stat-tile-body">
+              <strong class="stat-tile-num" id="stat-circles">—</strong>
+              <span class="stat-tile-label">circles <em id="stat-circles-mix"></em></span>
+            </div>
+          </article>
+          <article class="stat-tile" data-skel>
+            <div class="stat-tile-ico">💬</div>
+            <div class="stat-tile-body">
+              <strong class="stat-tile-num" id="stat-posts">—</strong>
+              <span class="stat-tile-label">posts shared</span>
+            </div>
+          </article>
+          <article class="stat-tile" data-skel>
+            <div class="stat-tile-ico">💖</div>
+            <div class="stat-tile-body">
+              <strong class="stat-tile-num" id="stat-hearts">—</strong>
+              <span class="stat-tile-label">hearts given</span>
+            </div>
+          </article>
+          <article class="stat-tile" data-skel>
+            <div class="stat-tile-ico">📖</div>
+            <div class="stat-tile-body">
+              <strong class="stat-tile-num" id="stat-stories">—</strong>
+              <span class="stat-tile-label">stories shared</span>
+            </div>
+          </article>
+          <article class="stat-tile is-week" data-skel>
+            <div class="stat-tile-ico">✨</div>
+            <div class="stat-tile-body">
+              <strong class="stat-tile-num" id="stat-active">—</strong>
+              <span class="stat-tile-label">active this week</span>
+            </div>
+          </article>
+        </section>
+
+        <!-- Top circles + recent activity -->
+        <div class="dash-grid-2">
+          <section class="community-section">
+            <div class="section-head">
+              <h2>Top circles</h2>
+              <button class="link-btn" data-tab-link="circles">See all →</button>
+            </div>
+            <div id="top-circles" class="circles-grid mini">
+              <p class="empty-state">Loading…</p>
+            </div>
+          </section>
+
+          <section class="community-section">
+            <div class="section-head">
+              <h2>Recent activity</h2>
+              <span class="section-hint">Across all circles</span>
+            </div>
+            <ul id="recent-activity" class="activity-list">
+              <li class="empty-state">Loading…</li>
+            </ul>
+          </section>
+        </div>
+      </section>
+
+      <!-- ===================== CIRCLES VIEW ===================== -->
+      <section id="view-circles" class="community-view" hidden>
+        <!-- Pinned official circle -->
         <section class="community-section" id="official-section" hidden>
           <div id="official-card-slot"></div>
         </section>
@@ -93,34 +183,82 @@
             <p class="empty-state">Loading…</p>
           </div>
         </section>
+      </section>
 
-        <section class="community-section community-extras">
-          <article class="extras-card">
-            <h3>📖 Community stories</h3>
-            <p>Soon — curated reflections from real people walking this path.</p>
-            <span class="extras-soon">Coming soon</span>
-          </article>
-          <article class="extras-card">
-            <h3>📚 Resources</h3>
-            <p>Soon — vetted articles, guides, and trusted information.</p>
-            <span class="extras-soon">Coming soon</span>
-          </article>
+      <!-- ===================== STORIES VIEW ===================== -->
+      <section id="view-stories" class="community-view" hidden>
+        <header class="community-hero soft">
+          <div>
+            <p class="hero-eyebrow">Community Stories</p>
+            <h1>Real stories from real people.</h1>
+            <p class="hero-lead">Long-form reflections from people on this same path. Curated, gentle, never preachy.</p>
+          </div>
+        </header>
+        <section class="community-section">
+          <div class="coming-soon-card">
+            <span class="coming-soon-emoji">📖</span>
+            <h3>Coming soon</h3>
+            <p>We're working with our first wave of contributors. If you've got a story you want to share when this opens, we'd love to hear from you.</p>
+            <a href="mailto:contact@endome.com?subject=My%20EndoMe%20story" class="btn btn-primary">Pitch a story</a>
+          </div>
         </section>
       </section>
 
-      <!-- CIRCLE VIEW -->
+      <!-- ===================== RESOURCES VIEW ===================== -->
+      <section id="view-resources" class="community-view" hidden>
+        <header class="community-hero soft">
+          <div>
+            <p class="hero-eyebrow">Resources</p>
+            <h1>Trusted reading, when you need it.</h1>
+            <p class="hero-lead">A curated library of articles, guides, and links our community has actually found useful.</p>
+          </div>
+        </header>
+        <section class="community-section">
+          <div class="resources-grid">
+            <article class="resource-card">
+              <span class="resource-tag">Guides</span>
+              <h3>What is endometriosis?</h3>
+              <p>A plain-English overview — symptoms, diagnosis pathways, and the big questions to bring to your GP.</p>
+              <span class="resource-soon">Coming soon</span>
+            </article>
+            <article class="resource-card">
+              <span class="resource-tag">GP visit</span>
+              <h3>Preparing for your GP appointment</h3>
+              <p>A printable checklist with the right questions to ask — and how to bring your symptom log.</p>
+              <span class="resource-soon">Coming soon</span>
+            </article>
+            <article class="resource-card">
+              <span class="resource-tag">Pain</span>
+              <h3>Managing flare days</h3>
+              <p>Heat, rest, hydration, meds — what's actually backed by research and what's just folklore.</p>
+              <span class="resource-soon">Coming soon</span>
+            </article>
+            <article class="resource-card">
+              <span class="resource-tag">Mental health</span>
+              <h3>Endo & mental load</h3>
+              <p>It's not "just in your head". Resources for the emotional side of chronic illness.</p>
+              <span class="resource-soon">Coming soon</span>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <!-- ===================== INDIVIDUAL CIRCLE VIEW (existing) ===================== -->
       <section id="view-circle" class="community-view" hidden>
-        <a href="/community" class="back-link" data-go-hub>← Back to community</a>
+        <a href="/community?tab=circles" class="back-link" data-go-circles>← Back to circles</a>
         <header class="circle-hero">
           <div class="circle-hero-icon">💬</div>
           <div class="circle-hero-body">
             <div class="circle-hero-top">
               <h1 id="circle-name">Circle</h1>
               <span id="circle-official" class="official-pill" hidden>Official</span>
+              <span id="circle-type-pill" class="type-pill">Open</span>
             </div>
             <p id="circle-desc" class="circle-desc"></p>
             <div class="circle-meta">
               <span id="circle-members">— members</span>
+              <span class="dot-sep">·</span>
+              <span id="circle-posts-count">— posts</span>
               <span id="circle-role" hidden></span>
             </div>
           </div>
@@ -131,7 +269,10 @@
         </header>
 
         <section id="compose-card" class="compose-card" hidden>
-          <textarea id="compose-body" placeholder="Share what's on your mind. A question, a win, a soft day — anything." maxlength="2000" rows="3"></textarea>
+          <div class="compose-prompt">
+            <div class="author-avatar small" id="compose-avatar">Y</div>
+            <textarea id="compose-body" placeholder="Share what's on your mind — a question, a small win, a soft day, anything." maxlength="2000" rows="3"></textarea>
+          </div>
           <div class="compose-foot">
             <label class="compose-question">
               <input type="checkbox" id="compose-question" />
@@ -170,6 +311,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/community.js" defer></script>
+  <script src="/community.js?v=2" defer></script>
 </body>
 </html>

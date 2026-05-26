@@ -1,64 +1,226 @@
+// Community — sub-tabs (Dashboard / Circles / Stories / Resources) +
+// individual circle view. Routing via the ?tab=… and ?c=… query params.
+console.info("EndoMe community build v2");
+
 (() => {
-  const viewHub    = document.getElementById("view-hub");
-  const viewCircle = document.getElementById("view-circle");
+  const views = {
+    dashboard: document.getElementById("view-dashboard"),
+    circles:   document.getElementById("view-circles"),
+    stories:   document.getElementById("view-stories"),
+    resources: document.getElementById("view-resources"),
+    circle:    document.getElementById("view-circle"),
+  };
+  const TABS = ["dashboard", "circles", "stories", "resources"];
+
   let myTier = null;
   let currentCircle = null;
+  let me = null;
 
-  // --- Routing -----------------------------------------------------------
+  // --- Routing ----------------------------------------------------------
   function parseRoute() {
     const params = new URLSearchParams(location.search);
     const slug = params.get("c");
-    return slug ? { kind: "circle", slug } : { kind: "hub" };
+    if (slug) return { kind: "circle", slug };
+    const tab = params.get("tab");
+    if (TABS.includes(tab)) return { kind: "tab", tab };
+    return { kind: "tab", tab: "dashboard" };
   }
-  function goHub(push = true) {
-    if (push) history.pushState({}, "", "/community");
-    showView("hub");
-    loadHub();
+  function goTab(tab, push = true) {
+    if (!TABS.includes(tab)) tab = "dashboard";
+    if (push) {
+      const u = new URL(location.href);
+      u.searchParams.delete("c");
+      if (tab === "dashboard") u.searchParams.delete("tab");
+      else u.searchParams.set("tab", tab);
+      history.pushState({}, "", u.toString());
+    }
+    showView(tab);
+    paintActiveTab(tab);
+    if (tab === "dashboard") loadDashboard();
+    if (tab === "circles")   loadCirclesHub();
   }
   function goCircle(slug, push = true) {
     if (push) history.pushState({}, "", `/community?c=${encodeURIComponent(slug)}`);
     showView("circle");
+    paintActiveTab("circles"); // circle is "inside" circles
     loadCircle(slug);
   }
   function showView(name) {
-    viewHub.hidden    = name !== "hub";
-    viewCircle.hidden = name !== "circle";
+    for (const [k, el] of Object.entries(views)) {
+      if (!el) continue;
+      el.hidden = k !== name;
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function paintActiveTab(tab) {
+    document.querySelectorAll(".csn-tab").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.tab === tab);
+      b.setAttribute("aria-selected", b.dataset.tab === tab ? "true" : "false");
+    });
   }
   window.addEventListener("popstate", () => {
     const r = parseRoute();
     if (r.kind === "circle") goCircle(r.slug, false);
-    else goHub(false);
+    else goTab(r.tab, false);
+  });
+
+  // Sub-nav tab clicks
+  document.querySelectorAll(".csn-tab").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      goTab(btn.dataset.tab);
+    });
+  });
+  document.addEventListener("click", (e) => {
+    const tabLink = e.target.closest("[data-tab-link]");
+    if (tabLink) { e.preventDefault(); goTab(tabLink.dataset.tabLink); }
+    if (e.target.closest("[data-go-circles]")) { e.preventDefault(); goTab("circles"); }
   });
 
   // --- Bootstrap --------------------------------------------------------
   (async () => {
     try {
-      const me = await fetchJson("/api/me/today");
+      me = await fetchJson("/api/me/today");
       document.querySelectorAll("[data-bind='displayName']").forEach((el) => {
         el.textContent = me?.user?.displayName || me?.user?.username || "there";
       });
     } catch {}
     const r = parseRoute();
     if (r.kind === "circle") await loadCircle(r.slug);
-    else await loadHub();
+    else goTab(r.tab, false);
     document.getElementById("page-loader")?.classList.add("is-hidden");
   })();
 
-  // --- Hub --------------------------------------------------------------
-  async function loadHub() {
+  // ====================================================================
+  // DASHBOARD VIEW — community-wide stats + top circles + recent activity
+  // ====================================================================
+  async function loadDashboard() {
+    // The hub call gives us tier + my circles for the official-circle hero;
+    // stats gives the KPI numbers and activity list.
+    const [hub, stats] = await Promise.all([
+      fetchJson("/api/me/community").catch(() => null),
+      fetchJson("/api/me/community/stats").catch(() => null),
+    ]);
+    if (hub) {
+      myTier = hub.tier;
+      renderTier(hub.tier);
+    }
+    if (stats) renderStats(stats);
+    else renderStatsError();
+  }
+
+  function renderTier(t) {
+    if (!t) return;
+    document.getElementById("tier-label").textContent = t.label;
+    const card = document.getElementById("tier-card");
+    card.dataset.tier = t.key;
+    const meta = document.getElementById("tier-meta");
+    if (t.canCreateCircle) {
+      meta.textContent = `${t.distinctLogDays} logged days · you can create circles ✨`;
+    } else if (t.nextLabel) {
+      const left = Math.max(0, (t.nextMinDays || 0) - (t.distinctLogDays || 0));
+      meta.textContent = `${t.distinctLogDays} logged days · ${left} more to reach ${t.nextLabel}`;
+    } else {
+      meta.textContent = `${t.distinctLogDays} logged days`;
+    }
+  }
+
+  function renderStats(s) {
+    const t = s.totals || {};
+    const w = s.thisWeek || {};
+    setNum("stat-members", t.members);
+    setNum("stat-circles", t.circles);
+    const mix = document.getElementById("stat-circles-mix");
+    if (mix) mix.textContent = (t.openCircles || t.privateCircles)
+      ? `${t.openCircles} open · ${t.privateCircles} private` : "";
+    setNum("stat-posts",   t.posts);
+    setNum("stat-hearts",  t.hearts);
+    setNum("stat-stories", t.stories);
+    setNum("stat-active",  w.activeMembers);
+
+    document.querySelectorAll(".stat-tile[data-skel]").forEach((el) => el.removeAttribute("data-skel"));
+
+    // Top circles grid (mini cards)
+    const tcEl = document.getElementById("top-circles");
+    const tops = s.topCircles || [];
+    if (!tops.length) {
+      tcEl.innerHTML = `<p class="empty-state">No circles yet.</p>`;
+    } else {
+      tcEl.innerHTML = tops.map(miniCircleCard).join("");
+    }
+
+    // Recent activity
+    const raEl = document.getElementById("recent-activity");
+    const acts = s.recentActivity || [];
+    if (!acts.length) {
+      raEl.innerHTML = `<li class="empty-state">Nothing posted yet — be the first.</li>`;
+    } else {
+      raEl.innerHTML = acts.map(activityRow).join("");
+    }
+  }
+  function renderStatsError() {
+    document.querySelectorAll(".stat-tile-num").forEach((el) => el.textContent = "—");
+  }
+  function setNum(id, n) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = formatNum(n);
+  }
+  function formatNum(n) {
+    if (n == null) return "—";
+    if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k";
+    return String(n);
+  }
+  function miniCircleCard(c) {
+    return `<a class="circle-card mini ${c.isOfficial ? "is-official" : ""}" href="/community?c=${encodeURIComponent(c.slug)}" data-open="${escapeHtml(c.slug)}">
+      <div class="circle-card-top">
+        <div class="circle-card-icon">${c.isOfficial ? "🌸" : "💬"}</div>
+        <div class="circle-card-body">
+          <div class="circle-card-name">
+            ${escapeHtml(c.name)}
+            ${c.isOfficial ? `<span class="official-pill small">Official</span>` : ""}
+            <span class="type-pill small">${c.isOpen ? "Open" : "Private"}</span>
+          </div>
+          <div class="circle-card-meta">
+            <span>👥 ${c.memberCount}</span>
+            <span>· 💬 ${c.postCount}</span>
+          </div>
+        </div>
+      </div>
+    </a>`;
+  }
+  function activityRow(a) {
+    return `<li class="activity-item">
+      <a href="/community?c=${encodeURIComponent(a.circleSlug)}" class="activity-link" data-open="${escapeHtml(a.circleSlug)}">
+        <div class="activity-avatar">${escapeHtml(initials(a.authorName))}</div>
+        <div class="activity-body">
+          <div class="activity-head">
+            <strong>${escapeHtml(a.authorName)}</strong>
+            <span class="activity-meta">in ${escapeHtml(a.circleName)}${a.circleOfficial ? " · 🌸" : ""}${a.isQuestion ? " · ❓" : ""}</span>
+          </div>
+          <p class="activity-body-text">${escapeHtml(a.body)}</p>
+          <span class="activity-time">${relTime(a.createdAt)}</span>
+        </div>
+      </a>
+    </li>`;
+  }
+
+  // ====================================================================
+  // CIRCLES HUB VIEW
+  // ====================================================================
+  async function loadCirclesHub() {
     try {
       const data = await fetchJson("/api/me/community");
       myTier = data.tier;
       renderTier(data.tier);
 
-      // Pull the official EndoMe circle out so we can spotlight it.
       const my = data.myCircles || [];
       const officialIdx = my.findIndex((c) => c.is_official);
       const official = officialIdx >= 0 ? my.splice(officialIdx, 1)[0] : null;
       renderOfficial(official);
       renderCircles(document.getElementById("my-circles"), my, { showRole: true });
       renderCircles(document.getElementById("discover-circles"), data.discover || [], { showRole: false, withJoin: true });
+
       const createBtn = document.getElementById("btn-create");
       createBtn.disabled = !data.tier.canCreateCircle;
       createBtn.title = data.tier.canCreateCircle
@@ -83,6 +245,7 @@
           <div class="circle-hero-card-top">
             <h2>${escapeHtml(c.name)}</h2>
             <span class="official-pill">Official</span>
+            <span class="type-pill">Open · everyone welcome</span>
             ${c.role ? `<span class="role-pill role-${c.role}">${roleLabel(c.role)}</span>` : ""}
           </div>
           <p>${escapeHtml(desc)}</p>
@@ -100,21 +263,6 @@
     return r === "admin" ? "👑 Admin" : r === "moderator" ? "🛡 Moderator" : "💖 Member";
   }
 
-  function renderTier(t) {
-    document.getElementById("tier-label").textContent = t.label;
-    const card = document.getElementById("tier-card");
-    card.dataset.tier = t.key;
-    const meta = document.getElementById("tier-meta");
-    if (t.canCreateCircle) {
-      meta.textContent = `${t.distinctLogDays} logged days · you can create circles ✨`;
-    } else if (t.nextLabel) {
-      const left = Math.max(0, (t.nextMinDays || 0) - (t.distinctLogDays || 0));
-      meta.textContent = `${t.distinctLogDays} logged days · ${left} more to reach ${t.nextLabel}`;
-    } else {
-      meta.textContent = `${t.distinctLogDays} logged days`;
-    }
-  }
-
   function renderCircles(container, list, opts = {}) {
     if (!list.length) {
       container.innerHTML = opts.withJoin
@@ -130,12 +278,13 @@
             <div class="circle-card-name">
               ${escapeHtml(c.name)}
               ${c.is_official ? `<span class="official-pill small">Official</span>` : ""}
+              <span class="type-pill small">${c.is_open ? "Open" : "Private"}</span>
               ${opts.showRole && c.role ? `<span class="role-pill role-${c.role}">${c.role}</span>` : ""}
             </div>
             <p class="circle-card-desc">${escapeHtml(c.description || "")}</p>
             <div class="circle-card-meta">
-              <span>${c.member_count || 0} member${(c.member_count||0)===1?"":"s"}</span>
-              ${c.post_count != null ? `<span>· ${c.post_count} post${c.post_count===1?"":"s"}</span>` : ""}
+              <span>👥 ${c.member_count || 0} member${(c.member_count||0)===1?"":"s"}</span>
+              ${c.post_count != null ? `<span>· 💬 ${c.post_count} post${c.post_count===1?"":"s"}</span>` : ""}
             </div>
           </div>
         </div>
@@ -167,7 +316,6 @@
       }
       return;
     }
-    if (e.target.closest("[data-go-hub]")) { e.preventDefault(); goHub(); return; }
   });
 
   // --- Create circle modal ----------------------------------------------
@@ -177,12 +325,12 @@
       toast(`Trusted tier needed — keep logging, you'll get there.`, "err");
       return;
     }
-    openModal();
+    openCreateModal();
   });
-  function openModal() { createModal.classList.add("open"); createModal.setAttribute("aria-hidden", "false"); }
-  function closeModal() { createModal.classList.remove("open"); createModal.setAttribute("aria-hidden", "true"); }
+  function openCreateModal() { createModal.classList.add("open"); createModal.setAttribute("aria-hidden", "false"); }
+  function closeCreateModal() { createModal.classList.remove("open"); createModal.setAttribute("aria-hidden", "true"); }
   document.querySelectorAll("[data-close-modal]").forEach((el) =>
-    el.addEventListener("click", (e) => { e.preventDefault(); closeModal(); })
+    el.addEventListener("click", (e) => { e.preventDefault(); closeCreateModal(); })
   );
   document.getElementById("create-circle-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -196,7 +344,7 @@
         body: JSON.stringify({ name: form.name.value, description: form.description.value }),
       });
       toast("Circle created 🌸");
-      closeModal();
+      closeCreateModal();
       form.reset();
       goCircle(data.slug);
     } catch (err) {
@@ -205,7 +353,9 @@
     }
   });
 
-  // --- Circle view ------------------------------------------------------
+  // ====================================================================
+  // INDIVIDUAL CIRCLE VIEW
+  // ====================================================================
   async function loadCircle(slug) {
     try {
       const data = await fetchJson(`/api/me/community/circles/${encodeURIComponent(slug)}`);
@@ -223,11 +373,18 @@
     document.getElementById("circle-desc").textContent = c.description || "A space to share, ask, and support each other.";
     const off = document.getElementById("circle-official");
     off.hidden = !c.isOfficial;
-    document.getElementById("circle-members").textContent = `${c.memberCount} member${c.memberCount === 1 ? "" : "s"}`;
+    document.getElementById("circle-members").textContent = `👥 ${c.memberCount} member${c.memberCount === 1 ? "" : "s"}`;
+    document.getElementById("circle-posts-count").textContent =
+      `💬 ${c.postsCount ?? "—"} post${(c.postsCount ?? 0) === 1 ? "" : "s"}`;
+    const tp = document.getElementById("circle-type-pill");
+    if (tp) {
+      tp.textContent = c.isOpen ? "Open" : "Private";
+      tp.classList.toggle("is-private", !c.isOpen);
+    }
     const roleEl = document.getElementById("circle-role");
     if (c.myRole) {
       roleEl.hidden = false;
-      roleEl.textContent = c.myRole === "admin" ? "👑 Admin" : c.myRole === "moderator" ? "🛡 Moderator" : "💖 Member";
+      roleEl.textContent = roleLabel(c.myRole);
       roleEl.className = `role-pill role-${c.myRole}`;
     } else {
       roleEl.hidden = true;
@@ -239,6 +396,8 @@
       joinBtn.hidden = true;
       leaveBtn.hidden = c.isOfficial; // can't leave official
       composeCard.hidden = false;
+      const avatar = document.getElementById("compose-avatar");
+      if (avatar) avatar.textContent = initials(me?.user?.displayName || me?.user?.username || "Y");
     } else {
       joinBtn.hidden = false;
       leaveBtn.hidden = true;
@@ -262,7 +421,7 @@
     try {
       await fetchJson(`/api/me/community/circles/${currentCircle.slug}/leave`, { method: "POST" });
       toast("Left circle");
-      goHub();
+      goTab("circles");
     } catch (err) {
       toast(err.message || "Couldn't leave", "err");
     }
@@ -330,6 +489,7 @@
           <button class="react-btn" data-toggle-replies="${p.id}">
             <span>💬</span>
             <span class="react-count">${p.replyCount || 0}</span>
+            <span class="react-label">Comment${(p.replyCount||0)===1?"":"s"}</span>
           </button>
         </footer>
         <div class="replies-block" data-replies-block="${p.id}" hidden></div>
@@ -343,7 +503,6 @@
       const id = react.dataset.reactPost;
       try {
         const data = await fetchJson(`/api/me/community/posts/${id}/react`, { method: "POST" });
-        // optimistic
         const heartIcon = react.querySelector("span:first-child");
         const count     = react.querySelector(".react-count");
         const cur = parseInt(count.textContent || "0", 10) || 0;
@@ -401,7 +560,6 @@
         });
         input.value = "";
         await loadReplies(id, block);
-        // refresh post reply count
         await loadCircle(currentCircle.slug);
       } catch (err) {
         toast(err.message || "Couldn't reply", "err");
