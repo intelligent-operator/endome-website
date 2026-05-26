@@ -546,9 +546,9 @@
   <!-- =========================== RESEARCH / DONATE =========================== -->
   <section class="research" id="research">
     <div class="research-inner">
-      <p class="research-eyebrow">Fund the research, not the awareness</p>
-      <h2 class="section-title">From 7 years to <span class="brand">7 weeks</span>.</h2>
-      <p class="research-blurb">Lots of non-profits run events and print pamphlets. We act. Six concrete milestones, public progress, real outcomes — every dollar moves the line.</p>
+      <p class="research-eyebrow">Fund endometriosis research</p>
+      <h2 class="section-title">Help cut a <span class="brand">7-year diagnosis</span> down to weeks.</h2>
+      <p class="research-blurb">Your donation funds real science — an always-on AI engine, working scientists, drug repurposing, multi-site trials. No pamphlets. No events. Just progress, in public.</p>
 
       <!-- Interactive donation graph -->
       <div class="dgraph-wrap" id="dgraph-wrap">
@@ -606,6 +606,28 @@
       </div>
     </div>
   </section>
+
+  <!-- Milestone detail modal (opened on marker click) -->
+  <div class="ms-modal" id="ms-modal" aria-hidden="true" role="dialog">
+    <div class="ms-modal-backdrop" data-close-ms></div>
+    <div class="ms-modal-card">
+      <button class="ms-modal-close" type="button" data-close-ms aria-label="Close">×</button>
+      <div class="ms-modal-head">
+        <span class="ms-modal-emoji" id="ms-modal-emoji">🤖</span>
+        <div>
+          <p class="ms-modal-eyebrow" id="ms-modal-step">Milestone 1</p>
+          <h3 id="ms-modal-title">Title</h3>
+        </div>
+      </div>
+      <div class="ms-modal-stats">
+        <div><strong id="ms-modal-target">$0</strong><span>milestone target</span></div>
+        <div><strong id="ms-modal-cumulative">$0</strong><span>cumulative goal</span></div>
+        <div><strong id="ms-modal-status">Locked</strong><span>status</span></div>
+      </div>
+      <p class="ms-modal-summary" id="ms-modal-summary"></p>
+      <button class="ms-modal-cta" type="button" id="ms-modal-cta">💖 Donate toward this milestone</button>
+    </div>
+  </div>
 
   <!-- =========================== COMMUNITY =========================== -->
   <section class="community" id="community">
@@ -730,6 +752,6 @@
   </footer>
 
   <script src="/app.js" defer></script>
-  <script src="/home-donate.js?v=3" defer></script>
+  <script src="/home-donate.js?v=4" defer></script>
 </body>
 </html>

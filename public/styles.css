@@ -446,9 +446,13 @@ body.is-signed-in .nav-when-out{display:none !important}
   backdrop-filter:blur(6px);
 }
 .perk-ico{
-  width:38px;height:38px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:40px;height:40px;border-radius:50%;
+  display:grid;place-items:center;flex-shrink:0;
   box-shadow:inset 0 0 0 2px rgba(255,255,255,.65);
+  line-height:0;
+}
+.perk-ico > *{
+  grid-area:1/1;justify-self:center;align-self:center;
 }
 .perk-ico svg{
   width:22px !important;height:22px !important;
@@ -780,9 +784,11 @@ body.modal-open{overflow:hidden}
 .research-eyebrow{
   display:inline-block;background:#fff;color:#ff4e8a;
   font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
-  padding:5px 14px;border-radius:999px;margin:0 0 12px;
+  padding:5px 14px;border-radius:999px;margin:0 0 6px;
   box-shadow:0 4px 14px rgba(255,77,138,.08);
 }
+.research .section-title{font-size:30px;letter-spacing:-.4px;margin:0 0 8px;line-height:1.1}
+.research .section-title .brand{color:#ff4e8a}
 .research-blurb{
   max-width:560px;margin:0 auto 28px;
   font-size:15px;line-height:1.55;color:#5a3a48;
@@ -882,8 +888,70 @@ body.modal-open{overflow:hidden}
   border-style:solid;border-width:8px 7px 0 7px;border-color:#1f1218 transparent transparent transparent;
 }
 .dgraph-tooltip strong{display:block;font-size:13px;font-weight:800;margin-bottom:3px}
-.dgraph-tooltip .tip-amount{display:block;font-size:11px;color:#ffb380;font-weight:700;margin-bottom:6px}
+.dgraph-tooltip .tip-amount{display:block;font-size:11px;color:#ffb380;font-weight:700;margin-bottom:2px}
+.dgraph-tooltip .tip-hint{display:block;font-size:10px;color:#9aa6b2;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
 .dgraph-tooltip p{margin:0;font-size:12px;opacity:.92}
+
+/* ============= Milestone detail modal (click on a marker) ============= */
+.ms-modal{
+  position:fixed;inset:0;z-index:200;display:none;
+  align-items:center;justify-content:center;padding:20px;
+}
+.ms-modal.open{display:flex}
+.ms-modal-backdrop{
+  position:absolute;inset:0;background:rgba(31,18,24,.55);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+}
+.ms-modal-card{
+  position:relative;z-index:1;width:100%;max-width:480px;
+  background:#fff;border-radius:24px;padding:28px;
+  box-shadow:0 30px 70px rgba(31,18,24,.4);
+  animation:ms-pop .25s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes ms-pop{
+  from{transform:translateY(14px) scale(.96);opacity:0}
+  to  {transform:translateY(0) scale(1);opacity:1}
+}
+.ms-modal-close{
+  position:absolute;top:14px;right:16px;background:transparent;border:none;
+  font-size:26px;cursor:pointer;color:#7a5f6c;line-height:1;
+}
+.ms-modal-head{display:flex;gap:16px;align-items:center;margin-bottom:18px}
+.ms-modal-emoji{
+  font-size:42px;line-height:1;flex-shrink:0;
+  background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+  width:64px;height:64px;border-radius:18px;
+  display:grid;place-items:center;
+}
+.ms-modal-eyebrow{margin:0;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#ff4e8a}
+.ms-modal-head h3{margin:2px 0 0;font-size:22px;font-weight:800;color:#2b1922;letter-spacing:-.3px;line-height:1.2}
+.ms-modal-stats{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;
+  margin-bottom:16px;padding:14px;border-radius:14px;
+  background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+}
+.ms-modal-stats > div{text-align:center;line-height:1.2}
+.ms-modal-stats strong{display:block;font-size:16px;font-weight:800;color:#2b1922;letter-spacing:-.2px}
+.ms-modal-stats span{display:block;font-size:10px;color:#7a5f6c;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+.ms-modal-stats strong.is-reached{color:#22c55e}
+.ms-modal-stats strong.is-locked{color:#dc2626}
+.ms-modal-summary{margin:0 0 18px;font-size:14px;line-height:1.6;color:#3a2330}
+.ms-modal-cta{
+  width:100%;background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  border:none;font-family:inherit;font-size:15px;font-weight:800;
+  padding:13px;border-radius:14px;cursor:pointer;
+  box-shadow:0 10px 26px rgba(255,77,138,.32);
+  transition:transform .14s, box-shadow .14s;
+}
+.ms-modal-cta:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(255,77,138,.4)}
+
+.instant-donate.flash-attention{
+  animation:flash-attention 1.4s ease;
+}
+@keyframes flash-attention{
+  0%,100%{box-shadow:none}
+  30%{box-shadow:0 0 0 4px rgba(255,77,138,.25),0 0 30px rgba(255,77,138,.35)}
+}
 
 /* Legend strip */
 .dgraph-legend{

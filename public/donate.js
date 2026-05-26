@@ -34,7 +34,8 @@ console.info("EndoMe donate build v1");
     try {
       const data = await fetchJson("/api/donations/totals");
       paintTotals(data);
-      paintRoadmap(data);
+      // Graph rendering + milestone-detail modal handled by home-donate.js
+      // (shared between this page and the homepage).
     } catch (err) {
       document.getElementById("raise-next").textContent = "Couldn't load roadmap.";
     }

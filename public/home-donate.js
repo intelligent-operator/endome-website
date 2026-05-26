@@ -2,7 +2,7 @@
 // Red dotted target line, green raised line that climbs the target.
 // Zoom toggle: "Next 3" (focused) or "All milestones".
 // Smooth, snap-to-nearest tooltip + hover guideline.
-console.info("EndoMe home-donate build v3");
+console.info("EndoMe home-donate build v4");
 
 (() => {
   const wrap = document.getElementById("dgraph-wrap");
@@ -214,28 +214,26 @@ console.info("EndoMe home-donate build v3");
     svg.onmouseleave = hide;
     wrap.querySelector(".dgraph-svg-wrap").addEventListener("mouseleave", hide);
 
-    const showAt = (idx, clientX, clientY) => {
-      if (idx === activeIdx) {
-        // Just reposition tooltip near pointer for nicer feel
-        positionTooltipNear(clientX, clientY);
-        return;
-      }
+    // Hover shows a clean amount-pill tooltip only — no description.
+    // The full milestone detail opens in a click-triggered modal instead.
+    const showAt = (idx) => {
+      if (idx === activeIdx) return;
       activeIdx = idx;
       const m = visible[idx];
       const cx = xFor(idx);
       const cy = yFor(m.cumulativeCents);
-      // Convert SVG coords back to client-relative for the tooltip
       const r = rectFor();
       const scaleX = r.width  / W;
       const scaleY = r.height / H;
       const wrapRect = wrap.getBoundingClientRect();
-      // Place tooltip above the marker circle
       const left = (r.left + cx * scaleX) - wrapRect.left;
       const top  = (r.top  + cy * scaleY) - wrapRect.top;
+      const reached = totalsData.totalCents >= m.cumulativeCents;
+      const status = reached ? "Unlocked" : "Locked";
       tooltip.innerHTML = `
         <strong>${escapeHtml(m.emoji)} ${escapeHtml(m.title)}</strong>
-        <span class="tip-amount">${fmtBig(m.targetCents)} step · ${fmtBig(m.cumulativeCents)} total</span>
-        <p>${escapeHtml(m.summary)}</p>`;
+        <span class="tip-amount">${fmtBig(m.cumulativeCents)} · ${escapeHtml(status)}</span>
+        <span class="tip-hint">Click to read</span>`;
       tooltip.style.left = left + "px";
       tooltip.style.top  = top  + "px";
       tooltip.hidden = false;
@@ -250,10 +248,6 @@ console.info("EndoMe home-donate build v3");
       svg.querySelectorAll(".dg-marker").forEach((mk) =>
         mk.classList.toggle("is-hover", +mk.dataset.i === idx));
     };
-
-    function positionTooltipNear(/* clientX, clientY */) {
-      // No-op for now — tooltip is anchored to the marker, intentionally.
-    }
 
     svg.onmousemove = (e) => {
       if (raf) return;
@@ -271,19 +265,56 @@ console.info("EndoMe home-donate build v3");
         }
         // Only show if pointer is within the plot region
         if (sx < PAD_L - 8 || sx > W - PAD_R + 8) { hide(); return; }
-        showAt(best, e.clientX, e.clientY);
+        showAt(best);
       });
     };
 
-    // Keyboard support — tab through markers
+    // Click any milestone marker → open detail modal.
     svg.querySelectorAll(".dg-marker").forEach((g, i) => {
-      g.addEventListener("focus", () => {
-        const r = rectFor();
-        const cx = xFor(i);
-        const cy = yFor(visible[i].cumulativeCents);
-        showAt(i, r.left + cx * (r.width / W), r.top + cy * (r.height / H));
-      });
+      const fire = (e) => { e.preventDefault(); openMilestoneModal(visible[i], i, totalsData.totalCents); };
+      g.addEventListener("click", fire);
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") fire(e); });
+      g.addEventListener("focus", () => showAt(i));
       g.addEventListener("blur",  hide);
+    });
+  }
+
+  // --- Milestone detail modal ---------------------------------------
+  const msModal = document.getElementById("ms-modal");
+  function openMilestoneModal(m, i, totalCents) {
+    if (!msModal) return;
+    const reached = totalCents >= m.cumulativeCents;
+    document.getElementById("ms-modal-emoji").textContent = m.emoji;
+    document.getElementById("ms-modal-step").textContent  = `Milestone ${i + 1}`;
+    document.getElementById("ms-modal-title").textContent = m.title;
+    document.getElementById("ms-modal-target").textContent     = fmtBig(m.targetCents);
+    document.getElementById("ms-modal-cumulative").textContent = fmtBig(m.cumulativeCents);
+    const statusEl = document.getElementById("ms-modal-status");
+    statusEl.textContent = reached ? "Unlocked" : "Locked";
+    statusEl.className   = reached ? "is-reached" : "is-locked";
+    document.getElementById("ms-modal-summary").textContent = m.summary;
+    msModal.classList.add("open"); msModal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+  }
+  function closeMilestoneModal() {
+    msModal.classList.remove("open"); msModal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("modal-open");
+  }
+  if (msModal) {
+    msModal.addEventListener("click", (e) => { if (e.target.closest("[data-close-ms]")) closeMilestoneModal(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && msModal.classList.contains("open")) closeMilestoneModal(); });
+    document.getElementById("ms-modal-cta")?.addEventListener("click", () => {
+      closeMilestoneModal();
+      // Homepage: scroll to the inline instant-donate strip.
+      const instant = document.getElementById("instant-donate");
+      if (instant) {
+        instant.scrollIntoView({ behavior: "smooth", block: "center" });
+        instant.classList.add("flash-attention");
+        setTimeout(() => instant.classList.remove("flash-attention"), 1400);
+        return;
+      }
+      // /donate page: trigger its own donate modal.
+      document.getElementById("donate-cta")?.click();
     });
   }
 

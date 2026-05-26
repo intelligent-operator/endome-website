@@ -12,8 +12,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css" />
-  <link rel="stylesheet" href="/donate.css?v=1" />
+  <link rel="stylesheet" href="/styles.css?v=2" />
+  <link rel="stylesheet" href="/donate.css?v=2" />
 </head>
 <body class="donate-body">
   <header class="donate-topbar">
@@ -57,12 +57,70 @@
       </div>
     </section>
 
-    <!-- ============= ROADMAP ============= -->
+    <!-- ============= ROADMAP GRAPH ============= -->
     <section class="donate-roadmap" id="donate-roadmap">
       <h2 class="roadmap-title">The roadmap</h2>
-      <p class="roadmap-sub">Each milestone funds a real, specific thing for endometriosis. Hit it, we ship it.</p>
-      <ol class="roadmap-list" id="roadmap-list"></ol>
+      <p class="roadmap-sub">Red dotted line is the target. Green line is what you've collectively raised. Click any milestone to read the detail.</p>
+
+      <div class="dgraph-wrap" id="dgraph-wrap">
+        <div class="dgraph-stats">
+          <div>
+            <strong class="dgraph-raised" id="dgraph-raised">$0</strong>
+            <span class="dgraph-raised-label">raised so far</span>
+          </div>
+          <div class="dgraph-next" id="dgraph-next">Loading…</div>
+          <div class="dgraph-zoom" role="group" aria-label="Zoom">
+            <button type="button" class="dg-zoom-btn on" data-zoom="3" aria-pressed="true">Next 3</button>
+            <button type="button" class="dg-zoom-btn" data-zoom="all" aria-pressed="false">All milestones</button>
+          </div>
+        </div>
+        <div class="dgraph-svg-wrap">
+          <svg class="dgraph" id="dgraph" viewBox="0 0 800 320" preserveAspectRatio="none" aria-label="Donation progress toward each milestone">
+            <defs>
+              <linearGradient id="dg-green-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="#22c55e" stop-opacity="0.32"/>
+                <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"/>
+              </linearGradient>
+            </defs>
+            <g class="dg-grid" id="dg-grid"></g>
+            <g class="dg-axis-y" id="dg-axis-y"></g>
+            <path class="dg-target"  id="dg-target" />
+            <path class="dg-area"    id="dg-area" fill="url(#dg-green-fill)" />
+            <path class="dg-raised"  id="dg-raised" />
+            <g id="dg-markers"></g>
+            <line class="dg-cursor" id="dg-cursor" x1="0" y1="0" x2="0" y2="0" hidden />
+            <circle class="dg-cursor-dot" id="dg-cursor-dot" cx="0" cy="0" r="5" hidden />
+          </svg>
+          <div class="dgraph-tooltip" id="dgraph-tooltip" hidden></div>
+        </div>
+        <div class="dgraph-legend">
+          <span class="dgl-item"><i class="dgl-swatch dgl-target"></i> Roadmap target</span>
+          <span class="dgl-item"><i class="dgl-swatch dgl-raised"></i> Raised so far</span>
+        </div>
+      </div>
     </section>
+
+    <!-- Milestone detail modal -->
+    <div class="ms-modal" id="ms-modal" aria-hidden="true" role="dialog">
+      <div class="ms-modal-backdrop" data-close-ms></div>
+      <div class="ms-modal-card">
+        <button class="ms-modal-close" type="button" data-close-ms aria-label="Close">×</button>
+        <div class="ms-modal-head">
+          <span class="ms-modal-emoji" id="ms-modal-emoji">🤖</span>
+          <div>
+            <p class="ms-modal-eyebrow" id="ms-modal-step">Milestone 1</p>
+            <h3 id="ms-modal-title">Title</h3>
+          </div>
+        </div>
+        <div class="ms-modal-stats">
+          <div><strong id="ms-modal-target">$0</strong><span>milestone target</span></div>
+          <div><strong id="ms-modal-cumulative">$0</strong><span>cumulative goal</span></div>
+          <div><strong id="ms-modal-status">Locked</strong><span>status</span></div>
+        </div>
+        <p class="ms-modal-summary" id="ms-modal-summary"></p>
+        <button class="ms-modal-cta" type="button" id="ms-modal-cta" data-open-donate>💖 Donate toward this milestone</button>
+      </div>
+    </div>
 
     <!-- ============= LEADERBOARD ============= -->
     <section class="donate-board">
@@ -114,6 +172,7 @@
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
-  <script src="/donate.js?v=1" defer></script>
+  <script src="/home-donate.js?v=4" defer></script>
+  <script src="/donate.js?v=2" defer></script>
 </body>
 </html>
