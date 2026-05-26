@@ -4651,7 +4651,7 @@ const MAX_DONOR_MSG_LEN  = 240;
 // and small investigator-led repurposed-drug pilots.
 const DONATION_MILESTONES = [
   { key: "ai-engine",     targetCents:   1000000, emoji: "🤖", title: "Switch on the AI engine",
-    summary: "We turn on an always-on AI that reads every new endometriosis paper, trial and patient log around the clock — the legwork no single researcher could keep up with. Covers compute, tooling and hosting for six months." },
+    summary: "We turn on an always-on AI that reads every new endometriosis paper, trial and patient log around the clock. The legwork no single researcher could keep up with. Donations keep it running, paying for the compute, tooling and hosting." },
   { key: "subproblems",   targetCents:   2500000, emoji: "🧩", title: "Break endo into its sub-problems",
     summary: "The engine breaks endometriosis down into its main moving parts — inflammation, excess oestrogen, immune confusion, nerve sensitisation — and ranks the biggest, most fixable opportunities to attack each one. The first plain-English map of what's actually broken." },
   { key: "dashboard",     targetCents:   5000000, emoji: "📊", title: "Public research dashboard",

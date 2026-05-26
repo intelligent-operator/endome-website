@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/styles.css?v=2" />
   <link rel="stylesheet" href="/dashboard.css?v=7" />
   <link rel="stylesheet" href="/profile.css?v=1" />
-  <link rel="stylesheet" href="/donate.css?v=5" />
+  <link rel="stylesheet" href="/donate.css?v=6" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -135,6 +135,17 @@
         </div>
       </section>
 
+      <!-- Milestone list (under the donate strip) -->
+      <section class="community-section">
+        <div class="section-head">
+          <h2>The roadmap</h2>
+          <span class="section-hint">Every milestone, every amount. Tap a row to read what it funds.</span>
+        </div>
+        <ol class="ms-list" id="ms-list">
+          <li class="empty-state small">Loading milestones…</li>
+        </ol>
+      </section>
+
       <!-- Public Research Dashboard quick-link -->
       <section class="community-section">
         <a class="research-link-card" href="/insights">
@@ -191,6 +202,6 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1" defer></script>
   <script src="/home-donate.js?v=5" defer></script>
-  <script src="/research.js?v=2" defer></script>
+  <script src="/research.js?v=3" defer></script>
 </body>
 </html>

@@ -240,8 +240,8 @@ body.modal-open{overflow:hidden}
   max-height:calc(100vh - 120px);
 }
 .donations-board-card .section-head{margin-bottom:8px}
-.donations-board-card .section-head h2{font-size:15px;font-weight:800;color:#2b1922;margin:0}
-.board-card-sub{margin:0 0 12px;font-size:11px;color:#7a5f6c}
+.donations-board-card .section-head h2{font-size:20px;font-weight:800;color:#2b1922;margin:0;letter-spacing:-.3px}
+.board-card-sub{margin:0 0 14px;font-size:13px;color:#7a5f6c}
 .donations-board-card .board-list{
   display:flex;flex-direction:column;gap:8px;
   flex:1;min-height:160px;overflow-y:auto;padding-right:2px;
@@ -303,4 +303,43 @@ body.modal-open{overflow:hidden}
    drop the sticky positioning so the right rail flows naturally. */
 @media (max-width:1280px){
   .donations-right{position:static}
+}
+
+/* ---- Milestone list under the donate strip on /research ---- */
+.ms-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.ms-row{
+  display:grid;grid-template-columns:42px 1fr auto;gap:14px;align-items:center;
+  background:#fff;border:1px solid #ffeaf2;border-radius:14px;
+  padding:14px 16px;cursor:pointer;
+  transition:transform .12s, box-shadow .14s, border-color .14s;
+}
+.ms-row:hover{transform:translateX(2px);border-color:#ffd6e0;box-shadow:0 10px 22px rgba(255,77,138,.08)}
+.ms-row.is-reached{background:#f7fcf6;border-color:#cdebd2}
+.ms-row.is-active{border-color:#ffd6e0;box-shadow:0 8px 18px rgba(255,77,138,.10)}
+.ms-emoji{
+  font-size:26px;width:42px;height:42px;border-radius:12px;
+  display:grid;place-items:center;
+  background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+}
+.ms-row.is-reached .ms-emoji{background:linear-gradient(135deg,#e6f7e0,#cdebd2)}
+.ms-body{min-width:0}
+.ms-body strong{display:block;font-size:14px;font-weight:800;color:#2b1922;margin-bottom:2px}
+.ms-sub{font-size:11px;color:#7a5f6c;display:block;margin-bottom:6px}
+.ms-bar{background:#ffeaf2;height:5px;border-radius:999px;overflow:hidden;max-width:280px}
+.ms-bar-fill{height:100%;background:linear-gradient(90deg,#ff4e8a,#ff7aa6);border-radius:999px;transition:width .6s ease}
+.ms-row.is-reached .ms-bar-fill{background:linear-gradient(90deg,#5cc77c,#7ad99b)}
+.ms-amount{text-align:right;flex-shrink:0}
+.ms-amount strong{display:block;font-size:16px;font-weight:800;color:#2b1922;letter-spacing:-.3px}
+.ms-state{
+  display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;margin-top:4px;
+}
+.ms-state-reached{background:#dff7e2;color:#2b9b48}
+.ms-state-active{background:#ffeaf2;color:#ff4e8a}
+.ms-state-locked{background:#fff5f8;color:#7a5f6c}
+
+@media (max-width:600px){
+  .ms-row{grid-template-columns:36px 1fr;row-gap:8px}
+  .ms-amount{grid-column:1/-1;text-align:left;display:flex;justify-content:space-between;align-items:center}
+  .ms-amount strong{font-size:14px}
 }
