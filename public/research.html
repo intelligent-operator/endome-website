@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/styles.css?v=2" />
   <link rel="stylesheet" href="/dashboard.css?v=7" />
   <link rel="stylesheet" href="/profile.css?v=1" />
-  <link rel="stylesheet" href="/donate.css?v=2" />
+  <link rel="stylesheet" href="/donate.css?v=3" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -61,7 +61,7 @@
         <a href="/documents"><span class="ico">📁</span> Documents</a>
         <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
         <a href="/community"><span class="ico">💬</span> Community</a>
-        <a class="active" href="/research"><span class="ico">🎗</span> Research</a>
+        <a class="active" href="/research"><span class="ico">🎗</span> Donations</a>
         <a href="/profile"><span class="ico">👤</span> Profile</a>
       </nav>
     </aside>
@@ -69,70 +69,87 @@
     <main class="dash-main community-main">
       <header class="community-hero soft">
         <div>
-          <p class="hero-eyebrow">Research</p>
+          <p class="hero-eyebrow">Donations</p>
           <h1>Endometriosis has no cure. <span style="color:#ff4e8a">Let's change that.</span></h1>
           <p class="hero-lead">Most donations to endometriosis buy awareness. Yours buys research and action. Watch every dollar work, in public, against the disease.</p>
         </div>
       </header>
 
-      <!-- The graph -->
-      <section class="community-section">
-        <div class="dgraph-wrap" id="dgraph-wrap">
-          <div class="dgraph-stats">
-            <div>
-              <strong class="dgraph-raised" id="dgraph-raised">$0</strong>
-              <span class="dgraph-raised-label">raised so far</span>
+      <!-- Graph (left, wide) + Hall of Heroes (right, narrow) -->
+      <div class="donations-grid">
+        <section class="community-section donations-graph-col">
+          <div class="dgraph-wrap" id="dgraph-wrap">
+            <div class="dgraph-stats">
+              <div>
+                <strong class="dgraph-raised" id="dgraph-raised">$0</strong>
+                <span class="dgraph-raised-label">raised so far</span>
+              </div>
+              <div class="dgraph-next" id="dgraph-next">Loading…</div>
+              <div class="dgraph-zoom" role="group" aria-label="Zoom">
+                <button type="button" class="dg-zoom-btn on" data-zoom="3" aria-pressed="true">Next 3</button>
+                <button type="button" class="dg-zoom-btn" data-zoom="all" aria-pressed="false">All milestones</button>
+              </div>
             </div>
-            <div class="dgraph-next" id="dgraph-next">Loading…</div>
-            <div class="dgraph-zoom" role="group" aria-label="Zoom">
-              <button type="button" class="dg-zoom-btn on" data-zoom="3" aria-pressed="true">Next 3</button>
-              <button type="button" class="dg-zoom-btn" data-zoom="all" aria-pressed="false">All milestones</button>
+            <div class="dgraph-svg-wrap">
+              <svg class="dgraph" id="dgraph" viewBox="0 0 800 320" preserveAspectRatio="none" aria-label="Donation progress toward each milestone">
+                <defs>
+                  <linearGradient id="dg-green-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stop-color="#22c55e" stop-opacity="0.32"/>
+                    <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"/>
+                  </linearGradient>
+                </defs>
+                <g class="dg-grid" id="dg-grid"></g>
+                <g class="dg-axis-y" id="dg-axis-y"></g>
+                <path class="dg-target"  id="dg-target" />
+                <path class="dg-area"    id="dg-area" fill="url(#dg-green-fill)" />
+                <path class="dg-raised"  id="dg-raised" />
+                <g id="dg-markers"></g>
+                <line class="dg-cursor" id="dg-cursor" x1="0" y1="0" x2="0" y2="0" hidden />
+                <circle class="dg-cursor-dot" id="dg-cursor-dot" cx="0" cy="0" r="5" hidden />
+              </svg>
+              <div class="dgraph-tooltip" id="dgraph-tooltip" hidden></div>
+            </div>
+            <div class="dgraph-legend">
+              <span class="dgl-item"><i class="dgl-swatch dgl-target"></i> Roadmap target</span>
+              <span class="dgl-item"><i class="dgl-swatch dgl-raised"></i> Raised so far</span>
             </div>
           </div>
-          <div class="dgraph-svg-wrap">
-            <svg class="dgraph" id="dgraph" viewBox="0 0 800 320" preserveAspectRatio="none" aria-label="Donation progress toward each milestone">
-              <defs>
-                <linearGradient id="dg-green-fill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stop-color="#22c55e" stop-opacity="0.32"/>
-                  <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"/>
-                </linearGradient>
-              </defs>
-              <g class="dg-grid" id="dg-grid"></g>
-              <g class="dg-axis-y" id="dg-axis-y"></g>
-              <path class="dg-target"  id="dg-target" />
-              <path class="dg-area"    id="dg-area" fill="url(#dg-green-fill)" />
-              <path class="dg-raised"  id="dg-raised" />
-              <g id="dg-markers"></g>
-              <line class="dg-cursor" id="dg-cursor" x1="0" y1="0" x2="0" y2="0" hidden />
-              <circle class="dg-cursor-dot" id="dg-cursor-dot" cx="0" cy="0" r="5" hidden />
-            </svg>
-            <div class="dgraph-tooltip" id="dgraph-tooltip" hidden></div>
-          </div>
-          <div class="dgraph-legend">
-            <span class="dgl-item"><i class="dgl-swatch dgl-target"></i> Roadmap target</span>
-            <span class="dgl-item"><i class="dgl-swatch dgl-raised"></i> Raised so far</span>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Instant donate -->
-      <section class="community-section">
-        <div class="instant-donate research-instant" id="instant-donate">
-          <p class="instant-donate-label">One-tap donate</p>
-          <div class="instant-amounts" id="instant-amounts">
-            <button type="button" class="amt-chip" data-amount="500">$5</button>
-            <button type="button" class="amt-chip" data-amount="1000">$10</button>
-            <button type="button" class="amt-chip on" data-amount="2500">$25</button>
-            <button type="button" class="amt-chip" data-amount="5000">$50</button>
-            <button type="button" class="amt-chip" data-amount="10000">$100</button>
-            <input type="number" class="amt-custom" id="amt-custom" min="2" max="500000" step="1" placeholder="Custom $" />
-          </div>
-          <button class="instant-donate-go" id="instant-donate-go">Donate <span id="instant-amount-label">$25</span> →</button>
-          <p class="form-status" id="instant-donate-status" role="status"></p>
-        </div>
-      </section>
+        <aside class="donations-side-col">
+          <!-- Hall of Heroes (right rail) -->
+          <section class="community-section donations-board-card">
+            <div class="section-head">
+              <h2>🏆 Hall of Heroes</h2>
+            </div>
+            <p class="board-card-sub">Top donors. Every amount counts.</p>
+            <ol class="board-list" id="board-list">
+              <li class="empty-state small">Loading…</li>
+            </ol>
+          </section>
 
-      <!-- Public Research Dashboard quick-link -->
+          <!-- Quick instant donate (compact, in the right rail) -->
+          <section class="community-section donations-instant-card">
+            <div class="section-head">
+              <h2>💖 Donate now</h2>
+            </div>
+            <div class="instant-donate research-instant" id="instant-donate">
+              <div class="instant-amounts" id="instant-amounts">
+                <button type="button" class="amt-chip" data-amount="500">$5</button>
+                <button type="button" class="amt-chip" data-amount="1000">$10</button>
+                <button type="button" class="amt-chip on" data-amount="2500">$25</button>
+                <button type="button" class="amt-chip" data-amount="5000">$50</button>
+                <button type="button" class="amt-chip" data-amount="10000">$100</button>
+                <input type="number" class="amt-custom" id="amt-custom" min="2" max="500000" step="1" placeholder="Custom $" />
+              </div>
+              <button class="instant-donate-go" id="instant-donate-go">Donate <span id="instant-amount-label">$25</span> →</button>
+              <p class="form-status" id="instant-donate-status" role="status"></p>
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      <!-- Public Research Dashboard quick-link (full width below) -->
       <section class="community-section">
         <a class="research-link-card" href="/insights">
           <span class="research-link-emoji">📊</span>
@@ -142,17 +159,6 @@
           </div>
           <span class="research-link-arrow">→</span>
         </a>
-      </section>
-
-      <!-- Leaderboard -->
-      <section class="community-section">
-        <div class="section-head">
-          <h2>Hall of Heroes</h2>
-          <span class="section-hint">Top donors. Add your name. Every amount counts.</span>
-        </div>
-        <ol class="board-list" id="board-list">
-          <li class="empty-state">Loading…</li>
-        </ol>
       </section>
 
       <!-- Milestone detail modal -->
