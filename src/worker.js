@@ -874,6 +874,11 @@ function withSecurityHeaders(response) {
   if (!ct.startsWith("text/html")) return response;
   const headers = new Headers(response.headers);
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) headers.set(k, v);
+  // HTML must always revalidate so deploys reach users on next navigation
+  // instead of being trapped behind a stale browser cache. JS/CSS are
+  // versioned via ?v= query strings so they can be cached aggressively.
+  headers.set("Cache-Control", "no-cache, must-revalidate");
+  headers.set("Pragma", "no-cache");
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

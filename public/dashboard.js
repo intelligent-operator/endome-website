@@ -3,6 +3,22 @@
 // Talks to /api/me/* (auth via session cookie).
 // =============================================================================
 
+// Visible in the dev console — confirms which JS build is running.
+console.info("EndoMe dashboard build v3 (multi-select symptoms enabled)");
+
+// If the cached HTML is too old to know about our multi-select markup, the
+// chips would silently behave as single-select. Detect that case on load and
+// force a one-shot cache-busting reload so the user gets the latest HTML.
+(function detectStaleHtml() {
+  const hasMultiSymptom = document.querySelector('[data-multi="symptom"]');
+  if (hasMultiSymptom) return; // fresh HTML, we're good
+  if (sessionStorage.getItem("endome_html_busted")) return; // already tried
+  sessionStorage.setItem("endome_html_busted", "1");
+  const u = new URL(location.href);
+  u.searchParams.set("_v", String(Date.now()));
+  location.replace(u.toString());
+})();
+
 const todayLocalDate = () => {
   const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
