@@ -19,7 +19,7 @@ console.info("EndoMe donate build v1");
     // If we just came back from a successful Stripe redirect, celebrate.
     const params = new URLSearchParams(location.search);
     if (params.get("donation") === "success") {
-      toast("Thank you — your donation is processing 💖", "ok");
+      toast("Thank you. Your donation is processing 💖", "ok");
       // Webhook handler timestamps the completion; refresh shortly after.
       setTimeout(() => { loadTotals(); loadLeaderboard(); }, 2000);
       history.replaceState({}, "", "/donate");
@@ -50,7 +50,7 @@ console.info("EndoMe donate build v1");
     const next = d.milestones[d.activeIndex >= 0 ? d.activeIndex : d.milestones.length - 1];
     const remaining = Math.max(0, next.cumulativeCents - d.totalCents);
     document.getElementById("raise-next").innerHTML = d.activeIndex < 0
-      ? `<strong>All milestones unlocked.</strong> Thank you. We're still raising — keep going.`
+      ? `<strong>All milestones unlocked.</strong> Thank you. We're still raising. Keep going.`
       : `<strong>${fmtMoney(remaining)}</strong> away from <strong>${next.emoji} ${escapeHtml(next.title)}</strong>`;
   }
 

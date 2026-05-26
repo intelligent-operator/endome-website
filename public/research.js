@@ -53,7 +53,7 @@ console.info("EndoMe research build v1");
   // back to /research via the checkout success_url — see worker).
   const params = new URLSearchParams(location.search);
   if (params.get("donation") === "success") {
-    toast("Thank you — your donation is processing 💖", "ok");
+    toast("Thank you. Your donation is processing 💖", "ok");
     history.replaceState({}, "", "/research");
     setTimeout(loadLeaderboard, 2000);
   } else if (params.get("donation") === "cancelled") {
