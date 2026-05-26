@@ -5,6 +5,7 @@
     users:   document.getElementById("view-users"),
     circles: document.getElementById("view-circles"),
     circle:  document.getElementById("view-circle"),
+    system:  document.getElementById("view-system"),
   };
   let allUsersCache = []; // for the add-member dropdown
   let currentCircleId = null;
@@ -23,6 +24,7 @@
     views.users.hidden   = name !== "users";
     views.circles.hidden = name !== "circles";
     views.circle.hidden  = name !== "circle";
+    if (views.system) views.system.hidden = name !== "system";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -243,6 +245,31 @@
     } catch (err) {
       status.textContent = err.message || "Couldn't add.";
       status.className = "acp-form-status err";
+    }
+  });
+
+  // --- Schema bootstrap button (System tab) ----------------------------
+  document.getElementById("btn-bootstrap")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const out = document.getElementById("bootstrap-results");
+    btn.disabled = true; btn.textContent = "Running…";
+    out.innerHTML = `<p style="color:#7a5f6c;font-size:13px;margin:0">Working…</p>`;
+    try {
+      const res = await fetch("/api/acp/bootstrap", { method: "POST", credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Failed (${res.status})`);
+      const rows = (data.results || []).map((r) => `
+        <li style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #fff0f5;font-size:13px">
+          <span><strong>${escapeHtml(r.name)}</strong>${r.error ? ` — <span style='color:#c4344b'>${escapeHtml(r.error)}</span>` : ""}</span>
+          <span style="color:${r.ok ? "#2b9b48" : "#c4344b"};font-weight:700">${r.ok ? "✓ ok" : "✗ failed"}</span>
+        </li>`).join("");
+      out.innerHTML = `<ul style="list-style:none;padding:0;margin:0">${rows}</ul>`;
+      toast("Bootstrap complete", "ok");
+    } catch (err) {
+      out.innerHTML = `<p style="color:#c4344b;font-size:13px;margin:0">${escapeHtml(err.message || "Failed")}</p>`;
+      toast(err.message || "Bootstrap failed", "err");
+    } finally {
+      btn.disabled = false; btn.textContent = "Run schema bootstrap now";
     }
   });
 
