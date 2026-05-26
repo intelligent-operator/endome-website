@@ -4643,22 +4643,24 @@ const DONATION_MAX_CENTS = 50000000; // $500k ceiling per single donation
 const MAX_DONOR_NAME_LEN = 60;
 const MAX_DONOR_MSG_LEN  = 240;
 
-// The roadmap. Each milestone is a target ($ amount in cents) plus the
-// concrete thing we'll do when it's reached. Order matters — they're shown
-// top-down on the page.
+// The roadmap. Every milestone funds a concrete research action — no
+// awareness campaigns, no events. Targets are cumulative-builder steps:
+// we ship each one when the running total crosses the line.
 const DONATION_MILESTONES = [
-  { key: "awareness",  targetCents:   500000, emoji: "📣", title: "Awareness Wave",
-    summary: "Print + distribute 5,000 endo info packs to GP clinics, schools and community health centres so fewer people wait 7 years for a diagnosis." },
-  { key: "consults",   targetCents:  1500000, emoji: "🩺", title: "First-Specialist Fund",
-    summary: "Sponsor 50 people through their first endometriosis-specialist consultation — covering the appointment, imaging, and travel where needed." },
-  { key: "dataset",    targetCents:  3000000, emoji: "🗂", title: "Open Symptom Dataset",
-    summary: "Build the first open-source, anonymised endo symptom dataset (sourced with consent from the EndoMe community) for researchers to train models on." },
-  { key: "ai-pilot",   targetCents:  5000000, emoji: "🤖", title: "AI Diagnosis Pilot",
-    summary: "Partner with an academic lab on a pilot study using AI to spot endo-suggestive patterns in routine imaging — aiming to cut years off the diagnostic delay." },
-  { key: "fellowship", targetCents:  7500000, emoji: "🎓", title: "Junior Research Fellowship",
-    summary: "Fund a six-month junior research fellowship dedicated to endo — peer-reviewed output, fully open-access, dataset shared with the community." },
-  { key: "ai-researcher", targetCents: 10000000, emoji: "🔬", title: "Full-Time AI Researcher",
-    summary: "Establish a full-time AI-powered research role — combining ML, lesion-imaging and patient-reported data with one mission: accelerate the path to a cure." },
+  { key: "ai-engine",       targetCents:   1000000, emoji: "🤖", title: "AI Research Engine, online 24/7",
+    summary: "Stand up an always-on AI pipeline: ingests every new endometriosis paper, trial registration and consented patient log daily, and surfaces patterns no individual researcher has time to spot. The engine never sleeps." },
+  { key: "open-dashboard",  targetCents:   2500000, emoji: "📊", title: "Open Research Dashboard",
+    summary: "Make the engine's findings public. Researchers and clinicians can query it, every claim is cited to the source study, and the EndoMe community can see what's emerging in real time." },
+  { key: "part-time-sci",   targetCents:   5000000, emoji: "🧪", title: "Part-Time Research Scientist",
+    summary: "Hire a PhD-trained research scientist three days a week for a year. Their job: pair with the AI engine, turn its hypotheses into runnable experiments, and start replicating the most promising results." },
+  { key: "full-time-sci",   targetCents:  10000000, emoji: "🔬", title: "Full-Time Research Scientist",
+    summary: "Scale to a full-time research scientist with travel + lab partnership budget. One job description, one line: shorten diagnosis from 7 years and find treatments that actually work." },
+  { key: "imaging-ai",      targetCents:  25000000, emoji: "🩻", title: "Imaging AI Partnership",
+    summary: "Co-fund a study with a radiology department to train a model on consented MRI and ultrasound scans, learning to spot endo lesions earlier than the human eye. Open-weighted, reproducible." },
+  { key: "drug-repurpose",  targetCents:  50000000, emoji: "💊", title: "Drug Repurposing Screen",
+    summary: "Run a virtual + in-vitro screen of every FDA-approved drug against endo molecular targets identified by the engine. Top hits go straight into a wet-lab pilot — the fastest known path to a new treatment." },
+  { key: "clinical-study",  targetCents: 100000000, emoji: "🏥", title: "Multi-Site Clinical Validation",
+    summary: "Fund a community-recruited, multi-site observational study to validate the engine's highest-confidence findings in real patients. Results published open-access. This is the step that turns 'promising' into 'proven'." },
 ];
 
 let _donationsSchemaChecked = false;
