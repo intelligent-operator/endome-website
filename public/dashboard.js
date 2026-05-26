@@ -4,7 +4,7 @@
 // =============================================================================
 
 // Visible in the dev console — confirms which JS build is running.
-console.info("EndoMe dashboard build v3 (multi-select symptoms enabled)");
+console.info("EndoMe dashboard build v4 (multi-select symptoms enabled — direct listeners)");
 
 // If the cached HTML is too old to know about our multi-select markup, the
 // chips would silently behave as single-select. Detect that case on load and
@@ -532,6 +532,9 @@ function openModal(name) {
   modal.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  // Make sure every multi-select chip in this modal has its direct click
+  // handler. Cheap + idempotent — safe to call on every open.
+  wireMultiButtons(modal);
   // Fresh slate every open for the symptom modal — last session's picks
   // shouldn't haunt the next entry.
   if (name === "symptom") resetMultiState(modal);
@@ -599,6 +602,30 @@ function toggleMulti(group, value) {
   updateMultiCount(group);
 }
 
+// Direct per-button click handlers for every [data-multi] group on the page.
+// Belt + braces: this bypasses the document-level delegated handler entirely
+// so no other listener can ever swallow a chip click. Idempotent — re-runnable
+// after DOM updates without double-wiring.
+function wireMultiButtons(root = document) {
+  for (const group of root.querySelectorAll("[data-multi]")) {
+    for (const btn of group.children) {
+      if (btn.tagName !== "BUTTON") continue;
+      if (btn.dataset.multiWired === "1") continue;
+      btn.dataset.multiWired = "1";
+      btn.type = "button"; // never let it submit the form
+      btn.setAttribute("role", "checkbox");
+      btn.setAttribute("aria-pressed", "false");
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleMulti(group, btn.dataset.val);
+        onPickerChange(btn);
+      });
+    }
+    updateMultiCount(group);
+  }
+}
+
 function updateMultiCount(group) {
   const key = group.dataset.multi;
   if (!key) return;
@@ -624,16 +651,8 @@ function bumpCounter(form, target, delta, opts = {}) {
 }
 
 document.addEventListener("click", (e) => {
-  // Multi-select chips come first: they're the most specific case and we
-  // never want a misfire to fall through to single-select behaviour.
-  const multiBtnDirect = e.target.closest("button");
-  if (multiBtnDirect && multiBtnDirect.parentElement?.hasAttribute("data-multi")) {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleMulti(multiBtnDirect.parentElement, multiBtnDirect.dataset.val);
-    onPickerChange(multiBtnDirect);
-    return;
-  }
+  // Multi-select chips have their own direct-bound listeners (see
+  // wireMultiButtons) so we don't touch them here.
   const scaleBtn = e.target.closest("[data-scale] button");
   if (scaleBtn && scaleBtn.parentElement?.hasAttribute("data-scale")) {
     selectScale(scaleBtn.parentElement, scaleBtn.dataset.val); onPickerChange(scaleBtn); return;
@@ -867,6 +886,7 @@ function toast(text, tone = "ok") {
 function capitalize(s) { return s ? s[0].toUpperCase() + s.slice(1) : ""; }
 
 // Kick everything off
+wireMultiButtons();        // wire every multi-select on the page (modals included)
 refresh();
 // Soft refresh every few minutes (so banners switch when 12:00 / 18:00 hit)
 setInterval(refresh, 5 * 60 * 1000);
