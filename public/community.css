@@ -39,7 +39,12 @@
 /* ---------- Stats strip (community dashboard) ---------- */
 .stats-strip{
   display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;
+  margin-top:6px;
 }
+
+/* Add breathing room between hero/stats and the grid below. */
+#view-dashboard .dash-grid-2{margin-top:18px}
+#view-dashboard .stats-strip + .dash-grid-2{margin-top:24px}
 .stat-tile{
   display:flex;align-items:center;gap:12px;
   background:#fff;border:1px solid #ffeaf2;border-radius:14px;
@@ -156,6 +161,42 @@
 /* Reply button gets a "Comment" label on wider screens */
 .react-btn .react-label{display:none;font-weight:600;font-size:12px;margin-left:2px}
 @media (min-width:520px){.react-btn .react-label{display:inline}}
+
+/* Visibility radio cards (Create circle modal) */
+.visibility-pick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+@media (max-width:520px){.visibility-pick{grid-template-columns:1fr}}
+.vis-opt{cursor:pointer;display:block}
+.vis-opt input{position:absolute;opacity:0;pointer-events:none}
+.vis-card{
+  display:flex;flex-direction:column;gap:2px;
+  background:#fff;border:1.5px solid #ffeaf2;border-radius:12px;
+  padding:10px 12px;transition:border-color .12s, background .12s, box-shadow .14s;
+}
+.vis-card strong{font-size:13px;color:#2b1922}
+.vis-card em{font-style:normal;font-size:11px;color:#7a5f6c;line-height:1.4}
+.vis-opt:hover .vis-card{background:#fff5f8}
+.vis-opt input:checked + .vis-card{
+  border-color:#ff4e8a;background:#fff5f8;
+  box-shadow:0 4px 12px rgba(255,77,138,.14);
+}
+
+/* Author avatar with emoji content (vs initials) */
+.author-avatar.has-emoji{background:#fff5f8;color:#2b1922}
+.author-avatar.has-emoji .emoji{font-size:18px;line-height:1}
+.author-avatar.small.has-emoji .emoji{font-size:14px}
+.activity-avatar.has-emoji{background:#fff5f8;color:#2b1922;display:flex;align-items:center;justify-content:center}
+.activity-avatar.has-emoji .emoji{font-size:18px;line-height:1}
+
+/* Clickable author names link to /u/:username — plain hover treatment */
+.author-link{color:inherit;text-decoration:none;display:inline-flex;align-items:center}
+.author-link:hover strong{color:#ff4e8a;text-decoration:underline}
+
+/* Friendlier empty states */
+.activity-list .empty-state,
+.circles-grid.mini .empty-state{
+  background:#fff;border:1px dashed #ffd6e0;border-radius:14px;
+  padding:24px 16px;color:#7a5f6c;font-size:13px;text-align:center;
+}
 
 /* ---------- Hero ---------- */
 .community-hero{

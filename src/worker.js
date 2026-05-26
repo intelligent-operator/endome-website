@@ -67,6 +67,18 @@ export default {
           return await handleLogout(request, env);
         }
 
+        // --- Public(ish) profile read: /api/users/:username -----------------
+        // Still session-gated so anonymous scraping is blocked, but the
+        // viewer doesn't have to share a circle with the target.
+        const userProfileMatch = url.pathname.match(/^\/api\/users\/([^\/]+)$/);
+        if (userProfileMatch && request.method === "GET") {
+          const session = await readSession(request, env);
+          if (!session) return json({ error: "Unauthorized" }, 401);
+          if (!env.DB) return json({ error: "Storage not configured" }, 503);
+          const viewer = await getOrCreateUser(env, session.u);
+          return jsonHeaders(await getPublicProfile(env, viewer, decodeURIComponent(userProfileMatch[1])));
+        }
+
         // --- /api/acp/* — Admin Control Panel APIs ------------------------
         // Locked to the env-var admin login only (AUTH_USERNAME).
         if (url.pathname.startsWith("/api/acp/")) {
@@ -148,6 +160,25 @@ export default {
           }
 
           // --- Community ----------------------------------------------------
+          // --- Profile & Friends ------------------------------------------
+          if (url.pathname === "/api/me/profile" && request.method === "GET") {
+            return jsonHeaders(await getMyProfile(env, user));
+          }
+          if (url.pathname === "/api/me/profile" && request.method === "PUT") {
+            return jsonHeaders(await putMyProfile(request, env, user));
+          }
+          if (url.pathname === "/api/me/friends" && request.method === "GET") {
+            return jsonHeaders(await getMyFriends(env, user));
+          }
+          const friendActionMatch = url.pathname.match(/^\/api\/me\/friends\/([^\/]+)(?:\/(\w+))?$/);
+          if (friendActionMatch) {
+            const [, otherId, action] = friendActionMatch;
+            const decoded = decodeURIComponent(otherId);
+            if (!action      && request.method === "POST")   return jsonHeaders(await postFriendRequest(env, user, decoded));
+            if (!action      && request.method === "DELETE") return jsonHeaders(await deleteFriendship(env, user, decoded));
+            if (action === "accept"  && request.method === "POST") return jsonHeaders(await postFriendAccept(env, user, decoded));
+            if (action === "decline" && request.method === "POST") return jsonHeaders(await postFriendDecline(env, user, decoded));
+          }
           if (url.pathname === "/api/me/community" && request.method === "GET") {
             return jsonHeaders(await getCommunityHub(env, user));
           }
@@ -235,7 +266,9 @@ export default {
       url.pathname === "/story"       || url.pathname.startsWith("/story/") ||
       url.pathname === "/tests"       || url.pathname.startsWith("/tests/") ||
       url.pathname === "/pet"         || url.pathname.startsWith("/pet/") ||
-      url.pathname === "/community"   || url.pathname.startsWith("/community/")
+      url.pathname === "/community"   || url.pathname.startsWith("/community/") ||
+      url.pathname === "/profile"     || url.pathname.startsWith("/profile/") ||
+      url.pathname === "/u"           || url.pathname.startsWith("/u/")
     ) {
       const session = await readSession(request, env);
       if (!session) {
@@ -253,6 +286,13 @@ export default {
       if (!isAdminSession(env, session)) {
         return Response.redirect(new URL("/dashboard", request.url).toString(), 302);
       }
+    }
+
+    // --- /u/<username> — serve the shared u.html page (JS reads the path). --
+    if (url.pathname.startsWith("/u/")) {
+      const profileReq = new Request(new URL("/u.html", request.url).toString(), request);
+      const r = await env.ASSETS.fetch(profileReq);
+      return withSecurityHeaders(r);
     }
 
     // --- Static assets ------------------------------------------------------
@@ -3105,11 +3145,16 @@ async function endopetRunAllChecks(env, userId, ctx = {}) {
 // =============================================================================
 
 // Tier thresholds based on distinct logged days. Easy to tune later.
+// Tier thresholds based on distinct logged days. Tiers are still surfaced in
+// the UI for status, but circle creation is open to everyone — newbies
+// included. We cap how many an individual can create below (see
+// MAX_CIRCLES_PER_USER) to prevent runaway spam.
 const COMMUNITY_TIERS = [
-  { key: "newcomer", label: "Newcomer", minDays: 0,  canCreateCircle: false },
-  { key: "active",   label: "Active",   minDays: 7,  canCreateCircle: false },
-  { key: "trusted",  label: "Trusted",  minDays: 30, canCreateCircle: true  },
+  { key: "newcomer", label: "Newcomer", minDays: 0,  canCreateCircle: true },
+  { key: "active",   label: "Active",   minDays: 7,  canCreateCircle: true },
+  { key: "trusted",  label: "Trusted",  minDays: 30, canCreateCircle: true },
 ];
+const MAX_CIRCLES_PER_USER = 5;
 
 function communityTier(pet) {
   const days = pet?.distinct_log_days || 0;
@@ -3309,7 +3354,7 @@ async function getCommunityStats(env, user) {
   const recentActivity = await safeAll(
     "SELECT p.id, p.body, p.created_at, p.is_question, " +
     "       c.slug AS circle_slug, c.name AS circle_name, c.is_official, " +
-    "       u.display_name AS author_name, u.username AS author_username " +
+    "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.alias AS author_alias " +
     "FROM circle_posts p " +
     "JOIN circles c ON c.id = p.circle_id " +
     "LEFT JOIN users u ON u.id = p.user_id " +
@@ -3347,6 +3392,8 @@ async function getCommunityStats(env, user) {
       circleName: p.circle_name,
       circleOfficial: !!p.is_official,
       authorName: p.author_name || p.author_username || "Someone",
+      authorUsername: p.author_username || null,
+      authorAvatar: p.author_avatar || null,
     })),
   });
 }
@@ -3356,17 +3403,19 @@ async function postCreateCircle(request, env, user) {
   const body = await readJsonSafe(request);
   if (!body) return json({ error: "Invalid body" }, 400);
 
-  const pet = await env.DB.prepare("SELECT distinct_log_days FROM pets WHERE user_id = ?")
-    .bind(user.id).first().catch(() => null);
-  const tier = communityTier(pet);
-  if (!tier.canCreateCircle) {
+  // Soft per-user cap — keeps the place from filling up with empty circles.
+  const owned = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM circles WHERE creator_user_id = ? AND is_official = 0"
+  ).bind(user.id).first().catch(() => ({ n: 0 }));
+  if ((owned?.n || 0) >= MAX_CIRCLES_PER_USER) {
     return json({
-      error: `Circle creation unlocks at the Trusted tier (${COMMUNITY_TIERS.find(t=>t.key==='trusted').minDays}+ logged days). You're at ${tier.distinctLogDays}.`,
+      error: `You've already created ${MAX_CIRCLES_PER_USER} circles. Tidy one up before starting another.`,
     }, 403);
   }
 
   const name = sanitizeText(body.name, 60);
   const description = sanitizeText(body.description, 400) || null;
+  const isOpen = body.isOpen === false ? 0 : 1; // default open, "Open" or "Private"
   if (!name || name.length < 3) {
     return json({ error: "Circle name needs at least 3 characters." }, 400);
   }
@@ -3376,8 +3425,8 @@ async function postCreateCircle(request, env, user) {
   try {
     const res = await env.DB.prepare(
       "INSERT INTO circles (slug, name, description, creator_user_id, is_official, is_open, created_at) " +
-      "VALUES (?, ?, ?, ?, 0, 1, ?)"
-    ).bind(slug, name, description, user.id, now).run();
+      "VALUES (?, ?, ?, ?, 0, ?, ?)"
+    ).bind(slug, name, description, user.id, isOpen, now).run();
     const circleId = res.meta?.last_row_id;
     await env.DB.prepare(
       "INSERT INTO circle_members (circle_id, user_id, role, joined_at) VALUES (?, ?, 'admin', ?)"
@@ -3421,7 +3470,7 @@ async function getCircleDetail(env, user, slug) {
   try {
     posts = await env.DB.prepare(
       "SELECT p.id, p.body, p.is_question, p.created_at, p.user_id, " +
-      "       u.display_name AS author_name, u.username AS author_username, " +
+      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.alias AS author_alias, " +
       "       (SELECT COUNT(*) FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.reaction='heart') AS heart_count, " +
       "       (SELECT COUNT(*) FROM circle_replies r WHERE r.post_id=p.id AND r.deleted_at IS NULL) AS reply_count, " +
       "       EXISTS(SELECT 1 FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.user_id=? AND r.reaction='heart') AS i_hearted " +
@@ -3443,6 +3492,8 @@ async function getCircleDetail(env, user, slug) {
     posts: (posts.results || []).map((p) => ({
       id: p.id, body: p.body, isQuestion: !!p.is_question, createdAt: p.created_at,
       authorId: p.user_id, authorName: p.author_name || p.author_username || "Someone",
+      authorUsername: p.author_username || null,
+      authorAvatar: p.author_avatar || null,
       heartCount: p.heart_count || 0, replyCount: p.reply_count || 0,
       iHearted: !!p.i_hearted, mine: p.user_id === user.id,
     })),
@@ -3560,7 +3611,7 @@ async function getReplies(env, user, postId) {
   try {
     rows = await env.DB.prepare(
       "SELECT r.id, r.body, r.created_at, r.parent_reply_id, r.user_id, " +
-      "       u.display_name AS author_name, u.username AS author_username, " +
+      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.alias AS author_alias, " +
       "       (SELECT COUNT(*) FROM circle_reactions x WHERE x.target_type='reply' AND x.target_id=r.id AND x.reaction='heart') AS heart_count, " +
       "       EXISTS(SELECT 1 FROM circle_reactions x WHERE x.target_type='reply' AND x.target_id=r.id AND x.user_id=? AND x.reaction='heart') AS i_hearted " +
       "FROM circle_replies r LEFT JOIN users u ON u.id = r.user_id " +
@@ -3572,6 +3623,8 @@ async function getReplies(env, user, postId) {
       id: r.id, body: r.body, createdAt: r.created_at,
       parentReplyId: r.parent_reply_id,
       authorId: r.user_id, authorName: r.author_name || r.author_username || "Someone",
+      authorUsername: r.author_username || null,
+      authorAvatar: r.author_avatar || null,
       heartCount: r.heart_count || 0, iHearted: !!r.i_hearted,
       mine: r.user_id === user.id,
     })),
@@ -3631,6 +3684,275 @@ async function reactReply(env, user, replyId) {
     "INSERT INTO circle_reactions (target_type, target_id, user_id, reaction, created_at) VALUES ('reply', ?, ?, 'heart', ?)"
   ).bind(replyId, user.id, nowSec()).run();
   return json({ ok: true, hearted: true });
+}
+
+// =============================================================================
+// PROFILE & FRIENDS — alias, avatar, bio + a simple friends graph.
+// =============================================================================
+
+// Avatars are picked from a curated emoji set (kept in sync with profile.js).
+// We accept anything 1-4 chars to stay flexible if the set grows, but we
+// scrub control chars + length-cap defensively.
+const MAX_ALIAS_LEN = 32;
+const MAX_BIO_LEN = 280;
+const MAX_AVATAR_LEN = 8;
+
+// Best-effort schema bootstrap. SQLite has no `ADD COLUMN IF NOT EXISTS`, so
+// we swallow the duplicate-column errors. Run once per worker boot.
+let _profileSchemaChecked = false;
+async function ensureProfileSchema(env) {
+  if (_profileSchemaChecked) return;
+  _profileSchemaChecked = true;
+  const tries = [
+    "ALTER TABLE users ADD COLUMN alias TEXT",
+    "ALTER TABLE users ADD COLUMN avatar TEXT",
+    "ALTER TABLE users ADD COLUMN bio TEXT",
+    "CREATE TABLE IF NOT EXISTS friendships (" +
+    "  user_id_a    TEXT    NOT NULL," +
+    "  user_id_b    TEXT    NOT NULL," +
+    "  requested_by TEXT    NOT NULL," +
+    "  status       TEXT    NOT NULL DEFAULT 'pending'," + // pending | accepted
+    "  created_at   INTEGER NOT NULL," +
+    "  updated_at   INTEGER NOT NULL," +
+    "  PRIMARY KEY (user_id_a, user_id_b)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_friendships_a ON friendships(user_id_a, status)",
+    "CREATE INDEX IF NOT EXISTS idx_friendships_b ON friendships(user_id_b, status)",
+  ];
+  for (const sql of tries) {
+    try { await env.DB.prepare(sql).run(); } catch { /* already there */ }
+  }
+}
+
+// Friendships are stored with a stable (a, b) pair where a < b lexicographically.
+// That gives us one row per relationship regardless of who initiated it.
+function friendPair(a, b) {
+  return a < b ? [a, b] : [b, a];
+}
+
+// Public-facing display name: alias if set, else display_name, else username.
+function publicName(row) {
+  if (!row) return "Someone";
+  return row.alias || row.display_name || row.username || "Someone";
+}
+
+function profileResponse(row, extras = {}) {
+  return {
+    id:          row.id,
+    username:    row.username,
+    displayName: row.display_name || null,
+    alias:       row.alias || null,
+    name:        publicName(row),
+    avatar:      row.avatar || null,
+    bio:         row.bio || null,
+    createdAt:   row.created_at || null,
+    ...extras,
+  };
+}
+
+// --- GET /api/me/profile -------------------------------------------------
+async function getMyProfile(env, user) {
+  await ensureProfileSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT id, username, display_name, alias, avatar, bio, created_at FROM users WHERE id = ?"
+  ).bind(user.id).first().catch(() => null);
+  if (!row) return json({ error: "Profile not found" }, 404);
+
+  const stats = await profileStatsFor(env, row.id);
+  return json({ profile: profileResponse(row, stats) });
+}
+
+// --- PUT /api/me/profile -------------------------------------------------
+async function putMyProfile(request, env, user) {
+  await ensureProfileSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+
+  // Each field is optional — only update what was sent. `null` explicitly
+  // clears it (e.g. removing your alias to fall back to your real name).
+  const fields = [];
+  const binds  = [];
+  if ("alias" in body) {
+    let v = sanitizeText(body.alias, MAX_ALIAS_LEN);
+    if (v && !/^[\p{L}\p{N} _'\-.]+$/u.test(v)) return json({ error: "Alias has invalid characters." }, 400);
+    fields.push("alias = ?"); binds.push(v || null);
+  }
+  if ("avatar" in body) {
+    let v = sanitizeText(body.avatar, MAX_AVATAR_LEN);
+    fields.push("avatar = ?"); binds.push(v || null);
+  }
+  if ("bio" in body) {
+    let v = sanitizeText(body.bio, MAX_BIO_LEN);
+    fields.push("bio = ?"); binds.push(v || null);
+  }
+  if (!fields.length) return json({ error: "Nothing to update." }, 400);
+
+  binds.push(user.id);
+  await env.DB.prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = ?`).bind(...binds).run();
+  return getMyProfile(env, user);
+}
+
+async function profileStatsFor(env, userId) {
+  const safe = async (sql, ...b) => {
+    try { return await env.DB.prepare(sql).bind(...b).first(); } catch { return null; }
+  };
+  const [posts, circles, friends, pending] = await Promise.all([
+    safe("SELECT COUNT(*) AS n FROM circle_posts WHERE user_id = ? AND deleted_at IS NULL", userId),
+    safe("SELECT COUNT(*) AS n FROM circle_members WHERE user_id = ?", userId),
+    safe(
+      "SELECT COUNT(*) AS n FROM friendships WHERE status = 'accepted' AND (user_id_a = ? OR user_id_b = ?)",
+      userId, userId
+    ),
+    safe(
+      "SELECT COUNT(*) AS n FROM friendships WHERE status = 'pending' AND requested_by != ? AND (user_id_a = ? OR user_id_b = ?)",
+      userId, userId, userId
+    ),
+  ]);
+  return {
+    postCount:    posts?.n    || 0,
+    circleCount:  circles?.n  || 0,
+    friendCount:  friends?.n  || 0,
+    pendingCount: pending?.n  || 0,
+  };
+}
+
+// --- GET /api/users/:username — viewing someone else's profile -----------
+async function getPublicProfile(env, viewer, target) {
+  await ensureProfileSchema(env);
+  // `target` can be username or alias-equivalent — try username first.
+  const t = target.toLowerCase().trim();
+  if (!t || t.length > 200) return json({ error: "User not found" }, 404);
+  const row = await env.DB.prepare(
+    "SELECT id, username, display_name, alias, avatar, bio, created_at FROM users " +
+    "WHERE LOWER(username) = ? OR LOWER(alias) = ? LIMIT 1"
+  ).bind(t, t).first().catch(() => null);
+  if (!row) return json({ error: "User not found" }, 404);
+
+  const isSelf = row.id === viewer.id;
+  let friendStatus = "none"; // none | pending_outgoing | pending_incoming | friends | self
+  if (isSelf) friendStatus = "self";
+  else {
+    const [a, b] = friendPair(viewer.id, row.id);
+    const f = await env.DB.prepare(
+      "SELECT status, requested_by FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
+    ).bind(a, b).first().catch(() => null);
+    if (f) {
+      if (f.status === "accepted") friendStatus = "friends";
+      else if (f.status === "pending") {
+        friendStatus = f.requested_by === viewer.id ? "pending_outgoing" : "pending_incoming";
+      }
+    }
+  }
+
+  const stats = await profileStatsFor(env, row.id);
+  return json({ profile: profileResponse(row, { ...stats, friendStatus, isSelf }) });
+}
+
+// --- GET /api/me/friends -------------------------------------------------
+async function getMyFriends(env, user) {
+  await ensureProfileSchema(env);
+  const friends = await env.DB.prepare(
+    "SELECT u.id, u.username, u.display_name, u.alias, u.avatar, u.bio, f.updated_at " +
+    "FROM friendships f " +
+    "JOIN users u ON u.id = CASE WHEN f.user_id_a = ? THEN f.user_id_b ELSE f.user_id_a END " +
+    "WHERE f.status = 'accepted' AND (f.user_id_a = ? OR f.user_id_b = ?) " +
+    "ORDER BY f.updated_at DESC LIMIT 200"
+  ).bind(user.id, user.id, user.id).all().catch(() => ({ results: [] }));
+
+  // Incoming requests = pending where someone else requested.
+  const incoming = await env.DB.prepare(
+    "SELECT u.id, u.username, u.display_name, u.alias, u.avatar, u.bio, f.created_at " +
+    "FROM friendships f " +
+    "JOIN users u ON u.id = f.requested_by " +
+    "WHERE f.status = 'pending' AND f.requested_by != ? AND (f.user_id_a = ? OR f.user_id_b = ?) " +
+    "ORDER BY f.created_at DESC LIMIT 50"
+  ).bind(user.id, user.id, user.id).all().catch(() => ({ results: [] }));
+
+  // Outgoing requests = pending where you requested.
+  const outgoing = await env.DB.prepare(
+    "SELECT u.id, u.username, u.display_name, u.alias, u.avatar, u.bio, f.created_at " +
+    "FROM friendships f " +
+    "JOIN users u ON u.id = CASE WHEN f.user_id_a = ? THEN f.user_id_b ELSE f.user_id_a END " +
+    "WHERE f.status = 'pending' AND f.requested_by = ? " +
+    "ORDER BY f.created_at DESC LIMIT 50"
+  ).bind(user.id, user.id).all().catch(() => ({ results: [] }));
+
+  return json({
+    friends:  (friends.results  || []).map((r) => profileResponse(r)),
+    incoming: (incoming.results || []).map((r) => profileResponse(r)),
+    outgoing: (outgoing.results || []).map((r) => profileResponse(r)),
+  });
+}
+
+// --- POST /api/me/friends/:otherId — send a friend request ---------------
+async function postFriendRequest(env, user, otherId) {
+  await ensureProfileSchema(env);
+  if (otherId === user.id) return json({ error: "You can't friend yourself." }, 400);
+  const other = await env.DB.prepare("SELECT id FROM users WHERE id = ?").bind(otherId).first().catch(() => null);
+  if (!other) return json({ error: "User not found." }, 404);
+
+  const [a, b] = friendPair(user.id, otherId);
+  const now = nowSec();
+  const existing = await env.DB.prepare(
+    "SELECT status, requested_by FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
+  ).bind(a, b).first().catch(() => null);
+  if (existing) {
+    if (existing.status === "accepted") return json({ ok: true, status: "friends" });
+    if (existing.requested_by === user.id) return json({ ok: true, status: "pending_outgoing" });
+    // The other side already requested → accept it instead of duplicating.
+    await env.DB.prepare(
+      "UPDATE friendships SET status = 'accepted', updated_at = ? WHERE user_id_a = ? AND user_id_b = ?"
+    ).bind(now, a, b).run();
+    return json({ ok: true, status: "friends" });
+  }
+  await env.DB.prepare(
+    "INSERT INTO friendships (user_id_a, user_id_b, requested_by, status, created_at, updated_at) " +
+    "VALUES (?, ?, ?, 'pending', ?, ?)"
+  ).bind(a, b, user.id, now, now).run();
+  return json({ ok: true, status: "pending_outgoing" });
+}
+
+// --- POST /api/me/friends/:otherId/accept --------------------------------
+async function postFriendAccept(env, user, otherId) {
+  await ensureProfileSchema(env);
+  const [a, b] = friendPair(user.id, otherId);
+  const row = await env.DB.prepare(
+    "SELECT status, requested_by FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
+  ).bind(a, b).first().catch(() => null);
+  if (!row) return json({ error: "No request to accept." }, 404);
+  if (row.status === "accepted") return json({ ok: true, status: "friends" });
+  if (row.requested_by === user.id) return json({ error: "You sent this request — wait for them to accept." }, 400);
+  await env.DB.prepare(
+    "UPDATE friendships SET status = 'accepted', updated_at = ? WHERE user_id_a = ? AND user_id_b = ?"
+  ).bind(nowSec(), a, b).run();
+  return json({ ok: true, status: "friends" });
+}
+
+// --- POST /api/me/friends/:otherId/decline -------------------------------
+async function postFriendDecline(env, user, otherId) {
+  await ensureProfileSchema(env);
+  const [a, b] = friendPair(user.id, otherId);
+  // Only the recipient can decline; the requester should DELETE instead.
+  const row = await env.DB.prepare(
+    "SELECT status, requested_by FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
+  ).bind(a, b).first().catch(() => null);
+  if (!row) return json({ error: "No request to decline." }, 404);
+  if (row.status !== "pending") return json({ error: "Only pending requests can be declined." }, 400);
+  if (row.requested_by === user.id) return json({ error: "Use DELETE to cancel a request you sent." }, 400);
+  await env.DB.prepare(
+    "DELETE FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
+  ).bind(a, b).run();
+  return json({ ok: true });
+}
+
+// --- DELETE /api/me/friends/:otherId — unfriend or cancel outgoing -------
+async function deleteFriendship(env, user, otherId) {
+  await ensureProfileSchema(env);
+  const [a, b] = friendPair(user.id, otherId);
+  await env.DB.prepare(
+    "DELETE FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
+  ).bind(a, b).run();
+  return json({ ok: true });
 }
 
 // =============================================================================

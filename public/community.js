@@ -190,9 +190,13 @@ console.info("EndoMe community build v2");
     </a>`;
   }
   function activityRow(a) {
+    const avatarInner = a.authorAvatar
+      ? `<span class="emoji">${escapeHtml(a.authorAvatar)}</span>`
+      : escapeHtml(initials(a.authorName));
+    const avatarClass = a.authorAvatar ? "activity-avatar has-emoji" : "activity-avatar";
     return `<li class="activity-item">
       <a href="/community?c=${encodeURIComponent(a.circleSlug)}" class="activity-link" data-open="${escapeHtml(a.circleSlug)}">
-        <div class="activity-avatar">${escapeHtml(initials(a.authorName))}</div>
+        <div class="${avatarClass}">${avatarInner}</div>
         <div class="activity-body">
           <div class="activity-head">
             <strong>${escapeHtml(a.authorName)}</strong>
@@ -222,10 +226,8 @@ console.info("EndoMe community build v2");
       renderCircles(document.getElementById("discover-circles"), data.discover || [], { showRole: false, withJoin: true });
 
       const createBtn = document.getElementById("btn-create");
-      createBtn.disabled = !data.tier.canCreateCircle;
-      createBtn.title = data.tier.canCreateCircle
-        ? "Create a new circle"
-        : `Unlocks at the Trusted tier (${data.tier.nextMinDays ?? 30}+ logged days)`;
+      createBtn.disabled = false;
+      createBtn.title = "Create a new circle — open to everyone or invite-only.";
     } catch (err) {
       document.getElementById("discover-circles").innerHTML =
         `<p class="empty-state">Couldn't load circles right now.</p>`;
@@ -321,10 +323,6 @@ console.info("EndoMe community build v2");
   // --- Create circle modal ----------------------------------------------
   const createModal = document.getElementById("create-circle-modal");
   document.getElementById("btn-create").addEventListener("click", () => {
-    if (!myTier?.canCreateCircle) {
-      toast(`Trusted tier needed — keep logging, you'll get there.`, "err");
-      return;
-    }
     openCreateModal();
   });
   function openCreateModal() { createModal.classList.add("open"); createModal.setAttribute("aria-hidden", "false"); }
@@ -338,10 +336,11 @@ console.info("EndoMe community build v2");
     const status = document.getElementById("create-status");
     status.textContent = "Creating…"; status.className = "form-status";
     try {
+      const isOpen = (form.querySelector('input[name="isOpen"]:checked')?.value ?? "true") === "true";
       const data = await fetchJson("/api/me/community/circles", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: form.name.value, description: form.description.value }),
+        body: JSON.stringify({ name: form.name.value, description: form.description.value, isOpen }),
       });
       toast("Circle created 🌸");
       closeCreateModal();
@@ -468,13 +467,22 @@ console.info("EndoMe community build v2");
     list.innerHTML = posts.map(postHtml).join("");
   }
   function postHtml(p) {
+    const avatarInner = p.authorAvatar
+      ? `<span class="emoji">${escapeHtml(p.authorAvatar)}</span>`
+      : escapeHtml(initials(p.authorName));
+    const avatarClass = p.authorAvatar ? "author-avatar has-emoji" : "author-avatar";
+    const profileHref = p.authorUsername ? `/u/${encodeURIComponent(p.authorUsername)}` : null;
     return `
       <article class="post-card ${p.isQuestion ? "is-question" : ""}" data-post-id="${p.id}">
         <header class="post-head">
           <div class="post-author">
-            <div class="author-avatar">${escapeHtml(initials(p.authorName))}</div>
+            ${profileHref
+              ? `<a href="${profileHref}" class="author-link"><div class="${avatarClass}">${avatarInner}</div></a>`
+              : `<div class="${avatarClass}">${avatarInner}</div>`}
             <div>
-              <strong>${escapeHtml(p.authorName)}</strong>
+              ${profileHref
+                ? `<a href="${profileHref}" class="author-link"><strong>${escapeHtml(p.authorName)}</strong></a>`
+                : `<strong>${escapeHtml(p.authorName)}</strong>`}
               <span class="post-time">${relTime(p.createdAt)}${p.isQuestion ? " · ❓ Question" : ""}</span>
             </div>
           </div>
@@ -607,12 +615,21 @@ console.info("EndoMe community build v2");
   }
 
   function replyHtml(r) {
+    const avatarInner = r.authorAvatar
+      ? `<span class="emoji">${escapeHtml(r.authorAvatar)}</span>`
+      : escapeHtml(initials(r.authorName));
+    const avatarClass = r.authorAvatar ? "author-avatar small has-emoji" : "author-avatar small";
+    const profileHref = r.authorUsername ? `/u/${encodeURIComponent(r.authorUsername)}` : null;
     return `
       <li class="reply">
-        <div class="author-avatar small">${escapeHtml(initials(r.authorName))}</div>
+        ${profileHref
+          ? `<a href="${profileHref}" class="author-link"><div class="${avatarClass}">${avatarInner}</div></a>`
+          : `<div class="${avatarClass}">${avatarInner}</div>`}
         <div class="reply-body">
           <div class="reply-head">
-            <strong>${escapeHtml(r.authorName)}</strong>
+            ${profileHref
+              ? `<a href="${profileHref}" class="author-link"><strong>${escapeHtml(r.authorName)}</strong></a>`
+              : `<strong>${escapeHtml(r.authorName)}</strong>`}
             <span class="post-time">${relTime(r.createdAt)}</span>
           </div>
           <p>${escapeHtml(r.body)}</p>

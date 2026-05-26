@@ -15,7 +15,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=4" />
-  <link rel="stylesheet" href="/community.css?v=2" />
+  <link rel="stylesheet" href="/community.css?v=3" />
+  <link rel="stylesheet" href="/profile.css?v=1" />
 </head>
 <body class="dash-body">
   <div id="page-loader" class="page-loader">
@@ -55,6 +56,7 @@
         <a href="/tests"><span class="ico">🧪</span> Tests</a>
         <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
         <a class="active" href="/community"><span class="ico">💬</span> Community</a>
+        <a href="/profile"><span class="ico">👤</span> Profile</a>
       </nav>
     </aside>
 
@@ -169,7 +171,7 @@
         <section class="community-section">
           <div class="section-head">
             <h2>Your circles</h2>
-            <button class="btn-create" id="btn-create" disabled>+ Create a circle</button>
+            <button class="btn-create" id="btn-create">+ Create a circle</button>
           </div>
           <div id="my-circles" class="circles-grid"></div>
         </section>
@@ -301,6 +303,25 @@
             <label class="field"><span>Description <em>(optional)</em></span>
               <textarea name="description" rows="3" maxlength="400" placeholder="Who's this for? What's the vibe?"></textarea>
             </label>
+            <div class="field">
+              <span>Who can join?</span>
+              <div class="visibility-pick">
+                <label class="vis-opt">
+                  <input type="radio" name="isOpen" value="true" checked />
+                  <span class="vis-card">
+                    <strong>Open</strong>
+                    <em>Anyone can join and post. Best for shared journeys.</em>
+                  </span>
+                </label>
+                <label class="vis-opt">
+                  <input type="radio" name="isOpen" value="false" />
+                  <span class="vis-card">
+                    <strong>Private</strong>
+                    <em>Invite-only. You'll add members from the admin panel.</em>
+                  </span>
+                </label>
+              </div>
+            </div>
             <button type="submit" class="btn btn-primary full">Create circle</button>
             <p id="create-status" class="form-status" role="status"></p>
           </form>
@@ -311,6 +332,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/community.js?v=2" defer></script>
+  <script src="/community.js?v=3" defer></script>
 </body>
 </html>
