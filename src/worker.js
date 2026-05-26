@@ -3246,7 +3246,72 @@ async function communityFindFreeSlug(env, base) {
 }
 
 // Ensure the official EndoMe circle exists. Idempotent.
+// Best-effort schema bootstrap for the five community tables. SQLite has no
+// IF NOT EXISTS for ADD COLUMN but every statement below is CREATE TABLE
+// IF NOT EXISTS / CREATE INDEX IF NOT EXISTS, so this is safe to call on
+// every request. Runs once per worker boot.
+let _communitySchemaChecked = false;
+async function ensureCommunitySchema(env) {
+  if (_communitySchemaChecked) return;
+  _communitySchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS circles (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  slug TEXT NOT NULL UNIQUE," +
+    "  name TEXT NOT NULL," +
+    "  description TEXT," +
+    "  creator_user_id TEXT," +
+    "  is_official INTEGER NOT NULL DEFAULT 0," +
+    "  is_open INTEGER NOT NULL DEFAULT 1," +
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_circles_official ON circles(is_official, created_at DESC)",
+    "CREATE TABLE IF NOT EXISTS circle_members (" +
+    "  circle_id INTEGER NOT NULL," +
+    "  user_id TEXT NOT NULL," +
+    "  role TEXT NOT NULL DEFAULT 'member'," +
+    "  joined_at INTEGER NOT NULL," +
+    "  PRIMARY KEY (circle_id, user_id)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_circle_members_user ON circle_members(user_id)",
+    "CREATE TABLE IF NOT EXISTS circle_posts (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  circle_id INTEGER NOT NULL," +
+    "  user_id TEXT NOT NULL," +
+    "  body TEXT NOT NULL," +
+    "  is_question INTEGER NOT NULL DEFAULT 0," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL," +
+    "  deleted_at INTEGER" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_circle_posts_circle_recent ON circle_posts(circle_id, created_at DESC)",
+    "CREATE TABLE IF NOT EXISTS circle_replies (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  post_id INTEGER NOT NULL," +
+    "  user_id TEXT NOT NULL," +
+    "  body TEXT NOT NULL," +
+    "  parent_reply_id INTEGER," +
+    "  created_at INTEGER NOT NULL," +
+    "  deleted_at INTEGER" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_circle_replies_post ON circle_replies(post_id, created_at)",
+    "CREATE TABLE IF NOT EXISTS circle_reactions (" +
+    "  target_type TEXT NOT NULL," +
+    "  target_id INTEGER NOT NULL," +
+    "  user_id TEXT NOT NULL," +
+    "  reaction TEXT NOT NULL DEFAULT 'heart'," +
+    "  created_at INTEGER NOT NULL," +
+    "  PRIMARY KEY (target_type, target_id, user_id, reaction)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_circle_reactions_target ON circle_reactions(target_type, target_id)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (err) {
+    console.warn("ensureCommunitySchema stmt failed:", err?.message || err);
+  } }
+}
+
 async function ensureOfficialCircle(env) {
+  await ensureCommunitySchema(env);
   try {
     const existing = await env.DB.prepare(
       "SELECT id FROM circles WHERE slug = 'endome' LIMIT 1"
