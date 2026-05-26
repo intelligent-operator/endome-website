@@ -363,8 +363,74 @@
   display:flex;align-items:center;justify-content:center;
   font-size:11px;font-weight:600;
 }
+.streak-week .dot{background:#fff5f8;color:#d8b9c5}
 .streak-week .dot.done{background:#ffe2eb;color:#ff4e8a}
 .streak-week .dot.today{background:#ff4e8a;color:#fff}
+.streak-week .is-today span:first-child{color:#ff4e8a;font-weight:700}
+
+/* Cycle Snapshot card — now a clickable button */
+.stat-card-btn{
+  text-align:left;cursor:pointer;border:1px solid transparent;
+  transition:transform .12s, box-shadow .15s, border-color .15s;
+}
+.stat-card-btn:hover{transform:translateY(-2px);border-color:#ffd6e0;box-shadow:0 10px 22px rgba(255,77,138,.10)}
+.stat-card-btn:focus-visible{outline:2px solid #ff4e8a;outline-offset:2px}
+.card-head-cta{
+  margin-left:auto;font-size:11px;font-weight:600;color:#ff4e8a;
+  opacity:.85;
+}
+
+/* Cycle Week modal contents */
+.cycle-week-body{display:flex;flex-direction:column;gap:18px;margin-top:6px}
+.cw-metric{display:flex;flex-direction:column;gap:6px}
+.cw-metric-head{display:flex;align-items:baseline;gap:8px}
+.cw-metric-head strong{font-size:13px;color:#3a2330}
+.cw-meta{font-size:11px;color:#a08596}
+.cw-bars{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:end;height:90px}
+.cw-bar-col{display:flex;flex-direction:column;align-items:center;gap:4px;height:100%}
+.cw-bar-wrap{
+  flex:1;width:100%;background:#fff5f8;border-radius:8px;overflow:hidden;
+  display:flex;align-items:flex-end;
+}
+.cw-bar{
+  width:100%;border-radius:6px;min-height:2px;
+  transition:height .35s ease;
+}
+.cw-day{font-size:10px;color:#7a5f6c;font-weight:600}
+.cw-summary{margin:0;text-align:center;font-size:12px;color:#7a5f6c}
+
+/* EndoPet poop indicator */
+.ep-poop-hint{
+  font-size:11px;color:#c2811a;background:#fff5e6;
+  padding:3px 8px;border-radius:999px;display:inline-block;margin-top:4px;font-weight:600;
+}
+.ep-poop-row{
+  display:flex;align-items:center;gap:10px;
+  background:#fff5e6;border:1px solid #ffe1c0;border-radius:12px;
+  padding:10px 12px;margin:8px 14px 12px;
+}
+.ep-poop-emoji{font-size:22px}
+.ep-poop-text{flex:1;font-size:12px;color:#5a3a48}
+.ep-poop-text strong{display:block;color:#c2811a;font-size:13px}
+
+/* Pet sprite on the dashboard — colour-shift mirrors the /pet page */
+.pet[data-pet]{
+  filter:hue-rotate(var(--color-shift, 0deg));
+}
+.pet[data-pet="poppy"]{--pet-light:#f5c184;--pet-mid:#e8a86a}
+.pet[data-pet="mochi"]{--pet-light:#f0e6fb;--pet-mid:#dcd0f0}
+.pet[data-pet="sunny"]{--pet-light:#f08b3a;--pet-mid:#e8762a}
+.pet[data-pet="coco"]{--pet-light:#b5a7d8;--pet-mid:#9d8fc7}
+.pet[data-pet="kiki"]{--pet-light:#e8b985;--pet-mid:#d9a872}
+.pet[data-pet="luna"]{--pet-light:#ffb6c8;--pet-mid:#ff9bb3}
+.pet:not([data-pet="luna"]):not([data-pet="poppy"]):not([data-pet="mochi"]):not([data-pet="sunny"]):not([data-pet="coco"]):not([data-pet="kiki"]){--pet-light:#ffb6c8;--pet-mid:#ff9bb3}
+.pet .pet-svg{display:block;width:100%;height:100%;animation:pet-idle 4.4s ease-in-out infinite}
+.ep-big-art.pet{display:flex;align-items:center;justify-content:center;min-height:170px}
+.ep-mini .ep-art.pet{display:flex;align-items:center;justify-content:center}
+@keyframes pet-idle{
+  0%,100%{transform:translateY(0) rotate(-1deg)}
+  50%{transform:translateY(-3px) rotate(1deg)}
+}
 
 /* Responsive */
 @media (max-width:1280px){

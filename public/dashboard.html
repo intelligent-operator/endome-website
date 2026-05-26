@@ -138,8 +138,8 @@
 
       <!-- Overview cards: cycle snapshot + EndoPet status -->
       <section class="stat-row stat-row-2">
-        <div class="card stat-card">
-          <div class="card-head"><span class="ico-tile peach">🌸</span> Cycle Snapshot</div>
+        <div class="card stat-card stat-card-btn" id="cycle-snapshot-card" data-modal="cycleWeek" role="button" tabindex="0" aria-label="Open weekly cycle graph">
+          <div class="card-head"><span class="ico-tile peach">🌸</span> Cycle Snapshot <span class="card-head-cta">View week →</span></div>
           <div id="cycle-snapshot">
             <!-- rendered by dashboard.js from /api/me/today -->
             <p class="empty-state">Log this morning's check-in to see your cycle overview.</p>
@@ -149,13 +149,12 @@
         <div class="card stat-card">
           <div class="card-head"><span class="ico-tile pink">🐾</span> EndoPet Status</div>
           <div class="ep-mini">
-            <div class="ep-art">
-              <svg viewBox="0 0 100 100" width="80" height="80"><ellipse cx="50" cy="68" rx="30" ry="22" fill="#ff9bb3"/><circle cx="50" cy="50" r="26" fill="#ffb6c8"/><polygon points="28,24 38,42 22,42" fill="#ff8aab"/><polygon points="72,24 62,42 78,42" fill="#ff8aab"/><circle cx="42" cy="52" r="3" fill="#2c1320"/><circle cx="58" cy="52" r="3" fill="#2c1320"/><path d="M45 60 q5 4 10 0" stroke="#2c1320" stroke-width="1.6" fill="none"/></svg>
-            </div>
+            <div class="ep-art pet" id="ep-mini-art" data-pet="luna" data-mood="happy"></div>
             <div>
               <strong><span data-bind="petName">Luna</span></strong>
               <div class="ep-level">Level <span data-bind="petLevel">1</span></div>
               <span class="happy-pill" data-bind="petMoodClass">Happy</span>
+              <div class="ep-poop-hint" id="ep-mini-poop" hidden>💩 needs a clean</div>
             </div>
           </div>
         </div>
@@ -181,29 +180,14 @@
         <div class="card-head wide">
           <span><span class="ico-tile pink">🐾</span> Your EndoPet</span>
         </div>
-        <div class="ep-big-art">
-          <svg viewBox="0 0 200 200" width="100%" height="auto">
-            <ellipse cx="100" cy="180" rx="70" ry="10" fill="#ffd6e0" opacity=".5"/>
-            <ellipse cx="100" cy="135" rx="55" ry="48" fill="#ff9bb3"/>
-            <path d="M150 150 q34 -8 24 12 q-10 18 -26 4" fill="#ff9bb3"/>
-            <circle cx="100" cy="100" r="50" fill="#ffb6c8"/>
-            <polygon points="55,42 72,72 42,72" fill="#ff8aab"/>
-            <polygon points="145,42 128,72 158,72" fill="#ff8aab"/>
-            <polygon points="58,46 70,70 48,70" fill="#ffc4d2"/>
-            <polygon points="142,46 130,70 152,70" fill="#ffc4d2"/>
-            <circle cx="86" cy="100" r="6" fill="#2c1320"/><circle cx="88" cy="98" r="2" fill="#fff"/>
-            <circle cx="114" cy="100" r="6" fill="#2c1320"/><circle cx="116" cy="98" r="2" fill="#fff"/>
-            <path d="M100 114 l-3 4 h6 z" fill="#ff5d8f"/>
-            <path d="M95 120 q5 5 10 0" stroke="#2c1320" stroke-width="2" fill="none" stroke-linecap="round"/>
-            <ellipse cx="76" cy="118" rx="7" ry="4" fill="#ff5d8f" opacity=".3"/>
-            <ellipse cx="124" cy="118" rx="7" ry="4" fill="#ff5d8f" opacity=".3"/>
-            <path d="M68 116 l-12 -3 M68 118 l-12 3 M132 116 l12 -3 M132 118 l12 3" stroke="#fff" stroke-width=".8"/>
-            <path d="M88 148 q12 8 24 0" stroke="#ff5d8f" stroke-width="2.5" fill="none"/>
-            <circle cx="100" cy="152" r="4" fill="#ff5d8f"/>
-            <!-- hearts -->
-            <path d="M30 90 q-3 -5 -7 0 q3 5 7 8 q4 -3 7 -8 q-4 -5 -7 0z" fill="#ff5d8f"/>
-            <path d="M170 110 q-3 -5 -7 0 q3 5 7 8 q4 -3 7 -8 q-4 -5 -7 0z" fill="#ff5d8f"/>
-          </svg>
+        <div class="ep-big-art pet" id="ep-big-art" data-pet="luna" data-mood="happy"></div>
+        <div class="ep-poop-row" id="ep-poop-row" hidden>
+          <span class="ep-poop-emoji">💩</span>
+          <div class="ep-poop-text">
+            <strong>Your pet pooped!</strong>
+            <span>Give them a quick clean to keep them happy.</span>
+          </div>
+          <button class="pill-btn small" id="ep-clean-btn" type="button">Clean</button>
         </div>
         <div class="ep-name"><span data-bind="petName">Luna</span> <span class="edit-ico">✏️</span></div>
         <div class="ep-row">
@@ -263,15 +247,7 @@
       <div class="card streak-card">
         <div class="card-head"><span class="ico-tile peach">🔥</span> Streak</div>
         <p class="card-sub">You've logged <span data-bind="streakDays">0</span> day<span data-bind="streakPlural">s</span> in a row!</p>
-        <div class="streak-week">
-          <div><span>M</span><span class="dot done">✓</span></div>
-          <div><span>T</span><span class="dot done">✓</span></div>
-          <div><span>W</span><span class="dot done">✓</span></div>
-          <div><span>T</span><span class="dot done">✓</span></div>
-          <div><span>F</span><span class="dot done">✓</span></div>
-          <div><span>S</span><span class="dot done">✓</span></div>
-          <div><span>S</span><span class="dot today">7</span></div>
-        </div>
+        <div class="streak-week" id="streak-week"></div>
       </div>
     </aside>
   </div>
@@ -690,6 +666,22 @@
         <button type="submit" class="btn btn-primary full">Complete evening check-in <em class="xp-badge">+15 XP</em></button>
         <p class="form-status" role="status"></p>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Cycle week graph -->
+  <div class="modal" id="modal-cycleWeek" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="cycleWeek-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card modal-xl">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🌸</span>
+        <h3 id="cycleWeek-title">Your last 7 days</h3>
+        <p>Pain, energy and mood from your morning check-ins.</p>
+      </header>
+      <div class="cycle-week-body" id="cycle-week-body">
+        <p class="empty-state">Loading…</p>
+      </div>
     </div>
   </div>
 

@@ -98,6 +98,9 @@ export default {
           if (url.pathname === "/api/me/symptoms" && request.method === "GET") {
             return jsonHeaders(await getSymptoms(request, env, user));
           }
+          if (url.pathname === "/api/me/week" && request.method === "GET") {
+            return jsonHeaders(await getMeWeek(env, user));
+          }
           if (url.pathname === "/api/me/notifications" && request.method === "GET") {
             return jsonHeaders(await getNotifications(env, user));
           }
@@ -118,6 +121,9 @@ export default {
           }
           if (url.pathname === "/api/me/pet/pat" && request.method === "POST") {
             return jsonHeaders(await postPetPat(env, user));
+          }
+          if (url.pathname === "/api/me/pet/clean" && request.method === "POST") {
+            return jsonHeaders(await postPetClean(env, user));
           }
           if (url.pathname === "/api/me/pet/state" && request.method === "GET") {
             return jsonHeaders(await getEndopetState(env, user));
@@ -1455,6 +1461,57 @@ async function getSymptoms(request, env, user) {
   return json({ symptoms: res.results || [] });
 }
 
+// --- /api/me/week ---------------------------------------------------------
+// Last 7 days (local-ish, from "today" backwards) of: morning pain/energy/mood
+// and whether anything was logged that day. Drives the streak ticks and the
+// cycle-snapshot weekly chart.
+async function getMeWeek(env, user) {
+  const today = normaliseDate(null); // current local-ish YYYY-MM-DD
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - 6);
+  const startISO = start.toISOString().slice(0, 10);
+
+  let daily = { results: [] };
+  let symRows = { results: [] };
+  try {
+    daily = await env.DB.prepare(
+      "SELECT log_date, morning_logged_at, evening_logged_at, " +
+      "       morning_mood AS mood, morning_energy AS energy, morning_pain AS pain " +
+      "FROM daily_logs WHERE user_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date ASC"
+    ).bind(user.id, startISO, today).all();
+  } catch (err) { console.warn("week daily:", err?.message); }
+  try {
+    symRows = await env.DB.prepare(
+      "SELECT log_date, COUNT(*) AS n FROM symptoms " +
+      "WHERE user_id = ? AND log_date BETWEEN ? AND ? GROUP BY log_date"
+    ).bind(user.id, startISO, today).all();
+  } catch (err) { console.warn("week symptoms:", err?.message); }
+
+  const byDate = new Map();
+  for (const r of daily.results || []) byDate.set(r.log_date, r);
+  const symBy = new Map();
+  for (const r of symRows.results || []) symBy.set(r.log_date, r.n);
+
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setUTCDate(start.getUTCDate() + i);
+    const iso = d.toISOString().slice(0, 10);
+    const row = byDate.get(iso);
+    const symCount = symBy.get(iso) || 0;
+    const logged = !!(row?.morning_logged_at || row?.evening_logged_at || symCount > 0);
+    days.push({
+      date: iso,
+      logged,
+      pain:   row?.pain   ?? null,
+      energy: row?.energy ?? null,
+      mood:   row?.mood   ?? null,
+      symptomCount: symCount,
+    });
+  }
+  return json({ days });
+}
+
 // --- Notifications --------------------------------------------------------
 async function getNotifications(env, user) {
   const res = await env.DB
@@ -1534,9 +1591,12 @@ async function postPetFeed(env, user) {
   const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
     .bind(user.id).first();
   if (!pet?.hatched_at) return json({ error: "Hatch your pet first" }, 400);
+  await ensurePetPoopColumn(env);
   const live = liveStats(pet);
-  const hunger = Math.max(0, live.hunger - 45);
-  const happiness = Math.min(100, live.happiness + 8);
+  // Feeding is *mostly* the same effect, but with a sprinkle of randomness so
+  // the same kibble doesn't always land the same way.
+  const hunger    = Math.max(0, live.hunger - randInt(38, 52));
+  const happiness = Math.min(100, live.happiness + randInt(5, 12));
   const now = nowSec();
   await env.DB.prepare(
     "UPDATE pets SET hunger = ?, happiness = ?, last_fed_at = ?, updated_at = ? WHERE user_id = ?"
@@ -1548,10 +1608,29 @@ async function postPetPlay(env, user) {
   const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
     .bind(user.id).first();
   if (!pet?.hatched_at) return json({ error: "Hatch your pet first" }, 400);
+  await ensurePetPoopColumn(env);
   const live = liveStats(pet);
-  const happiness = Math.min(100, live.happiness + 25);
-  const hunger = Math.min(100, live.hunger + 10);   // playing burns energy
   const now = nowSec();
+
+  // Natural routine: how recently they were played with shapes the reaction.
+  // First play after a quiet stretch lands big; rapid-fire plays earn less
+  // (the pet's a little worn out) and only *sometimes* burn hunger.
+  const minsSincePlay = pet.last_played_at ? (now - pet.last_played_at) / 60 : 99999;
+  let happinessDelta, hungerDelta;
+  if (minsSincePlay > 30) {
+    happinessDelta = randInt(22, 30);
+    hungerDelta    = Math.random() < 0.7 ? randInt(3, 9) : 0;
+  } else if (minsSincePlay > 5) {
+    happinessDelta = randInt(12, 22);
+    hungerDelta    = Math.random() < 0.5 ? randInt(2, 6) : 0;
+  } else {
+    happinessDelta = randInt(4, 12);
+    hungerDelta    = Math.random() < 0.3 ? randInt(1, 4) : 0;
+  }
+
+  const happiness = Math.min(100, live.happiness + happinessDelta);
+  const hunger    = Math.min(100, live.hunger + hungerDelta);
+
   // Small XP reward for playing.
   let xp = (pet.xp || 0) + 3;
   let level = pet.level || 1;
@@ -1564,6 +1643,70 @@ async function postPetPlay(env, user) {
   const data = JSON.parse(await res.clone().text());
   if (leveledUp) data.leveledUp = true;
   return json(data);
+}
+
+// --- /api/me/pet/clean — wipe up the poop, small happiness + XP boost. ----
+async function postPetClean(env, user) {
+  await ensurePetPoopColumn(env);
+  const pet = await env.DB.prepare("SELECT * FROM pets WHERE user_id = ?")
+    .bind(user.id).first();
+  if (!pet?.hatched_at) return json({ error: "Hatch your pet first" }, 400);
+  if (!petHasPoop(pet)) {
+    return json({ ok: true, hadPoop: false });
+  }
+  const live = liveStats(pet);
+  const happiness = Math.min(100, live.happiness + randInt(4, 9));
+  const now = nowSec();
+  // Bump XP gently — clean pet, clean conscience.
+  let xp = (pet.xp || 0) + 2;
+  let level = pet.level || 1;
+  while (xp >= level * 100) { xp -= level * 100; level += 1; }
+  try {
+    await env.DB.prepare(
+      "UPDATE pets SET happiness = ?, xp = ?, level = ?, last_cleaned_at = ?, updated_at = ? WHERE user_id = ?"
+    ).bind(happiness, xp, level, now, now, user.id).run();
+  } catch (err) {
+    // Column might not exist if ensurePetPoopColumn lost the race. Fallback.
+    await env.DB.prepare(
+      "UPDATE pets SET happiness = ?, xp = ?, level = ?, updated_at = ? WHERE user_id = ?"
+    ).bind(happiness, xp, level, now, user.id).run();
+  }
+  return getMePet(env, user);
+}
+
+// --- Pet poop helpers -----------------------------------------------------
+// Best-effort: add `last_cleaned_at` to the `pets` table if it doesn't exist.
+// SQLite has no IF NOT EXISTS for ADD COLUMN, so we just swallow the error.
+let _petPoopColumnChecked = false;
+async function ensurePetPoopColumn(env) {
+  if (_petPoopColumnChecked) return;
+  _petPoopColumnChecked = true;
+  try {
+    await env.DB.prepare("ALTER TABLE pets ADD COLUMN last_cleaned_at INTEGER").run();
+  } catch { /* column already exists or table missing — ignore */ }
+}
+
+// Pet has poop when it's been a few hours since the last feed and we haven't
+// cleaned up since that feed. Each feed has its own randomised "poop time"
+// derived from last_fed_at so we don't need extra storage.
+function petHasPoop(pet) {
+  if (!pet?.last_fed_at) return false;
+  const now = nowSec();
+  // Deterministic per-feed delay between 90 and 240 minutes.
+  const seed = pet.last_fed_at % 151;
+  const delaySec = (90 + seed) * 60;
+  const poopAt = pet.last_fed_at + delaySec;
+  if (now < poopAt) return false;
+  // Cleaned after the poop appeared? Then we're clean.
+  const cleanedAt = pet.last_cleaned_at || 0;
+  if (cleanedAt >= poopAt) return false;
+  // Too long after — assume it's faded away (don't grief the user forever).
+  if (now > poopAt + 36 * 3600) return false;
+  return true;
+}
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 async function postPetPat(env, user) {
@@ -1609,6 +1752,7 @@ function petFullResponse(pet) {
     happiness:   live.happiness,
     lastFedAt:   pet.last_fed_at || null,
     lastPlayedAt: pet.last_played_at || null,
+    hasPoop:     petHasPoop(pet),
   };
 }
 
@@ -1834,21 +1978,53 @@ async function checkStory(request, env, user) {
   if (step.type !== "manual") {
     return json({ error: "This step is completed automatically — no need to tick it." }, 400);
   }
-  // Use the strict version so the user sees a clear error if storage is broken
-  // (instead of the silent best-effort behaviour used for auto-marking).
+  // Be tolerant of a fresh DB where migration 0004 hasn't been applied:
+  // if the insert fails because the table is missing, create it and retry
+  // once. This makes the checklist "just work" for new installs.
   try {
-    await env.DB.prepare(
-      "INSERT INTO story_progress (user_id, step_id, completed_at, completed_by) " +
-      "VALUES (?, ?, ?, 'manual') " +
-      "ON CONFLICT(user_id, step_id) DO NOTHING"
-    ).bind(user.id, stepId, nowSec()).run();
+    await insertStoryProgress(env, user, stepId);
   } catch (err) {
-    console.error("checkStory insert failed:", err?.message || err);
-    return json({
-      error: "Couldn't save — your story table may need setup. Ask your admin to run migration 0004.",
-    }, 500);
+    const msg = String(err?.message || "");
+    if (/no such table/i.test(msg)) {
+      await ensureStoryTable(env);
+      try {
+        await insertStoryProgress(env, user, stepId);
+      } catch (err2) {
+        console.error("checkStory retry failed:", err2?.message || err2);
+        return json({ error: "Couldn't save your checklist right now." }, 500);
+      }
+    } else {
+      console.error("checkStory insert failed:", err?.message || err);
+      return json({ error: "Couldn't save your checklist right now." }, 500);
+    }
   }
   return getStory(env, user);
+}
+
+async function insertStoryProgress(env, user, stepId) {
+  await env.DB.prepare(
+    "INSERT INTO story_progress (user_id, step_id, completed_at, completed_by) " +
+    "VALUES (?, ?, ?, 'manual') " +
+    "ON CONFLICT(user_id, step_id) DO NOTHING"
+  ).bind(user.id, stepId, nowSec()).run();
+}
+
+// Create the story_progress table if migration 0004 was never applied.
+// Safe to call repeatedly.
+async function ensureStoryTable(env) {
+  try {
+    await env.DB.prepare(
+      "CREATE TABLE IF NOT EXISTS story_progress (" +
+      "  user_id      TEXT    NOT NULL," +
+      "  step_id      TEXT    NOT NULL," +
+      "  completed_at INTEGER NOT NULL," +
+      "  completed_by TEXT    NOT NULL DEFAULT 'manual'," +
+      "  PRIMARY KEY (user_id, step_id)" +
+      ")"
+    ).run();
+  } catch (err) {
+    console.warn("ensureStoryTable failed:", err?.message || err);
+  }
 }
 
 async function uncheckStory(request, env, user) {
@@ -2070,6 +2246,8 @@ function petResponse(pet) {
     xpForNext: pet.level * XP_PER_LEVEL,
     mood: pet.mood,
     streakDays: pet.streak_days,
+    colorSeed: pet.color_seed || 0,
+    hasPoop: petHasPoop(pet),
   };
 }
 

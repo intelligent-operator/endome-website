@@ -15,6 +15,8 @@ const api = {
   async eveningCheckin(body) { return postJson("/api/me/checkin/evening", { date: todayLocalDate(), ...body }); },
   async logSymptom(body) { return postJson("/api/me/symptoms", { date: todayLocalDate(), ...body }); },
   async dismissNotif(id) { return postJson(`/api/me/notifications/${id}/dismiss`, {}); },
+  async week() { return getJson("/api/me/week"); },
+  async cleanPet() { return postJson("/api/me/pet/clean", {}); },
 };
 
 async function getJson(url) {
@@ -43,6 +45,7 @@ let state = null;
 
 async function refresh() {
   try {
+    weekCache = null; // re-fetch streak + cycle week
     state = await api.today();
     render();
   } catch (err) {
@@ -82,6 +85,8 @@ function render() {
     });
     bind("streakDays", String(pet.streakDays || 0));
     bind("streakPlural", pet.streakDays === 1 ? "" : "s");
+    renderPetArt(pet);
+    renderPetPoop(pet);
   }
 
   renderBanner();
@@ -89,7 +94,111 @@ function render() {
   renderSymptomsTodayHint(symptoms?.length || 0);
   renderCycleSnapshot();
   renderTodaySymptoms();
+  renderStreakWeek();
   renderStoryMini();
+}
+
+// --- Pet art (matches /pet page) -----------------------------------------
+const PET_SVGS = {
+  luna: `<svg class="pet-svg" viewBox="0 0 160 160" width="100%" height="100%">
+    <ellipse cx="80" cy="138" rx="50" ry="8" fill="rgba(0,0,0,.06)"/>
+    <path d="M44 60 L30 26 L52 50 Z" fill="var(--pet-mid)"/>
+    <path d="M116 60 L130 26 L108 50 Z" fill="var(--pet-mid)"/>
+    <path d="M48 56 L40 38 L56 50 Z" fill="var(--pet-light)"/>
+    <path d="M112 56 L120 38 L104 50 Z" fill="var(--pet-light)"/>
+    <ellipse cx="80" cy="106" rx="38" ry="30" fill="var(--pet-mid)"/>
+    <circle cx="80" cy="80" r="36" fill="var(--pet-light)"/>
+    <ellipse cx="66" cy="82" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="94" cy="82" rx="5" ry="6" fill="#2c1320"/>
+    <circle cx="68" cy="80" r="1.6" fill="#fff"/><circle cx="96" cy="80" r="1.6" fill="#fff"/>
+    <path d="M80 92 l-2 3 h4 z" fill="#ff5d8f"/>
+    <path d="M76 96 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <ellipse cx="60" cy="93" rx="6" ry="3" fill="#ff5d8f" opacity=".35"/>
+    <ellipse cx="100" cy="93" rx="6" ry="3" fill="#ff5d8f" opacity=".35"/>
+  </svg>`,
+  poppy: `<svg class="pet-svg" viewBox="0 0 160 160" width="100%" height="100%">
+    <ellipse cx="80" cy="138" rx="50" ry="8" fill="rgba(0,0,0,.06)"/>
+    <ellipse cx="50" cy="88" rx="16" ry="22" fill="var(--pet-mid)"/>
+    <ellipse cx="110" cy="88" rx="16" ry="22" fill="var(--pet-mid)"/>
+    <ellipse cx="80" cy="100" rx="40" ry="32" fill="var(--pet-light)"/>
+    <circle cx="80" cy="78" r="34" fill="var(--pet-light)"/>
+    <circle cx="80" cy="66" r="14" fill="var(--pet-mid)"/>
+    <ellipse cx="68" cy="80" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="92" cy="80" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="80" cy="92" rx="3.5" ry="2.5" fill="#2c1320"/>
+    <path d="M76 98 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </svg>`,
+  mochi: `<svg class="pet-svg" viewBox="0 0 160 160" width="100%" height="100%">
+    <ellipse cx="80" cy="138" rx="50" ry="8" fill="rgba(0,0,0,.06)"/>
+    <ellipse cx="58" cy="40" rx="10" ry="26" fill="var(--pet-mid)"/>
+    <ellipse cx="102" cy="40" rx="10" ry="26" fill="var(--pet-mid)"/>
+    <ellipse cx="58" cy="42" rx="4" ry="16" fill="#ffb6c8"/>
+    <ellipse cx="102" cy="42" rx="4" ry="16" fill="#ffb6c8"/>
+    <ellipse cx="80" cy="106" rx="40" ry="32" fill="var(--pet-mid)"/>
+    <circle cx="80" cy="82" r="32" fill="var(--pet-light)"/>
+    <ellipse cx="68" cy="84" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="92" cy="84" rx="5" ry="6" fill="#2c1320"/>
+    <path d="M78 94 l2 2 l2 -2 z" fill="#ff7a99"/>
+    <path d="M76 100 q4 3 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </svg>`,
+  sunny: `<svg class="pet-svg" viewBox="0 0 160 160" width="100%" height="100%">
+    <ellipse cx="80" cy="138" rx="50" ry="8" fill="rgba(0,0,0,.06)"/>
+    <path d="M44 44 L56 70 L36 64 Z" fill="var(--pet-mid)"/>
+    <path d="M116 44 L104 70 L124 64 Z" fill="var(--pet-mid)"/>
+    <ellipse cx="80" cy="108" rx="38" ry="28" fill="var(--pet-mid)"/>
+    <ellipse cx="80" cy="112" rx="22" ry="18" fill="#fff"/>
+    <circle cx="80" cy="82" r="34" fill="var(--pet-light)"/>
+    <path d="M80 70 Q60 84 64 102 Q80 96 80 96 Q80 96 96 102 Q100 84 80 70 Z" fill="#fff"/>
+    <ellipse cx="68" cy="82" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="92" cy="82" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="80" cy="94" rx="3.5" ry="2.5" fill="#2c1320"/>
+    <path d="M76 100 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </svg>`,
+  coco: `<svg class="pet-svg" viewBox="0 0 160 160" width="100%" height="100%">
+    <ellipse cx="80" cy="138" rx="50" ry="8" fill="rgba(0,0,0,.06)"/>
+    <ellipse cx="80" cy="110" rx="40" ry="30" fill="var(--pet-mid)"/>
+    <circle cx="40" cy="64" r="18" fill="var(--pet-mid)"/>
+    <circle cx="120" cy="64" r="18" fill="var(--pet-mid)"/>
+    <circle cx="40" cy="64" r="10" fill="#f4cce3"/>
+    <circle cx="120" cy="64" r="10" fill="#f4cce3"/>
+    <circle cx="80" cy="78" r="34" fill="var(--pet-light)"/>
+    <ellipse cx="68" cy="78" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="92" cy="78" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="80" cy="94" rx="10" ry="8" fill="#2c1320"/>
+    <path d="M70 106 q10 4 20 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </svg>`,
+  kiki: `<svg class="pet-svg" viewBox="0 0 160 160" width="100%" height="100%">
+    <ellipse cx="80" cy="138" rx="50" ry="8" fill="rgba(0,0,0,.06)"/>
+    <ellipse cx="62" cy="40" rx="7" ry="22" fill="var(--pet-mid)"/>
+    <ellipse cx="98" cy="40" rx="7" ry="22" fill="var(--pet-mid)"/>
+    <ellipse cx="80" cy="110" rx="40" ry="30" fill="var(--pet-mid)"/>
+    <ellipse cx="80" cy="80" rx="30" ry="28" fill="var(--pet-light)"/>
+    <ellipse cx="70" cy="78" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="90" cy="78" rx="5" ry="6" fill="#2c1320"/>
+    <ellipse cx="80" cy="90" rx="3.5" ry="2.5" fill="#2c1320"/>
+    <path d="M76 96 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </svg>`,
+};
+
+function renderPetArt(pet) {
+  const type = pet.type && PET_SVGS[pet.type] ? pet.type : "luna";
+  const svg = PET_SVGS[type];
+  ["ep-mini-art", "ep-big-art"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = svg;
+    el.dataset.pet = type;
+    el.dataset.mood = pet.mood || "happy";
+    el.style.setProperty("--color-shift", `${pet.colorSeed || 0}deg`);
+  });
+}
+
+function renderPetPoop(pet) {
+  const hasPoop = !!pet.hasPoop;
+  const mini = document.getElementById("ep-mini-poop");
+  if (mini) mini.hidden = !hasPoop;
+  const row = document.getElementById("ep-poop-row");
+  if (row) row.hidden = !hasPoop;
 }
 
 // --- Story mini ring (right rail) ----------------------------------------
@@ -186,11 +295,13 @@ const SYMPTOM_META = {
   other:             { icon: "＋", label: "Other" },
 };
 function relTime(unixSec) {
-  const diff = Math.floor(Date.now() / 1000) - unixSec;
+  const n = Number(unixSec);
+  if (!Number.isFinite(n) || n <= 0) return "just now";
+  const diff = Math.floor(Date.now() / 1000) - n;
   if (diff < 60) return "just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  const d = new Date(unixSec * 1000);
+  const d = new Date(n * 1000);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
@@ -220,7 +331,7 @@ function renderTodaySymptoms() {
         ${s.notes ? `<p class="sym-notes">${escapeHtml(s.notes)}</p>` : ""}
         ${tags.length ? `<div class="sym-tags">${tags.map(escapeHtml).join(" ")}</div>` : ""}
       </div>
-      <div class="sym-time">${relTime(s.loggedAt)}</div>
+      <div class="sym-time">${relTime(s.logged_at)}</div>
     </li>`;
   }).join("") + `</ul>`;
 }
@@ -278,6 +389,74 @@ function bannerHtml({ tone, icon, title, body, cta, reward, modal }) {
       </div>
       ${cta ? `<button type="button" class="btn btn-primary" data-modal="${modal}">${cta} <em class="xp-badge">${reward}</em></button>` : ""}
     </div>`;
+}
+
+// --- Streak week (data-driven, only ticks on days actually logged) -------
+let weekCache = null;
+async function loadWeek(force = false) {
+  if (weekCache && !force) return weekCache;
+  try { weekCache = await api.week(); } catch { weekCache = null; }
+  return weekCache;
+}
+
+async function renderStreakWeek() {
+  const el = document.getElementById("streak-week");
+  if (!el) return;
+  const week = await loadWeek();
+  if (!week?.days?.length) {
+    el.innerHTML = `<p class="empty-state small">Log today to start your week.</p>`;
+    return;
+  }
+  const todayISO = todayLocalDate();
+  el.innerHTML = week.days.map((d) => {
+    const isToday = d.date === todayISO;
+    const dayLetter = ["S","M","T","W","T","F","S"][new Date(d.date + "T00:00:00").getDay()];
+    let dot;
+    if (d.logged) {
+      dot = `<span class="dot done">✓</span>`;
+    } else if (isToday) {
+      dot = `<span class="dot today">·</span>`;
+    } else {
+      dot = `<span class="dot">·</span>`;
+    }
+    return `<div${isToday ? ' class="is-today"' : ''}><span>${dayLetter}</span>${dot}</div>`;
+  }).join("");
+}
+
+// --- Cycle week modal (opens from clicking the Cycle Snapshot card) ------
+async function renderCycleWeekModal() {
+  const body = document.getElementById("cycle-week-body");
+  if (!body) return;
+  body.innerHTML = `<p class="empty-state">Loading…</p>`;
+  const week = await loadWeek(true);
+  if (!week?.days?.length) {
+    body.innerHTML = `<p class="empty-state">No data yet. Log a morning check-in to start seeing your week.</p>`;
+    return;
+  }
+  const days = week.days;
+  // Max-of-5 scale for pain/energy/mood since those are 1–5.
+  const metric = (label, key, color) => {
+    const bars = days.map((d) => {
+      const v = d[key];
+      const has = v != null && v > 0;
+      const h = has ? (v / 5) * 100 : 0;
+      const dayLabel = ["S","M","T","W","T","F","S"][new Date(d.date + "T00:00:00").getDay()];
+      return `<div class="cw-bar-col">
+        <div class="cw-bar-wrap"><div class="cw-bar" style="height:${h}%;background:${color}" title="${dayLabel}: ${has ? v + '/5' : 'no data'}"></div></div>
+        <span class="cw-day">${dayLabel}</span>
+      </div>`;
+    }).join("");
+    return `<div class="cw-metric">
+      <div class="cw-metric-head"><strong>${label}</strong> <span class="cw-meta">last 7 days</span></div>
+      <div class="cw-bars">${bars}</div>
+    </div>`;
+  };
+  const symptomTotal = days.reduce((s, d) => s + (d.symptomCount || 0), 0);
+  body.innerHTML = `
+    ${metric("Pain",   "pain",   "linear-gradient(180deg,#ff4e8a,#ff7aa6)")}
+    ${metric("Energy", "energy", "linear-gradient(180deg,#ffb43c,#ffd07a)")}
+    ${metric("Mood",   "mood",   "linear-gradient(180deg,#7ad06f,#a8e09f)")}
+    <p class="cw-summary">${symptomTotal} symptom${symptomTotal === 1 ? "" : "s"} logged this week.</p>`;
 }
 
 function renderSymptomsTodayHint(count) {
@@ -338,6 +517,7 @@ function openModal(name) {
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
   prefillModal(name);
+  if (name === "cycleWeek") renderCycleWeekModal();
   const firstInput = modal.querySelector("button[data-val], input, textarea");
   setTimeout(() => firstInput?.focus(), 80);
 }
@@ -410,9 +590,30 @@ document.addEventListener("click", (e) => {
     bumpCounter(form, cIncr.dataset.counterTarget, parseFloat(cIncr.dataset.counterIncr), { min: cIncr.dataset.min, max: cIncr.dataset.max });
     return;
   }
+  const cleanBtn = e.target.closest("#ep-clean-btn");
+  if (cleanBtn) {
+    e.preventDefault();
+    cleanBtn.disabled = true;
+    api.cleanPet().then(() => {
+      toast("Cleaned ✨ +2 XP", "ok");
+      refresh();
+    }).catch((err) => {
+      toast(err.message || "Couldn't clean", "err");
+      cleanBtn.disabled = false;
+    });
+    return;
+  }
   const open = e.target.closest("[data-modal]");
   if (open) { e.preventDefault(); openModal(open.dataset.modal); return; }
   if (e.target.closest("[data-close-modal]")) { closeAllModals(); return; }
+});
+
+// Keyboard activation for the clickable cycle-snapshot card.
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.id === "cycle-snapshot-card") {
+    e.preventDefault();
+    openModal("cycleWeek");
+  }
 });
 
 document.addEventListener("keydown", (e) => {
