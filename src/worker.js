@@ -67,6 +67,22 @@ export default {
           return await handleLogout(request, env);
         }
 
+        // --- Donations (public) ------------------------------------------
+        if (url.pathname === "/api/donations/totals" && request.method === "GET") {
+          if (!env.DB) return json({ error: "Storage not configured" }, 503);
+          return jsonHeaders(await getDonationTotals(env));
+        }
+        if (url.pathname === "/api/donations/leaderboard" && request.method === "GET") {
+          if (!env.DB) return json({ error: "Storage not configured" }, 503);
+          return jsonHeaders(await getDonationLeaderboard(env));
+        }
+        if (url.pathname === "/api/donations/checkout" && request.method === "POST") {
+          if (!env.DB) return json({ error: "Storage not configured" }, 503);
+          const sess = await readSession(request, env);
+          const viewer = sess ? await getOrCreateUser(env, sess.u).catch(() => null) : null;
+          return jsonHeaders(await postDonationCheckout(request, env, viewer));
+        }
+
         // --- Public(ish) profile read: /api/users/:username -----------------
         // Still session-gated so anonymous scraping is blocked, but the
         // viewer doesn't have to share a circle with the target.
@@ -1056,9 +1072,16 @@ async function handleStripeWebhook(request, env) {
     const session = event.data.object;
     const userId        = session.metadata?.user_id || session.client_reference_id || null;
     const testId        = session.metadata?.test_id || null;
+    const donationId    = session.metadata?.donation_id || null;
     const customerEmail = session.customer_details?.email || null;
     const amount        = session.amount_total != null ? (session.amount_total / 100).toFixed(2) : "?";
     const currency      = (session.currency || "AUD").toUpperCase();
+
+    // Donation completion (no order to record, just mark paid).
+    if (donationId) {
+      try { await completeDonation(env, session); }
+      catch (err) { console.error("completeDonation failed:", err?.message || err); }
+    }
 
     // Record the order against the user (sets ordered_at + marks story step
     // + sends the customer a branded confirmation email).
@@ -1212,6 +1235,7 @@ async function bootstrapSchema(env) {
       ensureMedSchema(env),
       ensureDocSchema(env),
       ensurePetPoopColumn(env),
+      ensureDonationsSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -1234,6 +1258,7 @@ async function adminBootstrapSchema(env) {
   await run("medications", ensureMedSchema);
   await run("documents",  ensureDocSchema);
   await run("pet_columns", ensurePetPoopColumn);
+  await run("donations",  ensureDonationsSchema);
   return json({ ok: true, results });
 }
 
@@ -4603,6 +4628,207 @@ async function deleteDocument(env, user, id) {
   }
   await env.DB.prepare("DELETE FROM documents WHERE id = ? AND user_id = ?").bind(id, user.id).run();
   return json({ ok: true });
+}
+
+// =============================================================================
+// DONATIONS — Stripe Checkout for endo-research crowdfunding.
+// Milestones are constants on the server so the roadmap is stable across
+// reloads. Anyone can donate (signed-in or not); the leaderboard names
+// only what the donor chose to share.
+// =============================================================================
+
+const DONATION_CURRENCY = "aud";
+const DONATION_MIN_CENTS = 200;      // $2 floor — keeps spam + Stripe fees sensible
+const DONATION_MAX_CENTS = 50000000; // $500k ceiling per single donation
+const MAX_DONOR_NAME_LEN = 60;
+const MAX_DONOR_MSG_LEN  = 240;
+
+// The roadmap. Each milestone is a target ($ amount in cents) plus the
+// concrete thing we'll do when it's reached. Order matters — they're shown
+// top-down on the page.
+const DONATION_MILESTONES = [
+  { key: "awareness",  targetCents:   500000, emoji: "📣", title: "Awareness Wave",
+    summary: "Print + distribute 5,000 endo info packs to GP clinics, schools and community health centres so fewer people wait 7 years for a diagnosis." },
+  { key: "consults",   targetCents:  1500000, emoji: "🩺", title: "First-Specialist Fund",
+    summary: "Sponsor 50 people through their first endometriosis-specialist consultation — covering the appointment, imaging, and travel where needed." },
+  { key: "dataset",    targetCents:  3000000, emoji: "🗂", title: "Open Symptom Dataset",
+    summary: "Build the first open-source, anonymised endo symptom dataset (sourced with consent from the EndoMe community) for researchers to train models on." },
+  { key: "ai-pilot",   targetCents:  5000000, emoji: "🤖", title: "AI Diagnosis Pilot",
+    summary: "Partner with an academic lab on a pilot study using AI to spot endo-suggestive patterns in routine imaging — aiming to cut years off the diagnostic delay." },
+  { key: "fellowship", targetCents:  7500000, emoji: "🎓", title: "Junior Research Fellowship",
+    summary: "Fund a six-month junior research fellowship dedicated to endo — peer-reviewed output, fully open-access, dataset shared with the community." },
+  { key: "ai-researcher", targetCents: 10000000, emoji: "🔬", title: "Full-Time AI Researcher",
+    summary: "Establish a full-time AI-powered research role — combining ML, lesion-imaging and patient-reported data with one mission: accelerate the path to a cure." },
+];
+
+let _donationsSchemaChecked = false;
+async function ensureDonationsSchema(env) {
+  if (_donationsSchemaChecked) return;
+  _donationsSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS donations (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT," +
+    "  donor_name TEXT," +
+    "  donor_message TEXT," +
+    "  amount_cents INTEGER NOT NULL," +
+    "  currency TEXT NOT NULL DEFAULT 'aud'," +
+    "  stripe_session_id TEXT," +
+    "  status TEXT NOT NULL DEFAULT 'pending'," + // pending | succeeded | failed
+    "  created_at INTEGER NOT NULL," +
+    "  completed_at INTEGER" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_donations_status  ON donations(status, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_donations_user    ON donations(user_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_donations_session ON donations(stripe_session_id)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+// Compute milestone status + progress from the running total.
+function donationRoadmap(totalCents) {
+  let cumulative = 0;
+  let activeIndex = -1;
+  const out = DONATION_MILESTONES.map((m, i) => {
+    cumulative += m.targetCents;
+    const reached = totalCents >= cumulative;
+    if (!reached && activeIndex < 0) activeIndex = i;
+    const baseline = cumulative - m.targetCents;
+    const progressInThisStep = Math.max(0, Math.min(m.targetCents, totalCents - baseline));
+    return {
+      key:        m.key,
+      emoji:      m.emoji,
+      title:      m.title,
+      summary:    m.summary,
+      targetCents: m.targetCents,
+      cumulativeCents: cumulative,
+      reached,
+      progress:   Math.round((progressInThisStep / m.targetCents) * 100),
+    };
+  });
+  return { milestones: out, activeIndex, totalGoalCents: cumulative };
+}
+
+async function getDonationTotals(env) {
+  await ensureDonationsSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS total FROM donations WHERE status = 'succeeded'"
+  ).first().catch(() => ({ n: 0, total: 0 }));
+  const totalCents = row?.total || 0;
+  const roadmap = donationRoadmap(totalCents);
+  return json({
+    currency: DONATION_CURRENCY.toUpperCase(),
+    totalCents,
+    donationCount: row?.n || 0,
+    milestones: roadmap.milestones,
+    activeIndex: roadmap.activeIndex,
+    totalGoalCents: roadmap.totalGoalCents,
+  });
+}
+
+async function getDonationLeaderboard(env) {
+  await ensureDonationsSchema(env);
+  const rows = await env.DB.prepare(
+    "SELECT donor_name, donor_message, amount_cents, completed_at " +
+    "FROM donations WHERE status = 'succeeded' " +
+    "ORDER BY amount_cents DESC, completed_at DESC LIMIT 25"
+  ).all().catch(() => ({ results: [] }));
+  return json({
+    currency: DONATION_CURRENCY.toUpperCase(),
+    donors: (rows.results || []).map((r) => ({
+      name:    r.donor_name || "Anonymous",
+      message: r.donor_message || null,
+      amountCents: r.amount_cents,
+      at: r.completed_at,
+    })),
+  });
+}
+
+async function postDonationCheckout(request, env, viewer) {
+  await ensureDonationsSchema(env);
+  if (!env.STRIPE_SECRET_KEY) return json({ error: "Donations aren't configured yet." }, 503);
+
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+
+  const cents = Math.round(Number(body.amountCents) || 0);
+  if (!Number.isFinite(cents) || cents < DONATION_MIN_CENTS) {
+    return json({ error: `Minimum donation is $${(DONATION_MIN_CENTS / 100).toFixed(2)} ${DONATION_CURRENCY.toUpperCase()}.` }, 400);
+  }
+  if (cents > DONATION_MAX_CENTS) {
+    return json({ error: "That's incredibly generous — please contact us directly for large donations." }, 400);
+  }
+  const donorName    = sanitizeText(body.donorName, MAX_DONOR_NAME_LEN) || (viewer ? null : null);
+  const donorMessage = sanitizeText(body.donorMessage, MAX_DONOR_MSG_LEN);
+  const anonymous    = body.anonymous === true || body.anonymous === "true";
+
+  // If viewer is signed in and didn't blank out / opt-out, default their alias.
+  let displayName = donorName;
+  if (!displayName && viewer && !anonymous) {
+    try {
+      const row = await env.DB.prepare(
+        "SELECT alias, display_name, username FROM users WHERE id = ?"
+      ).bind(viewer.id).first();
+      displayName = (row?.alias || row?.display_name || row?.username) || null;
+    } catch {}
+  }
+  if (anonymous) displayName = "Anonymous";
+
+  const now = nowSec();
+  const ins = await env.DB.prepare(
+    "INSERT INTO donations (user_id, donor_name, donor_message, amount_cents, currency, status, created_at) " +
+    "VALUES (?, ?, ?, ?, ?, 'pending', ?)"
+  ).bind(viewer?.id || null, displayName, donorMessage, cents, DONATION_CURRENCY, now).run();
+  const donationId = ins.meta?.last_row_id;
+
+  const siteUrl = (env.SITE_URL || "https://endome.com").replace(/\/$/, "");
+  const form = new URLSearchParams();
+  form.set("mode", "payment");
+  form.set("line_items[0][price_data][currency]", DONATION_CURRENCY);
+  form.set("line_items[0][price_data][product_data][name]", "EndoMe research donation");
+  form.set("line_items[0][price_data][product_data][description]", "Funds endometriosis research via the EndoMe roadmap.");
+  form.set("line_items[0][price_data][unit_amount]", String(cents));
+  form.set("line_items[0][quantity]", "1");
+  form.set("success_url", `${siteUrl}/donate?donation=success&session_id={CHECKOUT_SESSION_ID}`);
+  form.set("cancel_url",  `${siteUrl}/donate?donation=cancelled`);
+  form.set("allow_promotion_codes", "false");
+  form.set("submit_type", "donate");
+  form.set("metadata[donation_id]", String(donationId));
+  form.set("metadata[user_id]", viewer?.id || "");
+
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("donation checkout failed", res.status, text);
+    return json({ error: "Couldn't start checkout. Try again in a moment." }, 502);
+  }
+  const data = await res.json();
+  // Store the session id so the webhook can match the donation back.
+  try {
+    await env.DB.prepare("UPDATE donations SET stripe_session_id = ? WHERE id = ?")
+      .bind(data.id, donationId).run();
+  } catch {}
+  return json({ ok: true, url: data.url, donationId });
+}
+
+// Called from handleStripeWebhook when a checkout session completes with
+// metadata.donation_id set. Marks the donation succeeded and timestamps it.
+async function completeDonation(env, session) {
+  await ensureDonationsSchema(env);
+  const donationId = session.metadata?.donation_id ? +session.metadata.donation_id : null;
+  if (!donationId) return false;
+  const amount = session.amount_total ?? 0;
+  await env.DB.prepare(
+    "UPDATE donations SET status = 'succeeded', completed_at = ?, amount_cents = ? WHERE id = ?"
+  ).bind(nowSec(), amount || 0, donationId).run();
+  return true;
 }
 
 // =============================================================================

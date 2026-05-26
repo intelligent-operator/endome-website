@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <title>Donate – EndoMe Research</title>
+  <meta name="description" content="Help us fund endometriosis research. Every dollar moves the roadmap forward — from awareness to AI-assisted diagnosis." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/donate.css?v=1" />
+</head>
+<body class="donate-body">
+  <header class="donate-topbar">
+    <div class="donate-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <nav class="donate-nav">
+        <a href="/">Home</a>
+        <a href="/dashboard">Dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="donate-main">
+    <!-- ============= HERO ============= -->
+    <section class="donate-hero">
+      <p class="donate-eyebrow">Fund endometriosis research</p>
+      <h1>Move the diagnostic timeline from <em>7 years</em> to <em>7 weeks</em>.</h1>
+      <p class="donate-lead">200 million people. Average diagnostic delay: 7 years. We're crowdfunding a research roadmap that ends with a full-time AI-powered researcher hunting for a cure. Every dollar unlocks the next milestone.</p>
+
+      <div class="raise-card" id="raise-card">
+        <div class="raise-stats">
+          <div class="raise-stat raise-stat-big">
+            <span class="raise-stat-num" id="raised-amount">$0</span>
+            <span class="raise-stat-label">raised so far</span>
+          </div>
+          <div class="raise-stat">
+            <span class="raise-stat-num" id="raised-goal">of $1,000,000</span>
+            <span class="raise-stat-label">total roadmap</span>
+          </div>
+          <div class="raise-stat">
+            <span class="raise-stat-num" id="raised-count">0</span>
+            <span class="raise-stat-label">donations</span>
+          </div>
+        </div>
+        <div class="raise-bar"><div class="raise-bar-fill" id="raise-bar-fill" style="width:0%"></div></div>
+        <div class="raise-next" id="raise-next">Loading roadmap…</div>
+        <button class="donate-cta" id="donate-cta">💖 Donate now</button>
+      </div>
+    </section>
+
+    <!-- ============= ROADMAP ============= -->
+    <section class="donate-roadmap" id="donate-roadmap">
+      <h2 class="roadmap-title">The roadmap</h2>
+      <p class="roadmap-sub">Each milestone funds a real, specific thing for endometriosis. Hit it, we ship it.</p>
+      <ol class="roadmap-list" id="roadmap-list"></ol>
+    </section>
+
+    <!-- ============= LEADERBOARD ============= -->
+    <section class="donate-board">
+      <h2 class="roadmap-title">Hall of Heroes</h2>
+      <p class="roadmap-sub">Top donors. Add your name to the list — every amount counts.</p>
+      <ol class="board-list" id="board-list">
+        <li class="empty-state">Loading…</li>
+      </ol>
+    </section>
+
+    <footer class="donate-foot">
+      <p>EndoMe is built by a small team in Australia. 100% of donations go to the research roadmap — payment processing is the only cost taken out, via Stripe.</p>
+    </footer>
+  </main>
+
+  <!-- ============= DONATE MODAL ============= -->
+  <div class="donate-modal" id="donate-modal" aria-hidden="true" role="dialog">
+    <div class="donate-modal-backdrop" data-close-donate></div>
+    <div class="donate-modal-card">
+      <button class="donate-modal-close" type="button" data-close-donate aria-label="Close">×</button>
+      <h3>Donate to EndoMe research</h3>
+      <p class="donate-modal-sub">Any amount helps. You'll be redirected to Stripe to finish.</p>
+      <form id="donate-form">
+        <div class="donate-amounts" id="donate-amounts">
+          <button type="button" class="amt-chip" data-amount="500">$5</button>
+          <button type="button" class="amt-chip" data-amount="1000">$10</button>
+          <button type="button" class="amt-chip on" data-amount="2500">$25</button>
+          <button type="button" class="amt-chip" data-amount="5000">$50</button>
+          <button type="button" class="amt-chip" data-amount="10000">$100</button>
+          <button type="button" class="amt-chip" data-amount="25000">$250</button>
+        </div>
+        <label class="field"><span>Or a custom amount (AUD)</span>
+          <input type="number" id="custom-amount" min="2" max="500000" step="1" placeholder="e.g. 75" />
+        </label>
+        <label class="field"><span>Your name on the Hall of Heroes <em>(optional)</em></span>
+          <input type="text" id="donor-name" maxlength="60" placeholder="e.g. Tom, or 'Sarah's friends'" />
+        </label>
+        <label class="field"><span>A short message <em>(optional)</em></span>
+          <textarea id="donor-message" rows="2" maxlength="240" placeholder="For my sister, for my future, for the next person diagnosed…"></textarea>
+        </label>
+        <label class="donate-anon">
+          <input type="checkbox" id="donor-anonymous" />
+          <span>Donate anonymously</span>
+        </label>
+        <button type="submit" class="donate-go" id="donate-go">Donate <span id="donate-go-amount">$25</span> via Stripe →</button>
+        <p class="form-status" id="donate-status" role="status"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  <script src="/donate.js?v=1" defer></script>
+</body>
+</html>
