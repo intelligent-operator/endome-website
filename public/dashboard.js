@@ -210,9 +210,9 @@ function renderTodaySymptoms() {
   list.innerHTML = `<ul class="sym-list">` + items.map((s) => {
     const meta = SYMPTOM_META[s.symptom] || { icon: "•", label: s.symptom };
     const tags = [];
-    if (s.pain_type) tags.push(`🩸 ${s.pain_type}`);
-    if (s.location) tags.push(`📍 ${s.location}`);
-    if (s.triggers) tags.push(...String(s.triggers).split(",").map((t) => `· ${t}`));
+    if (s.pain_type) String(s.pain_type).split(",").filter(Boolean).forEach((p) => tags.push(`🩸 ${p}`));
+    if (s.location)  String(s.location).split(",").map((l) => l.trim()).filter(Boolean).forEach((l) => tags.push(`📍 ${l}`));
+    if (s.triggers)  String(s.triggers).split(",").filter(Boolean).forEach((t) => tags.push(`· ${t}`));
     return `<li class="sym-row">
       <div class="sym-ico" title="${meta.label}">${meta.icon}</div>
       <div class="sym-main">
@@ -397,7 +397,7 @@ document.addEventListener("click", (e) => {
   const chipBtn = e.target.closest("[data-chip] button");
   if (chipBtn) { selectChip(chipBtn.parentElement, chipBtn.dataset.val); onPickerChange(chipBtn); return; }
   const multiBtn = e.target.closest("[data-multi] button");
-  if (multiBtn) { toggleMulti(multiBtn.parentElement, multiBtn.dataset.val); return; }
+  if (multiBtn) { toggleMulti(multiBtn.parentElement, multiBtn.dataset.val); onPickerChange(multiBtn); return; }
   const cDecr = e.target.closest("[data-counter-decr]");
   if (cDecr) {
     const form = cDecr.closest("form");
@@ -422,7 +422,7 @@ document.addEventListener("keydown", (e) => {
 // --- Contextual show/hide -------------------------------------------------
 function onPickerChange(btn) {
   const group = btn.parentElement;
-  const key = group.dataset.scale || group.dataset.chip;
+  const key = group.dataset.scale || group.dataset.chip || group.dataset.multi;
   const value = group.dataset.value;
 
   // Show "Flow today" only when Menstrual is selected
@@ -431,11 +431,12 @@ function onPickerChange(btn) {
     if (flowRow) flowRow.hidden = value !== "menstrual";
   }
 
-  // Show location row only for pain-type symptoms
+  // Show pain-type + location rows when any pain-style symptom is selected.
   if (key === "symptom") {
+    const selected = (group.dataset.value || "").split(",").filter(Boolean);
     document.querySelectorAll("[data-show-when]").forEach((el) => {
       const triggers = el.dataset.showWhen.split(/\s+/);
-      el.hidden = !triggers.includes(value);
+      el.hidden = !selected.some((v) => triggers.includes(v));
     });
   }
 }
@@ -508,21 +509,21 @@ submitForm(
 submitForm(
   "form-symptom",
   (form) => {
-    const symptom = pickerVal(form, "symptom", "chip");
+    const symptoms = multiVals(form, "symptom");
     const severity = pickerVal(form, "severity");
-    if (!symptom) throw new Error("Pick a symptom.");
+    if (!symptoms.length) throw new Error("Pick at least one symptom.");
     if (!severity) throw new Error("Set severity 1–5.");
     return {
-      symptom, severity,
-      location: pickerVal(form, "location", "chip"),
-      painType: pickerVal(form, "painType", "chip"),
+      symptoms, severity,
+      locations: multiVals(form, "location"),
+      painTypes: multiVals(form, "painType"),
       triggers: multiVals(form, "triggers"),
       relief: multiVals(form, "relief"),
       notes: form.notes.value || null,
     };
   },
   api.logSymptom,
-  "Symptom logged"
+  "Symptoms logged"
 );
 
 submitForm(

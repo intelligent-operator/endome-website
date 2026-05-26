@@ -454,8 +454,8 @@
       </header>
       <form id="form-symptom" novalidate>
         <div class="modal-section">
-          <h4 class="section-title">Symptom</h4>
-          <div class="chip-pick wrap" data-chip="symptom">
+          <h4 class="section-title">Symptoms <span class="sec-hint">(pick one or more)</span></h4>
+          <div class="chip-pick wrap multi" data-multi="symptom">
             <button type="button" data-val="pelvic_pain">⚡ Pelvic pain</button>
             <button type="button" data-val="cramps">🔥 Cramps</button>
             <button type="button" data-val="endo_belly">🎈 Endo belly</button>
@@ -480,8 +480,8 @@
         </div>
 
         <div class="modal-section" id="pain-type-section" data-show-when="pain pelvic_pain back_pain cramps headache endo_belly breast_tender painful_urination painful_bowel painful_sex" hidden>
-          <h4 class="section-title">Pain feels like <span class="sec-hint">(optional)</span></h4>
-          <div class="chip-pick wrap" data-chip="painType">
+          <h4 class="section-title">Pain feels like <span class="sec-hint">(pick any that fit — optional)</span></h4>
+          <div class="chip-pick wrap multi" data-multi="painType">
             <button type="button" data-val="sharp">🗡 Sharp</button>
             <button type="button" data-val="dull">🌫 Dull</button>
             <button type="button" data-val="burning">🔥 Burning</button>
@@ -507,9 +507,9 @@
 
         <div class="modal-section" id="symptom-extras">
           <h4 class="section-title">Where & context <span class="sec-hint">(optional)</span></h4>
-          <div class="seg-field" data-show-when="pain pelvic_pain back_pain cramps">
-            <label>Location</label>
-            <div class="chip-pick wrap" data-chip="location">
+          <div class="seg-field" data-show-when="pain pelvic_pain back_pain cramps endo_belly painful_urination painful_bowel painful_sex">
+            <label>Location <em>(pick any)</em></label>
+            <div class="chip-pick wrap multi" data-multi="location">
               <button type="button" data-val="Lower abdomen">Lower abdomen</button>
               <button type="button" data-val="Pelvis">Pelvis</button>
               <button type="button" data-val="Ovaries">Ovaries</button>

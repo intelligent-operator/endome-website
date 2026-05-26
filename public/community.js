@@ -51,7 +51,13 @@
       const data = await fetchJson("/api/me/community");
       myTier = data.tier;
       renderTier(data.tier);
-      renderCircles(document.getElementById("my-circles"), data.myCircles || [], { showRole: true });
+
+      // Pull the official EndoMe circle out so we can spotlight it.
+      const my = data.myCircles || [];
+      const officialIdx = my.findIndex((c) => c.is_official);
+      const official = officialIdx >= 0 ? my.splice(officialIdx, 1)[0] : null;
+      renderOfficial(official);
+      renderCircles(document.getElementById("my-circles"), my, { showRole: true });
       renderCircles(document.getElementById("discover-circles"), data.discover || [], { showRole: false, withJoin: true });
       const createBtn = document.getElementById("btn-create");
       createBtn.disabled = !data.tier.canCreateCircle;
@@ -62,6 +68,36 @@
       document.getElementById("discover-circles").innerHTML =
         `<p class="empty-state">Couldn't load circles right now.</p>`;
     }
+  }
+
+  function renderOfficial(c) {
+    const section = document.getElementById("official-section");
+    const slot = document.getElementById("official-card-slot");
+    if (!c) { section.hidden = true; return; }
+    section.hidden = false;
+    const desc = c.description || "The home for everyone here. Share stories, ask questions, lift each other up.";
+    slot.innerHTML = `
+      <article class="circle-hero-card" data-open="${escapeHtml(c.slug)}">
+        <div class="circle-hero-card-icon">🌸</div>
+        <div class="circle-hero-card-body">
+          <div class="circle-hero-card-top">
+            <h2>${escapeHtml(c.name)}</h2>
+            <span class="official-pill">Official</span>
+            ${c.role ? `<span class="role-pill role-${c.role}">${roleLabel(c.role)}</span>` : ""}
+          </div>
+          <p>${escapeHtml(desc)}</p>
+          <div class="circle-hero-card-meta">
+            <span>👥 ${c.member_count || 0} member${(c.member_count||0)===1?"":"s"}</span>
+            <span>📝 ${c.post_count || 0} post${(c.post_count||0)===1?"":"s"}</span>
+          </div>
+        </div>
+        <div class="circle-hero-card-actions">
+          <button class="btn btn-primary" data-open="${escapeHtml(c.slug)}">Open EndoMe →</button>
+        </div>
+      </article>`;
+  }
+  function roleLabel(r) {
+    return r === "admin" ? "👑 Admin" : r === "moderator" ? "🛡 Moderator" : "💖 Member";
   }
 
   function renderTier(t) {
@@ -83,7 +119,7 @@
     if (!list.length) {
       container.innerHTML = opts.withJoin
         ? `<p class="empty-state">No new circles to discover right now. Once Trusted, you can create your own.</p>`
-        : `<p class="empty-state">You'll see your circles here once you're in one.</p>`;
+        : `<p class="empty-state">You're in the official EndoMe circle above. Join others from "Discover" below or create your own once you're Trusted.</p>`;
       return;
     }
     container.innerHTML = list.map((c) => `

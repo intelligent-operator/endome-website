@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin · EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/acp.css" />
+</head>
+<body class="acp-body">
+  <header class="acp-topbar">
+    <div class="acp-topbar-inner">
+      <a href="/dashboard" class="acp-logo">
+        <img src="/logo-final.png" alt="" width="28" height="28" />
+        <span>EndoMe</span>
+        <span class="acp-badge">ADMIN</span>
+      </a>
+      <nav class="acp-nav">
+        <button class="acp-tab active" data-tab="users">Users</button>
+        <button class="acp-tab" data-tab="circles">Circles</button>
+      </nav>
+      <a href="/api/logout" class="acp-signout">Sign out</a>
+    </div>
+  </header>
+
+  <main class="acp-main">
+    <!-- USERS -->
+    <section class="acp-view" id="view-users">
+      <header class="acp-section-head">
+        <h1>Users</h1>
+        <input type="search" id="user-search" placeholder="Search name, email, username…" />
+      </header>
+      <div class="acp-card" id="users-card">
+        <p class="acp-empty">Loading users…</p>
+      </div>
+    </section>
+
+    <!-- CIRCLES -->
+    <section class="acp-view" id="view-circles" hidden>
+      <header class="acp-section-head">
+        <h1>Circles</h1>
+        <span class="acp-hint">Click a circle to manage its members and their roles.</span>
+      </header>
+      <div class="acp-card" id="circles-card">
+        <p class="acp-empty">Loading circles…</p>
+      </div>
+    </section>
+
+    <!-- CIRCLE DETAIL -->
+    <section class="acp-view" id="view-circle" hidden>
+      <button class="acp-back" id="back-to-circles">← Back to circles</button>
+      <header class="acp-section-head">
+        <h1 id="circle-title">Circle</h1>
+        <button class="acp-btn" id="btn-add-member">+ Add member</button>
+      </header>
+      <div class="acp-card" id="members-card">
+        <p class="acp-empty">Loading members…</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Add member modal -->
+  <div class="acp-modal" id="add-modal" aria-hidden="true">
+    <div class="acp-modal-backdrop" data-close-modal></div>
+    <div class="acp-modal-card">
+      <button class="acp-modal-close" data-close-modal>×</button>
+      <h3>Add a member</h3>
+      <p class="acp-modal-sub">Pick a user and a role.</p>
+      <form id="add-form">
+        <label class="acp-field">
+          <span>User</span>
+          <select id="add-user-id" required></select>
+        </label>
+        <label class="acp-field">
+          <span>Role</span>
+          <select id="add-role">
+            <option value="member">Member</option>
+            <option value="moderator">Moderator</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <button type="submit" class="acp-btn primary full">Add to circle</button>
+        <p class="acp-form-status" id="add-status"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="/acp.js" defer></script>
+</body>
+</html>

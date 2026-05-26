@@ -1,0 +1,147 @@
+/* =====================================================================
+   /acp — Admin Control Panel (env-var admin only).
+   ===================================================================== */
+.acp-body{
+  background:#fdf8fa;color:#2b1922;font-family:Poppins,sans-serif;margin:0;min-height:100vh;
+}
+
+.acp-topbar{
+  position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #ffeaf2;
+  box-shadow:0 2px 8px rgba(255,77,138,.06);
+}
+.acp-topbar-inner{
+  max-width:1280px;margin:0 auto;padding:12px 24px;
+  display:flex;align-items:center;gap:20px;
+}
+.acp-logo{
+  display:inline-flex;align-items:center;gap:8px;color:#2b1922;
+  text-decoration:none;font-weight:700;font-size:16px;
+}
+.acp-badge{
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  font-size:10px;letter-spacing:.12em;padding:3px 8px;border-radius:6px;font-weight:800;
+}
+.acp-nav{display:flex;gap:6px;margin-left:18px}
+.acp-tab{
+  background:transparent;border:none;font-family:inherit;font-size:14px;font-weight:600;
+  color:#7a5f6c;padding:8px 14px;border-radius:8px;cursor:pointer;
+}
+.acp-tab:hover{background:#fff5f8;color:#ff4e8a}
+.acp-tab.active{background:#ffeaf2;color:#ff4e8a}
+.acp-signout{
+  margin-left:auto;color:#7a5f6c;font-size:13px;text-decoration:none;
+  padding:8px 12px;border-radius:8px;
+}
+.acp-signout:hover{background:#fff5f8;color:#ff4e8a}
+
+.acp-main{max-width:1280px;margin:0 auto;padding:28px 24px 60px}
+
+.acp-view{display:flex;flex-direction:column;gap:18px}
+.acp-section-head{
+  display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+}
+.acp-section-head h1{margin:0;font-size:24px;font-weight:700;color:#2b1922;letter-spacing:-.3px}
+.acp-hint{font-size:13px;color:#7a5f6c}
+
+#user-search{
+  width:320px;max-width:100%;
+  padding:9px 14px;border:1px solid #ffd6e0;border-radius:999px;
+  font-family:inherit;font-size:13px;background:#fff;outline:none;
+}
+#user-search:focus{border-color:#ff4e8a;box-shadow:0 0 0 3px rgba(255,77,138,.12)}
+
+.acp-card{
+  background:#fff;border:1px solid #ffeaf2;border-radius:16px;
+  overflow:hidden;box-shadow:0 4px 16px rgba(255,77,138,.05);
+}
+.acp-empty{padding:32px;text-align:center;color:#7a5f6c;font-size:13px;margin:0}
+
+/* Tables */
+.acp-table{width:100%;border-collapse:collapse;font-size:13px}
+.acp-table thead th{
+  background:#fff5f8;text-align:left;padding:12px 16px;font-weight:700;
+  color:#5a3a48;font-size:12px;text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid #ffeaf2;
+}
+.acp-table tbody td{
+  padding:14px 16px;border-bottom:1px solid #fff0f5;color:#3a2330;vertical-align:middle;
+}
+.acp-table tbody tr:last-child td{border-bottom:none}
+.acp-table tbody tr:hover{background:#fffafc}
+
+.acp-username{font-weight:600;color:#2b1922}
+.acp-meta{font-size:11px;color:#a08596;margin-top:2px}
+.acp-pill{
+  display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;
+  background:#ffeaf2;color:#ff4e8a;
+}
+.acp-pill.role-admin{background:#fff0d6;color:#c2811a}
+.acp-pill.role-moderator{background:#e6f7e0;color:#3a9b4b}
+.acp-pill.role-member{background:#ffeaf2;color:#ff4e8a}
+.acp-pill.official{background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff}
+
+.acp-actions{display:flex;gap:6px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.acp-btn{
+  background:#fff;border:1px solid #ffd6e0;color:#ff4e8a;border-radius:999px;
+  padding:7px 14px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;
+}
+.acp-btn:hover{background:#ffeaf2}
+.acp-btn.primary{background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border-color:transparent}
+.acp-btn.primary:hover{filter:brightness(1.05)}
+.acp-btn.danger{color:#c4344b;border-color:#ffd0d8}
+.acp-btn.danger:hover{background:#fff0f3}
+.acp-btn.full{width:100%;padding:11px 16px;font-size:14px;margin-top:6px}
+
+.acp-role-select{
+  border:1px solid #ffd6e0;background:#fff;border-radius:999px;
+  padding:6px 28px 6px 12px;font-family:inherit;font-size:12px;color:#3a2330;cursor:pointer;
+  appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='%23a08596' d='M3 5l5 6 5-6z'/></svg>");
+  background-repeat:no-repeat;background-position:right 8px center;background-size:14px;
+}
+.acp-role-select:focus{outline:none;border-color:#ff4e8a}
+
+.acp-back{
+  background:none;border:none;color:#7a5f6c;font-size:13px;font-weight:600;
+  cursor:pointer;padding:0;text-align:left;width:fit-content;
+}
+.acp-back:hover{color:#ff4e8a}
+
+.acp-circle-row{cursor:pointer}
+.acp-circle-row td:first-child{font-weight:600}
+
+/* Modal */
+.acp-modal{
+  position:fixed;inset:0;z-index:60;display:none;
+  align-items:center;justify-content:center;padding:20px;
+}
+.acp-modal.open{display:flex}
+.acp-modal-backdrop{position:absolute;inset:0;background:rgba(58,29,43,.55);backdrop-filter:blur(4px)}
+.acp-modal-card{
+  position:relative;z-index:1;width:100%;max-width:420px;background:#fff;border-radius:20px;
+  padding:28px;box-shadow:0 30px 70px rgba(58,29,43,.35);
+}
+.acp-modal-card h3{margin:0 0 4px;font-size:20px;color:#2b1922}
+.acp-modal-sub{margin:0 0 16px;font-size:13px;color:#7a5f6c}
+.acp-modal-close{
+  position:absolute;top:10px;right:14px;background:transparent;border:none;
+  font-size:26px;cursor:pointer;color:#7a5f6c;
+}
+.acp-field{display:block;margin-bottom:14px}
+.acp-field > span{display:block;font-size:13px;font-weight:600;color:#3a2330;margin-bottom:6px}
+.acp-field select{
+  width:100%;padding:11px 14px;border:1px solid #ffd6e0;border-radius:12px;
+  font-family:inherit;font-size:14px;background:#fff5f8;outline:none;box-sizing:border-box;
+}
+.acp-field select:focus{border-color:#ff4e8a;background:#fff}
+.acp-form-status{margin:10px 0 0;font-size:12px;color:#7a5f6c;text-align:center;min-height:1em}
+.acp-form-status.err{color:#c4344b}
+
+@media (max-width:640px){
+  .acp-topbar-inner{flex-wrap:wrap;gap:10px}
+  .acp-nav{order:3;width:100%;justify-content:center;margin-left:0}
+  .acp-main{padding:20px 14px 40px}
+  .acp-table thead{display:none}
+  .acp-table tbody td{display:block;padding:8px 14px;border-bottom:none}
+  .acp-table tbody tr{display:block;border-bottom:1px solid #fff0f5;padding:10px 0}
+  .acp-actions{justify-content:flex-start;padding-top:6px}
+}

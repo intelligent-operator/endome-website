@@ -67,6 +67,15 @@ export default {
           return await handleLogout(request, env);
         }
 
+        // --- /api/acp/* — Admin Control Panel APIs ------------------------
+        // Locked to the env-var admin login only (AUTH_USERNAME).
+        if (url.pathname.startsWith("/api/acp/")) {
+          const session = await readSession(request, env);
+          if (!isAdminSession(env, session)) return json({ error: "Forbidden" }, 403);
+          if (!env.DB) return json({ error: "Storage not configured" }, 503);
+          return jsonHeaders(await handleAcp(request, env, url));
+        }
+
         // --- Authenticated user-data endpoints ----------------------------
         if (url.pathname.startsWith("/api/me/")) {
           const session = await readSession(request, env);
@@ -222,6 +231,18 @@ export default {
       const session = await readSession(request, env);
       if (!session) {
         return Response.redirect(new URL("/login", request.url).toString(), 302);
+      }
+    }
+
+    // --- /acp — Admin Control Panel HTML gate ------------------------------
+    // Same env-var admin as the API: anyone else gets bounced.
+    if (url.pathname === "/acp" || url.pathname === "/acp.html" || url.pathname.startsWith("/acp/")) {
+      const session = await readSession(request, env);
+      if (!session) {
+        return Response.redirect(new URL("/login", request.url).toString(), 302);
+      }
+      if (!isAdminSession(env, session)) {
+        return Response.redirect(new URL("/dashboard", request.url).toString(), 302);
       }
     }
 
@@ -1337,39 +1358,86 @@ async function postSymptom(request, env, user) {
   const body = await readJsonSafe(request);
   if (!body) return json({ error: "Invalid body" }, 400);
 
-  const symptom = typeof body.symptom === "string" ? body.symptom.toLowerCase().trim() : "";
-  if (!ALLOWED_SYMPTOMS.has(symptom)) return json({ error: "Unknown symptom" }, 400);
+  // Accept either a `symptoms` array (new multi-select UI) or a single
+  // `symptom` string (legacy single-select callers).
+  const rawList = Array.isArray(body.symptoms) ? body.symptoms
+                : (typeof body.symptom === "string" ? [body.symptom] : []);
+  const symptoms = [];
+  for (const item of rawList) {
+    if (typeof item !== "string") continue;
+    const lc = item.toLowerCase().trim();
+    if (ALLOWED_SYMPTOMS.has(lc) && !symptoms.includes(lc)) symptoms.push(lc);
+    if (symptoms.length >= 20) break;
+  }
+  if (!symptoms.length) return json({ error: "Pick at least one symptom." }, 400);
+
   const severity = clampInt(body.severity, 1, 5);
   if (severity == null) return json({ error: "severity is required (1–5)" }, 400);
-  const location = sanitizeText(body.location, 60);
+
+  // Locations / pain types accept either an array (new) or a single string (legacy).
+  const locations = pickStringList(body.locations ?? body.location, 6, 60);
+  const locationCsv = locations.length ? locations.join(", ").slice(0, 240) : null;
+
+  const painTypeList = [];
+  const rawPainTypes = Array.isArray(body.painTypes) ? body.painTypes
+                     : (typeof body.painType === "string" ? [body.painType] : []);
+  for (const item of rawPainTypes) {
+    if (typeof item !== "string") continue;
+    const lc = item.toLowerCase().trim();
+    if (ALLOWED_PAIN_TYPES.has(lc) && !painTypeList.includes(lc)) painTypeList.push(lc);
+    if (painTypeList.length >= 6) break;
+  }
+
   const notes    = sanitizeText(body.notes, 500);
   const triggers = tagList(body.triggers, ALLOWED_TRIGGERS);
   const relief   = tagList(body.relief, ALLOWED_RELIEF);
-  // pain_type only persisted for pain-style symptoms; ignored otherwise.
-  const painType = PAIN_SYMPTOMS.has(symptom) ? oneOf(body.painType, ALLOWED_PAIN_TYPES) : null;
   const date = normaliseDate(body.date);
   const now = nowSec();
-  const points = POINTS_SYMPTOM;
 
-  await env.DB.batch([
-    env.DB.prepare(
+  // One DB row per symptom, sharing the descriptors. We only credit XP for
+  // the first one (so logging "10 things at once" doesn't game the system),
+  // and we batch the writes.
+  const POINTS_FIRST = POINTS_SYMPTOM;
+  const POINTS_EXTRA = Math.max(1, Math.floor(POINTS_SYMPTOM / 2));
+  let totalPoints = 0;
+  const stmts = [];
+  symptoms.forEach((s, i) => {
+    const painType = PAIN_SYMPTOMS.has(s) && painTypeList.length
+      ? painTypeList.join(",").slice(0, 120) : null;
+    const pts = i === 0 ? POINTS_FIRST : POINTS_EXTRA;
+    totalPoints += pts;
+    stmts.push(env.DB.prepare(
       "INSERT INTO symptoms (user_id, log_date, logged_at, symptom, severity, location, notes, triggers, relief, pain_type, points) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(user.id, date, now, symptom, severity, location, notes, triggers, relief, painType, points),
-    env.DB.prepare(
-      `INSERT INTO daily_logs (user_id, log_date, points_total)
-       VALUES (?, ?, ?)
-       ON CONFLICT(user_id, log_date) DO UPDATE SET points_total = daily_logs.points_total + ?`
-    ).bind(user.id, date, points, points),
-  ]);
+    ).bind(user.id, date, now + i, s, severity, locationCsv, notes, triggers, relief, painType, pts));
+  });
+  stmts.push(env.DB.prepare(
+    `INSERT INTO daily_logs (user_id, log_date, points_total)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id, log_date) DO UPDATE SET points_total = daily_logs.points_total + ?`
+  ).bind(user.id, date, totalPoints, totalPoints));
+  await env.DB.batch(stmts);
 
-  const pet = await awardXp(env, user.id, points, date);
-  // Use logged_at as the source id — unique per symptom entry. Pain or
-  // severity-5 entries also flag as a flare for the future achievement.
-  const isFlare = severity >= 4 || ["pelvic_pain", "endo_belly"].includes(symptom);
+  const pet = await awardXp(env, user.id, totalPoints, date);
+  const flareSym = symptoms.find((s) => ["pelvic_pain", "endo_belly"].includes(s));
+  const isFlare = severity >= 4 || !!flareSym;
   const glow = await endopetGrantReward(env, user.id, isFlare ? "flare" : "symptom", `${date}:${now}`);
   const ach  = await endopetRunAllChecks(env, user.id, { welcomeBack: glow?.welcomeBack });
-  return json({ ok: true, pointsAwarded: points, pet, glow, ach });
+  return json({ ok: true, pointsAwarded: totalPoints, count: symptoms.length, pet, glow, ach });
+}
+
+// Sanitize a list of free-text strings (location). Accepts either an array
+// or a single string. Trims, drops empties, dedupes, caps length per item.
+function pickStringList(v, maxCount, maxLen) {
+  const arr = Array.isArray(v) ? v : (typeof v === "string" ? [v] : []);
+  const out = [];
+  for (const item of arr) {
+    if (typeof item !== "string") continue;
+    const cleaned = sanitizeText(item, maxLen);
+    if (cleaned && !out.includes(cleaned)) out.push(cleaned);
+    if (out.length >= maxCount) break;
+  }
+  return out;
 }
 
 // --- /api/me/symptoms (GET) -----------------------------------------------
@@ -3255,4 +3323,196 @@ async function reactReply(env, user, replyId) {
     "INSERT INTO circle_reactions (target_type, target_id, user_id, reaction, created_at) VALUES ('reply', ?, ?, 'heart', ?)"
   ).bind(replyId, user.id, nowSec()).run();
   return json({ ok: true, hearted: true });
+}
+
+// =============================================================================
+// ADMIN CONTROL PANEL (/acp) — env-var admin only.
+// Lists users + circles, sets per-circle member roles, adds/removes members.
+// =============================================================================
+
+const ACP_CIRCLE_ROLES = new Set(["member", "moderator", "admin"]);
+
+function isAdminSession(env, session) {
+  const cfgUser = (env.AUTH_USERNAME || "").toLowerCase();
+  if (!cfgUser || !session?.u) return false;
+  return timingSafeEqual(String(session.u).toLowerCase(), cfgUser);
+}
+
+async function handleAcp(request, env, url) {
+  const path = url.pathname.slice("/api/acp".length); // e.g. "/users"
+
+  if (path === "/me" && request.method === "GET") {
+    return json({ ok: true, admin: true });
+  }
+
+  if (path === "/users" && request.method === "GET") {
+    return await acpListUsers(env, url);
+  }
+
+  if (path === "/circles" && request.method === "GET") {
+    return await acpListCircles(env);
+  }
+
+  const circleMembers = path.match(/^\/circles\/(\d+)\/members$/);
+  if (circleMembers && request.method === "GET") {
+    return await acpListMembers(env, +circleMembers[1]);
+  }
+  if (circleMembers && request.method === "POST") {
+    return await acpAddMember(request, env, +circleMembers[1]);
+  }
+
+  const memberRole = path.match(/^\/circles\/(\d+)\/members\/([^\/]+)$/);
+  if (memberRole && request.method === "PUT") {
+    return await acpSetRole(request, env, +memberRole[1], decodeURIComponent(memberRole[2]));
+  }
+  if (memberRole && request.method === "DELETE") {
+    return await acpRemoveMember(env, +memberRole[1], decodeURIComponent(memberRole[2]));
+  }
+
+  return json({ error: "Not found" }, 404);
+}
+
+async function acpListUsers(env, url) {
+  const q = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 60);
+  let rows = { results: [] };
+  try {
+    if (q) {
+      const like = `%${q.replace(/[%_]/g, (c) => "\\" + c)}%`;
+      rows = await env.DB.prepare(
+        "SELECT u.id, u.username, u.email, u.display_name, u.created_at, " +
+        "       (SELECT COUNT(*) FROM circle_members m WHERE m.user_id = u.id) AS circle_count, " +
+        "       (SELECT COUNT(*) FROM symptoms s WHERE s.user_id = u.id) AS symptom_count " +
+        "FROM users u " +
+        "WHERE LOWER(u.username) LIKE ? ESCAPE '\\' OR LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(u.display_name) LIKE ? ESCAPE '\\' " +
+        "ORDER BY u.created_at DESC LIMIT 200"
+      ).bind(like, like, like).all();
+    } else {
+      rows = await env.DB.prepare(
+        "SELECT u.id, u.username, u.email, u.display_name, u.created_at, " +
+        "       (SELECT COUNT(*) FROM circle_members m WHERE m.user_id = u.id) AS circle_count, " +
+        "       (SELECT COUNT(*) FROM symptoms s WHERE s.user_id = u.id) AS symptom_count " +
+        "FROM users u ORDER BY u.created_at DESC LIMIT 200"
+      ).all();
+    }
+  } catch (err) {
+    console.warn("acpListUsers:", err?.message || err);
+  }
+  return json({
+    users: (rows.results || []).map((u) => ({
+      id: u.id, username: u.username, email: u.email || null,
+      displayName: u.display_name || null, createdAt: u.created_at,
+      circleCount: u.circle_count || 0, symptomCount: u.symptom_count || 0,
+    })),
+  });
+}
+
+async function acpListCircles(env) {
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT c.id, c.slug, c.name, c.description, c.is_official, c.is_open, c.created_at, " +
+      "       (SELECT COUNT(*) FROM circle_members m WHERE m.circle_id = c.id) AS member_count, " +
+      "       (SELECT COUNT(*) FROM circle_posts p WHERE p.circle_id = c.id AND p.deleted_at IS NULL) AS post_count " +
+      "FROM circles c ORDER BY c.is_official DESC, c.created_at DESC LIMIT 200"
+    ).all();
+  } catch (err) {
+    console.warn("acpListCircles:", err?.message || err);
+  }
+  return json({
+    circles: (rows.results || []).map((c) => ({
+      id: c.id, slug: c.slug, name: c.name, description: c.description,
+      isOfficial: !!c.is_official, isOpen: !!c.is_open, createdAt: c.created_at,
+      memberCount: c.member_count || 0, postCount: c.post_count || 0,
+    })),
+  });
+}
+
+async function acpListMembers(env, circleId) {
+  const circle = await env.DB.prepare(
+    "SELECT id, slug, name FROM circles WHERE id = ?"
+  ).bind(circleId).first().catch(() => null);
+  if (!circle) return json({ error: "Circle not found" }, 404);
+
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT m.user_id, m.role, m.joined_at, u.username, u.display_name, u.email " +
+      "FROM circle_members m LEFT JOIN users u ON u.id = m.user_id " +
+      "WHERE m.circle_id = ? " +
+      "ORDER BY CASE m.role WHEN 'admin' THEN 0 WHEN 'moderator' THEN 1 ELSE 2 END, m.joined_at ASC " +
+      "LIMIT 500"
+    ).bind(circleId).all();
+  } catch (err) { console.warn("acpListMembers:", err?.message || err); }
+  return json({
+    circle: { id: circle.id, slug: circle.slug, name: circle.name },
+    members: (rows.results || []).map((m) => ({
+      userId: m.user_id, role: m.role, joinedAt: m.joined_at,
+      username: m.username, displayName: m.display_name || null, email: m.email || null,
+    })),
+  });
+}
+
+async function acpAddMember(request, env, circleId) {
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const userId = sanitizeText(body.userId, 200);
+  const role = ACP_CIRCLE_ROLES.has(body.role) ? body.role : "member";
+  if (!userId) return json({ error: "userId is required" }, 400);
+
+  const circle = await env.DB.prepare("SELECT id FROM circles WHERE id = ?")
+    .bind(circleId).first().catch(() => null);
+  if (!circle) return json({ error: "Circle not found" }, 404);
+
+  const user = await env.DB.prepare("SELECT id FROM users WHERE id = ?")
+    .bind(userId).first().catch(() => null);
+  if (!user) return json({ error: "User not found" }, 404);
+
+  await env.DB.prepare(
+    "INSERT INTO circle_members (circle_id, user_id, role, joined_at) " +
+    "VALUES (?, ?, ?, ?) " +
+    "ON CONFLICT(circle_id, user_id) DO UPDATE SET role = excluded.role"
+  ).bind(circleId, userId, role, nowSec()).run();
+  return json({ ok: true });
+}
+
+async function acpSetRole(request, env, circleId, userId) {
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const role = ACP_CIRCLE_ROLES.has(body.role) ? body.role : null;
+  if (!role) return json({ error: "role must be member/moderator/admin" }, 400);
+
+  const existing = await env.DB.prepare(
+    "SELECT 1 FROM circle_members WHERE circle_id = ? AND user_id = ?"
+  ).bind(circleId, userId).first().catch(() => null);
+  if (!existing) return json({ error: "User is not in this circle. Add them first." }, 404);
+
+  await env.DB.prepare(
+    "UPDATE circle_members SET role = ? WHERE circle_id = ? AND user_id = ?"
+  ).bind(role, circleId, userId).run();
+  return json({ ok: true, role });
+}
+
+async function acpRemoveMember(env, circleId, userId) {
+  // Don't strand official circles without any admin — but allow if other admins exist.
+  const circle = await env.DB.prepare(
+    "SELECT id, is_official FROM circles WHERE id = ?"
+  ).bind(circleId).first().catch(() => null);
+  if (!circle) return json({ error: "Circle not found" }, 404);
+
+  if (circle.is_official) {
+    const otherAdmins = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM circle_members WHERE circle_id = ? AND role = 'admin' AND user_id != ?"
+    ).bind(circleId, userId).first().catch(() => ({ n: 0 }));
+    const meRow = await env.DB.prepare(
+      "SELECT role FROM circle_members WHERE circle_id = ? AND user_id = ?"
+    ).bind(circleId, userId).first().catch(() => null);
+    if (meRow?.role === "admin" && (otherAdmins?.n || 0) === 0) {
+      return json({ error: "Can't remove the last admin of an official circle." }, 400);
+    }
+  }
+
+  await env.DB.prepare(
+    "DELETE FROM circle_members WHERE circle_id = ? AND user_id = ?"
+  ).bind(circleId, userId).run();
+  return json({ ok: true });
 }

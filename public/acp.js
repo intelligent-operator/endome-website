@@ -1,0 +1,284 @@
+// /acp — Admin Control Panel.
+// Server already blocks non-admins from this page; the JS just talks to /api/acp/*.
+(() => {
+  const views = {
+    users:   document.getElementById("view-users"),
+    circles: document.getElementById("view-circles"),
+    circle:  document.getElementById("view-circle"),
+  };
+  let allUsersCache = []; // for the add-member dropdown
+  let currentCircleId = null;
+
+  // --- Tabs ------------------------------------------------------------
+  document.querySelectorAll(".acp-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const name = tab.dataset.tab;
+      document.querySelectorAll(".acp-tab").forEach((t) => t.classList.toggle("active", t === tab));
+      showView(name);
+      if (name === "users") loadUsers();
+      if (name === "circles") loadCircles();
+    });
+  });
+  function showView(name) {
+    views.users.hidden   = name !== "users";
+    views.circles.hidden = name !== "circles";
+    views.circle.hidden  = name !== "circle";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // --- Users -----------------------------------------------------------
+  let userSearchTimer = null;
+  document.getElementById("user-search").addEventListener("input", (e) => {
+    clearTimeout(userSearchTimer);
+    const q = e.target.value;
+    userSearchTimer = setTimeout(() => loadUsers(q), 220);
+  });
+
+  async function loadUsers(q = "") {
+    const card = document.getElementById("users-card");
+    try {
+      const url = q ? `/api/acp/users?q=${encodeURIComponent(q)}` : "/api/acp/users";
+      const data = await fetchJson(url);
+      allUsersCache = data.users || [];
+      if (!allUsersCache.length) {
+        card.innerHTML = `<p class="acp-empty">No users match "${escapeHtml(q)}".</p>`;
+        return;
+      }
+      card.innerHTML = `
+        <table class="acp-table">
+          <thead><tr>
+            <th>User</th><th>Email</th><th>Joined</th><th>Circles</th><th>Symptoms</th>
+          </tr></thead>
+          <tbody>${allUsersCache.map(userRow).join("")}</tbody>
+        </table>`;
+    } catch (err) {
+      card.innerHTML = `<p class="acp-empty">Couldn't load users: ${escapeHtml(err.message || "")}</p>`;
+    }
+  }
+  function userRow(u) {
+    return `<tr>
+      <td>
+        <div class="acp-username">${escapeHtml(u.displayName || u.username)}</div>
+        <div class="acp-meta">@${escapeHtml(u.username)}</div>
+      </td>
+      <td>${escapeHtml(u.email || "—")}</td>
+      <td>${fmtDate(u.createdAt)}</td>
+      <td>${u.circleCount}</td>
+      <td>${u.symptomCount}</td>
+    </tr>`;
+  }
+
+  // --- Circles ---------------------------------------------------------
+  async function loadCircles() {
+    const card = document.getElementById("circles-card");
+    try {
+      const data = await fetchJson("/api/acp/circles");
+      const list = data.circles || [];
+      if (!list.length) {
+        card.innerHTML = `<p class="acp-empty">No circles yet.</p>`;
+        return;
+      }
+      card.innerHTML = `
+        <table class="acp-table">
+          <thead><tr>
+            <th>Name</th><th>Slug</th><th>Members</th><th>Posts</th><th></th>
+          </tr></thead>
+          <tbody>${list.map(circleRow).join("")}</tbody>
+        </table>`;
+    } catch (err) {
+      card.innerHTML = `<p class="acp-empty">Couldn't load circles: ${escapeHtml(err.message || "")}</p>`;
+    }
+  }
+  function circleRow(c) {
+    return `<tr class="acp-circle-row" data-circle-id="${c.id}" data-circle-name="${escapeHtml(c.name)}">
+      <td>
+        ${escapeHtml(c.name)} ${c.isOfficial ? `<span class="acp-pill official">Official</span>` : ""}
+        ${c.description ? `<div class="acp-meta">${escapeHtml(c.description).slice(0, 100)}</div>` : ""}
+      </td>
+      <td><code>${escapeHtml(c.slug)}</code></td>
+      <td>${c.memberCount}</td>
+      <td>${c.postCount}</td>
+      <td><div class="acp-actions"><button class="acp-btn primary" data-open="${c.id}">Manage</button></div></td>
+    </tr>`;
+  }
+  document.getElementById("circles-card").addEventListener("click", (e) => {
+    const row = e.target.closest("[data-circle-id]");
+    if (!row) return;
+    openCircle(+row.dataset.circleId, row.dataset.circleName);
+  });
+
+  // --- Circle detail (members) -----------------------------------------
+  document.getElementById("back-to-circles").addEventListener("click", () => {
+    document.querySelector('.acp-tab[data-tab="circles"]').click();
+  });
+  async function openCircle(id, name) {
+    currentCircleId = id;
+    document.getElementById("circle-title").textContent = name;
+    document.querySelectorAll(".acp-tab").forEach((t) => t.classList.remove("active"));
+    showView("circle");
+    await loadMembers(id);
+  }
+  async function loadMembers(id) {
+    const card = document.getElementById("members-card");
+    try {
+      const data = await fetchJson(`/api/acp/circles/${id}/members`);
+      document.getElementById("circle-title").textContent = data.circle?.name || "Circle";
+      const members = data.members || [];
+      if (!members.length) {
+        card.innerHTML = `<p class="acp-empty">No members yet.</p>`;
+        return;
+      }
+      card.innerHTML = `
+        <table class="acp-table">
+          <thead><tr>
+            <th>User</th><th>Email</th><th>Joined</th><th>Role</th><th></th>
+          </tr></thead>
+          <tbody>${members.map(memberRow).join("")}</tbody>
+        </table>`;
+    } catch (err) {
+      card.innerHTML = `<p class="acp-empty">Couldn't load members: ${escapeHtml(err.message || "")}</p>`;
+    }
+  }
+  function memberRow(m) {
+    const roles = ["member", "moderator", "admin"];
+    return `<tr data-member-id="${escapeHtml(m.userId)}">
+      <td>
+        <div class="acp-username">${escapeHtml(m.displayName || m.username || m.userId)}</div>
+        ${m.username ? `<div class="acp-meta">@${escapeHtml(m.username)}</div>` : ""}
+      </td>
+      <td>${escapeHtml(m.email || "—")}</td>
+      <td>${fmtDate(m.joinedAt)}</td>
+      <td>
+        <select class="acp-role-select" data-set-role="${escapeHtml(m.userId)}">
+          ${roles.map((r) => `<option value="${r}" ${m.role===r?"selected":""}>${labelFor(r)}</option>`).join("")}
+        </select>
+      </td>
+      <td><div class="acp-actions"><button class="acp-btn danger" data-remove="${escapeHtml(m.userId)}">Remove</button></div></td>
+    </tr>`;
+  }
+  function labelFor(r) {
+    return r === "admin" ? "👑 Admin" : r === "moderator" ? "🛡 Moderator" : "💖 Member";
+  }
+
+  document.getElementById("members-card").addEventListener("change", async (e) => {
+    const sel = e.target.closest("[data-set-role]");
+    if (!sel) return;
+    const userId = sel.dataset.setRole;
+    const role = sel.value;
+    sel.disabled = true;
+    try {
+      await fetchJson(`/api/acp/circles/${currentCircleId}/members/${encodeURIComponent(userId)}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      toast(`Role set to ${labelFor(role)}`);
+    } catch (err) {
+      toast(err.message || "Couldn't update role", "err");
+    } finally {
+      sel.disabled = false;
+    }
+  });
+
+  document.getElementById("members-card").addEventListener("click", async (e) => {
+    const rm = e.target.closest("[data-remove]");
+    if (!rm) return;
+    const userId = rm.dataset.remove;
+    if (!confirm("Remove this member from the circle?")) return;
+    rm.disabled = true;
+    try {
+      await fetchJson(`/api/acp/circles/${currentCircleId}/members/${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+      });
+      toast("Member removed");
+      await loadMembers(currentCircleId);
+    } catch (err) {
+      toast(err.message || "Couldn't remove", "err");
+      rm.disabled = false;
+    }
+  });
+
+  // --- Add member modal ------------------------------------------------
+  const addModal = document.getElementById("add-modal");
+  document.getElementById("btn-add-member").addEventListener("click", async () => {
+    if (!currentCircleId) return;
+    // Fetch the full user list so the dropdown is populated.
+    try {
+      if (!allUsersCache.length) {
+        const data = await fetchJson("/api/acp/users");
+        allUsersCache = data.users || [];
+      }
+    } catch {}
+    const select = document.getElementById("add-user-id");
+    select.innerHTML = allUsersCache.map((u) =>
+      `<option value="${escapeHtml(u.id)}">${escapeHtml(u.displayName || u.username)} — ${escapeHtml(u.email || u.username)}</option>`
+    ).join("");
+    document.getElementById("add-role").value = "member";
+    document.getElementById("add-status").textContent = "";
+    addModal.classList.add("open");
+    addModal.setAttribute("aria-hidden", "false");
+  });
+  document.querySelectorAll("[data-close-modal]").forEach((el) =>
+    el.addEventListener("click", () => {
+      addModal.classList.remove("open");
+      addModal.setAttribute("aria-hidden", "true");
+    })
+  );
+  document.getElementById("add-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const userId = document.getElementById("add-user-id").value;
+    const role = document.getElementById("add-role").value;
+    const status = document.getElementById("add-status");
+    status.textContent = "Adding…"; status.className = "acp-form-status";
+    try {
+      await fetchJson(`/api/acp/circles/${currentCircleId}/members`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userId, role }),
+      });
+      toast(`Added as ${labelFor(role)}`);
+      addModal.classList.remove("open");
+      addModal.setAttribute("aria-hidden", "true");
+      await loadMembers(currentCircleId);
+    } catch (err) {
+      status.textContent = err.message || "Couldn't add.";
+      status.className = "acp-form-status err";
+    }
+  });
+
+  // --- Bootstrap -------------------------------------------------------
+  loadUsers();
+
+  // --- Helpers ---------------------------------------------------------
+  async function fetchJson(url, init = {}) {
+    const res = await fetch(url, { credentials: "same-origin", ...init });
+    if (res.status === 401 || res.status === 403) {
+      location.href = "/login";
+      throw new Error("Not authorized");
+    }
+    let payload = {};
+    try { payload = await res.json(); } catch {}
+    if (!res.ok) throw new Error(payload.error || `Request failed (${res.status})`);
+    return payload;
+  }
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[<>&"']/g, (c) => ({
+      "<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;",
+    })[c]);
+  }
+  function fmtDate(unixSec) {
+    if (!unixSec) return "—";
+    const d = new Date(unixSec * 1000);
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+  function toast(text, tone = "ok") {
+    const stack = document.getElementById("toast-stack");
+    if (!stack) return;
+    const t = document.createElement("div");
+    t.className = `toast toast-${tone}`;
+    t.textContent = text;
+    stack.appendChild(t);
+    requestAnimationFrame(() => t.classList.add("in"));
+    setTimeout(() => { t.classList.remove("in"); setTimeout(() => t.remove(), 250); }, 2400);
+  }
+})();
