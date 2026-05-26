@@ -171,6 +171,7 @@ console.info("EndoMe donate build v1");
           donorName:    document.getElementById("donor-name").value.trim() || null,
           donorMessage: document.getElementById("donor-message").value.trim() || null,
           anonymous:    document.getElementById("donor-anonymous").checked,
+          returnTo:     "/donate",
         }),
       });
       if (!data.url) throw new Error("Checkout URL missing.");

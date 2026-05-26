@@ -325,7 +325,8 @@ export default {
       url.pathname === "/u"           || url.pathname.startsWith("/u/") ||
       url.pathname === "/meds"        || url.pathname.startsWith("/meds/") ||
       url.pathname === "/documents"   || url.pathname.startsWith("/documents/") ||
-      url.pathname === "/security"    || url.pathname.startsWith("/security/")
+      url.pathname === "/security"    || url.pathname.startsWith("/security/") ||
+      url.pathname === "/research"    || url.pathname.startsWith("/research/")
     ) {
       const session = await readSession(request, env);
       if (!session) {
@@ -4643,23 +4644,25 @@ const DONATION_MAX_CENTS = 50000000; // $500k ceiling per single donation
 const MAX_DONOR_NAME_LEN = 60;
 const MAX_DONOR_MSG_LEN  = 240;
 
-// The roadmap. Every step funds a concrete piece of cure-focused research.
-// Amounts mirror real-world costs in AU/UK academic research budgets:
-// scientist salaries (incl. on-costs), wet-lab assays, contract research,
+// The roadmap. Plain-English steps so anyone can follow the path from "AI
+// turned on" to "first patient trial". Amounts mirror real AU/UK academic
+// research costs: salaries with on-costs, wet-lab assays, contract research,
 // and small investigator-led repurposed-drug pilots.
 const DONATION_MILESTONES = [
-  { key: "ai-engine",     targetCents:   1000000, emoji: "🤖", title: "AI Research Engine, online 24/7",
-    summary: "Stand up an always-on AI pipeline that ingests every new endometriosis paper, trial registration and consented patient log daily, looking for molecular pathways, drug targets, and overlap with diseases we already treat. Compute + tooling for six months." },
-  { key: "target-map",    targetCents:   3000000, emoji: "🎯", title: "Endo Drug-Target Map",
-    summary: "Use the engine to systematically map every known endometriosis molecular pathway and rank druggable targets by feasibility. The prioritised list is published open-access — the first public map of what to actually attack." },
-  { key: "scientist-yr",  targetCents:   7500000, emoji: "🧪", title: "Full-Year Research Scientist",
-    summary: "Fund a research scientist for one full year (salary + on-costs at AU/UK rates). Their only job: move the engine's hypotheses forward — pairing AI findings with literature, designing experiments, and securing lab partners." },
-  { key: "wet-lab",       targetCents:  20000000, emoji: "🔬", title: "Wet-Lab Validation",
-    summary: "Partner with an academic lab to test the top 10 drug-repurposing candidates against endometrial tissue samples in vitro. The first measurable answer to 'does this actually affect endo cells?'" },
-  { key: "preclinical",   targetCents:  50000000, emoji: "🧬", title: "Lead Optimisation + Animal Pilot",
-    summary: "Take the strongest one or two hits from the wet-lab into preclinical optimisation and a small animal study — the standard last step before any human trial." },
-  { key: "first-trial",   targetCents: 100000000, emoji: "🏥", title: "First-In-Patient Pilot Trial",
-    summary: "Multi-site, open-label investigator-led pilot trial (~30 patients) of the most promising repurposed candidate. Recruited transparently from the EndoMe community. Every protocol public, every result open-access. This is the gateway to a real treatment." },
+  { key: "ai-engine",     targetCents:   1000000, emoji: "🤖", title: "Switch on the AI engine",
+    summary: "We turn on an always-on AI that reads every new endometriosis paper, trial and patient log around the clock — the legwork no single researcher could keep up with. Covers compute, tooling and hosting for six months." },
+  { key: "subproblems",   targetCents:   2500000, emoji: "🧩", title: "Break endo into its sub-problems",
+    summary: "The engine breaks endometriosis down into its main moving parts — inflammation, excess oestrogen, immune confusion, nerve sensitisation — and ranks the biggest, most fixable opportunities to attack each one. The first plain-English map of what's actually broken." },
+  { key: "dashboard",     targetCents:   5000000, emoji: "📊", title: "Public research dashboard",
+    summary: "A simple website where anyone can see what the engine has found: which inflammation pathways look most fixable, which oestrogen targets are weakest in endo, and which existing drugs already hit those targets elsewhere. Every claim cited to a source study. Free for everyone, forever." },
+  { key: "scientist-yr",  targetCents:   7500000, emoji: "🧪", title: "Hire a research scientist for a year",
+    summary: "We pay a research scientist their full salary for 12 months. Their only job: take the engine's top findings, turn them into real lab experiments, and line up the partners who can run them." },
+  { key: "wet-lab",       targetCents:  20000000, emoji: "🔬", title: "Test 10 candidate drugs in the lab",
+    summary: "We partner with an academic lab to test the engine's top 10 candidate drugs against actual endometrial tissue, in petri dishes. The first real-world answer to: does this drug touch the disease?" },
+  { key: "animal-study",  targetCents:  50000000, emoji: "🐭", title: "Animal study on the strongest leads",
+    summary: "We take the top one or two candidates from the lab and run a proper preclinical animal study. This is the standard last step before any treatment can be tested in humans." },
+  { key: "first-trial",   targetCents: 100000000, emoji: "🏥", title: "First-in-patient pilot trial",
+    summary: "About 30 patients, recruited transparently from the EndoMe community, get the most promising drug in a multi-site open-label pilot. Every protocol and every result published in public. The doorway to a real treatment." },
 ];
 
 let _donationsSchemaChecked = false;
@@ -4783,6 +4786,12 @@ async function postDonationCheckout(request, env, viewer) {
   const donationId = ins.meta?.last_row_id;
 
   const siteUrl = (env.SITE_URL || "https://endome.com").replace(/\/$/, "");
+  // returnTo lets the client choose which page Stripe redirects back to —
+  // homepage, public /donate, or the signed-in /research view. Locked to a
+  // small allowlist so we can't be turned into an open redirect.
+  const safeReturns = new Set(["/", "/donate", "/research"]);
+  const requestedReturn = typeof body.returnTo === "string" ? body.returnTo : "";
+  const returnTo = safeReturns.has(requestedReturn) ? requestedReturn : "/donate";
   const form = new URLSearchParams();
   form.set("mode", "payment");
   form.set("line_items[0][price_data][currency]", DONATION_CURRENCY);
@@ -4790,8 +4799,8 @@ async function postDonationCheckout(request, env, viewer) {
   form.set("line_items[0][price_data][product_data][description]", "Funds endometriosis research via the EndoMe roadmap.");
   form.set("line_items[0][price_data][unit_amount]", String(cents));
   form.set("line_items[0][quantity]", "1");
-  form.set("success_url", `${siteUrl}/donate?donation=success&session_id={CHECKOUT_SESSION_ID}`);
-  form.set("cancel_url",  `${siteUrl}/donate?donation=cancelled`);
+  form.set("success_url", `${siteUrl}${returnTo}?donation=success&session_id={CHECKOUT_SESSION_ID}`);
+  form.set("cancel_url",  `${siteUrl}${returnTo}?donation=cancelled`);
   form.set("allow_promotion_codes", "false");
   form.set("submit_type", "donate");
   form.set("metadata[donation_id]", String(donationId));

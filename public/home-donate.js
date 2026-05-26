@@ -2,7 +2,7 @@
 // Red dotted target line, green raised line that climbs the target.
 // Zoom toggle: "Next 3" (focused) or "All milestones".
 // Smooth, snap-to-nearest tooltip + hover guideline.
-console.info("EndoMe home-donate build v4");
+console.info("EndoMe home-donate build v5");
 
 (() => {
   const wrap = document.getElementById("dgraph-wrap");
@@ -184,8 +184,11 @@ console.info("EndoMe home-donate build v4");
           ${halo}
           <circle class="dg-marker-circle" cx="${cx}" cy="${cy}" r="13" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>
           <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="11" font-weight="800" fill="${textColor}" font-family="Poppins,sans-serif">${text}</text>
-          <text x="${cx}" y="${baseline + 22}" text-anchor="middle" font-size="14" font-family="Poppins,sans-serif">${m.emoji}</text>
-          <text x="${cx}" y="${baseline + 40}" text-anchor="middle" font-size="11" font-weight="700" fill="#3a2330" font-family="Poppins,sans-serif">${fmtShort(m.cumulativeCents)}</text>
+          <!-- Emoji + amount on a single baseline beneath the marker -->
+          <text x="${cx}" y="${baseline + 28}" text-anchor="middle" font-family="Poppins,sans-serif">
+            <tspan font-size="15">${m.emoji}</tspan>
+            <tspan dx="6" font-size="11" font-weight="800" fill="#3a2330">${fmtShort(m.cumulativeCents)}</tspan>
+          </text>
           <!-- Invisible bigger hit target for easier hovering on mobile + desktop -->
           <circle class="dg-marker-hit" cx="${cx}" cy="${cy}" r="26" fill="transparent"/>
         </g>`);
@@ -362,7 +365,7 @@ console.info("EndoMe home-donate build v4");
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ amountCents: selectedCents }),
+        body: JSON.stringify({ amountCents: selectedCents, returnTo: location.pathname }),
       });
       const data = await res.json();
       if (!res.ok || !data.url) throw new Error(data.error || "Couldn't start checkout.");

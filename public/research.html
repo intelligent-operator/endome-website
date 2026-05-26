@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <title>Research – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=2" />
+  <link rel="stylesheet" href="/dashboard.css?v=7" />
+  <link rel="stylesheet" href="/profile.css?v=1" />
+  <link rel="stylesheet" href="/donate.css?v=2" />
+  <link rel="stylesheet" href="/account-menu.css?v=1" />
+</head>
+<body class="dash-body">
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-content">
+      <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
+      <div class="page-loader-bar"></div>
+      <p class="page-loader-text">Loading…</p>
+    </div>
+  </div>
+
+  <header class="dash-topbar">
+    <div class="dash-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <div class="dash-spacer"></div>
+      <div class="account-menu">
+        <button class="account-toggle" id="account-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+          <div class="avatar"><svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/><circle cx="20" cy="16" r="7" fill="#8a4a2a"/><path d="M6 36c2-8 8-12 14-12s12 4 14 12" fill="#f5c69b"/><circle cx="20" cy="16" r="6" fill="#f5c69b"/></svg></div>
+          <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
+          <svg class="account-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M6 9l6 6 6-6" stroke="#3a2330" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="account-dropdown" id="account-dropdown" hidden role="menu">
+          <a href="/profile" role="menuitem"><span class="acm-ico">👤</span> Profile</a>
+          <a href="/security" role="menuitem"><span class="acm-ico">🔒</span> Security &amp; password</a>
+          <a href="/documents" role="menuitem"><span class="acm-ico">📁</span> My documents</a>
+          <a href="/meds" role="menuitem"><span class="acm-ico">💊</span> My medications</a>
+          <div class="account-divider"></div>
+          <a href="/api/logout" role="menuitem"><span class="acm-ico">↪</span> Sign out</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-layout community-layout">
+    <aside class="dash-sidebar">
+      <nav class="side-nav">
+        <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
+        <a href="/story"><span class="ico">📖</span> Your Story</a>
+        <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/meds"><span class="ico">💊</span> Medications</a>
+        <a href="/documents"><span class="ico">📁</span> Documents</a>
+        <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
+        <a href="/community"><span class="ico">💬</span> Community</a>
+        <a class="active" href="/research"><span class="ico">🎗</span> Research</a>
+        <a href="/profile"><span class="ico">👤</span> Profile</a>
+      </nav>
+    </aside>
+
+    <main class="dash-main community-main">
+      <header class="community-hero soft">
+        <div>
+          <p class="hero-eyebrow">Research</p>
+          <h1>Endometriosis has no cure. <span style="color:#ff4e8a">Let's change that.</span></h1>
+          <p class="hero-lead">The same roadmap is on the public site, and tracked here too. Every donation moves the green line up the red one.</p>
+        </div>
+      </header>
+
+      <!-- The graph -->
+      <section class="community-section">
+        <div class="dgraph-wrap" id="dgraph-wrap">
+          <div class="dgraph-stats">
+            <div>
+              <strong class="dgraph-raised" id="dgraph-raised">$0</strong>
+              <span class="dgraph-raised-label">raised so far</span>
+            </div>
+            <div class="dgraph-next" id="dgraph-next">Loading…</div>
+            <div class="dgraph-zoom" role="group" aria-label="Zoom">
+              <button type="button" class="dg-zoom-btn on" data-zoom="3" aria-pressed="true">Next 3</button>
+              <button type="button" class="dg-zoom-btn" data-zoom="all" aria-pressed="false">All milestones</button>
+            </div>
+          </div>
+          <div class="dgraph-svg-wrap">
+            <svg class="dgraph" id="dgraph" viewBox="0 0 800 320" preserveAspectRatio="none" aria-label="Donation progress toward each milestone">
+              <defs>
+                <linearGradient id="dg-green-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stop-color="#22c55e" stop-opacity="0.32"/>
+                  <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"/>
+                </linearGradient>
+              </defs>
+              <g class="dg-grid" id="dg-grid"></g>
+              <g class="dg-axis-y" id="dg-axis-y"></g>
+              <path class="dg-target"  id="dg-target" />
+              <path class="dg-area"    id="dg-area" fill="url(#dg-green-fill)" />
+              <path class="dg-raised"  id="dg-raised" />
+              <g id="dg-markers"></g>
+              <line class="dg-cursor" id="dg-cursor" x1="0" y1="0" x2="0" y2="0" hidden />
+              <circle class="dg-cursor-dot" id="dg-cursor-dot" cx="0" cy="0" r="5" hidden />
+            </svg>
+            <div class="dgraph-tooltip" id="dgraph-tooltip" hidden></div>
+          </div>
+          <div class="dgraph-legend">
+            <span class="dgl-item"><i class="dgl-swatch dgl-target"></i> Roadmap target</span>
+            <span class="dgl-item"><i class="dgl-swatch dgl-raised"></i> Raised so far</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Instant donate -->
+      <section class="community-section">
+        <div class="instant-donate research-instant" id="instant-donate">
+          <p class="instant-donate-label">One-tap donate</p>
+          <div class="instant-amounts" id="instant-amounts">
+            <button type="button" class="amt-chip" data-amount="500">$5</button>
+            <button type="button" class="amt-chip" data-amount="1000">$10</button>
+            <button type="button" class="amt-chip on" data-amount="2500">$25</button>
+            <button type="button" class="amt-chip" data-amount="5000">$50</button>
+            <button type="button" class="amt-chip" data-amount="10000">$100</button>
+            <input type="number" class="amt-custom" id="amt-custom" min="2" max="500000" step="1" placeholder="Custom $" />
+          </div>
+          <button class="instant-donate-go" id="instant-donate-go">Donate <span id="instant-amount-label">$25</span> →</button>
+          <p class="form-status" id="instant-donate-status" role="status"></p>
+        </div>
+      </section>
+
+      <!-- Leaderboard -->
+      <section class="community-section">
+        <div class="section-head">
+          <h2>Hall of Heroes</h2>
+          <span class="section-hint">Top donors. Add your name — every amount counts.</span>
+        </div>
+        <ol class="board-list" id="board-list">
+          <li class="empty-state">Loading…</li>
+        </ol>
+      </section>
+
+      <!-- Milestone detail modal -->
+      <div class="ms-modal" id="ms-modal" aria-hidden="true" role="dialog">
+        <div class="ms-modal-backdrop" data-close-ms></div>
+        <div class="ms-modal-card">
+          <button class="ms-modal-close" type="button" data-close-ms aria-label="Close">×</button>
+          <div class="ms-modal-head">
+            <span class="ms-modal-emoji" id="ms-modal-emoji">🤖</span>
+            <div>
+              <p class="ms-modal-eyebrow" id="ms-modal-step">Milestone 1</p>
+              <h3 id="ms-modal-title">Title</h3>
+            </div>
+          </div>
+          <div class="ms-modal-stats">
+            <div><strong id="ms-modal-target">$0</strong><span>milestone target</span></div>
+            <div><strong id="ms-modal-cumulative">$0</strong><span>cumulative goal</span></div>
+            <div><strong id="ms-modal-status">Locked</strong><span>status</span></div>
+          </div>
+          <p class="ms-modal-summary" id="ms-modal-summary"></p>
+          <button class="ms-modal-cta" type="button" id="ms-modal-cta">💖 Donate toward this milestone</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  <script src="/account-menu.js?v=1" defer></script>
+  <script src="/home-donate.js?v=5" defer></script>
+  <script src="/research.js?v=1" defer></script>
+</body>
+</html>
