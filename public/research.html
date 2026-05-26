@@ -61,6 +61,7 @@
         <a href="/documents"><span class="ico">📁</span> Documents</a>
         <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
         <a href="/community"><span class="ico">💬</span> Community</a>
+        <a href="/explore"><span class="ico">🌌</span> Research</a>
         <a class="active" href="/research"><span class="ico">🎗</span> Donations</a>
         <a href="/profile"><span class="ico">👤</span> Profile</a>
       </nav>
@@ -75,7 +76,7 @@
         </div>
       </header>
 
-      <!-- Graph (left, wide) + Hall of Heroes (right, narrow) -->
+      <!-- Graph (left, wide) + Hall of Heroes (right, equal height) -->
       <div class="donations-grid">
         <section class="community-section donations-graph-col">
           <div class="dgraph-wrap" id="dgraph-wrap">
@@ -117,7 +118,7 @@
         </section>
 
         <aside class="donations-side-col">
-          <!-- Hall of Heroes (right rail) -->
+          <!-- Hall of Heroes (right rail, fills column height) -->
           <section class="community-section donations-board-card">
             <div class="section-head">
               <h2>🏆 Hall of Heroes</h2>
@@ -127,27 +128,28 @@
               <li class="empty-state small">Loading…</li>
             </ol>
           </section>
-
-          <!-- Quick instant donate (compact, in the right rail) -->
-          <section class="community-section donations-instant-card">
-            <div class="section-head">
-              <h2>💖 Donate now</h2>
-            </div>
-            <div class="instant-donate research-instant" id="instant-donate">
-              <div class="instant-amounts" id="instant-amounts">
-                <button type="button" class="amt-chip" data-amount="500">$5</button>
-                <button type="button" class="amt-chip" data-amount="1000">$10</button>
-                <button type="button" class="amt-chip on" data-amount="2500">$25</button>
-                <button type="button" class="amt-chip" data-amount="5000">$50</button>
-                <button type="button" class="amt-chip" data-amount="10000">$100</button>
-                <input type="number" class="amt-custom" id="amt-custom" min="2" max="500000" step="1" placeholder="Custom $" />
-              </div>
-              <button class="instant-donate-go" id="instant-donate-go">Donate <span id="instant-amount-label">$25</span> →</button>
-              <p class="form-status" id="instant-donate-status" role="status"></p>
-            </div>
-          </section>
         </aside>
       </div>
+
+      <!-- Donate now (full width, sits under the graph row) -->
+      <section class="community-section donations-instant-card-wide">
+        <div class="instant-donate-head">
+          <h2>💖 Donate now</h2>
+          <p>Anonymous donations welcome. We never spend Stripe processing on anything but Stripe.</p>
+        </div>
+        <div class="instant-donate research-instant" id="instant-donate">
+          <div class="instant-amounts" id="instant-amounts">
+            <button type="button" class="amt-chip" data-amount="500">$5</button>
+            <button type="button" class="amt-chip" data-amount="1000">$10</button>
+            <button type="button" class="amt-chip on" data-amount="2500">$25</button>
+            <button type="button" class="amt-chip" data-amount="5000">$50</button>
+            <button type="button" class="amt-chip" data-amount="10000">$100</button>
+            <input type="number" class="amt-custom" id="amt-custom" min="2" max="500000" step="1" placeholder="Custom $" />
+          </div>
+          <button class="instant-donate-go" id="instant-donate-go">Donate <span id="instant-amount-label">$25</span> →</button>
+          <p class="form-status" id="instant-donate-status" role="status"></p>
+        </div>
+      </section>
 
       <!-- Public Research Dashboard quick-link (full width below) -->
       <section class="community-section">
