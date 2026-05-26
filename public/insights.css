@@ -1,0 +1,93 @@
+/* =====================================================================
+   /insights — public research dashboard preview.
+   ===================================================================== */
+.insights-body{background:#fdf8fa;color:#2b1922;font-family:Poppins,sans-serif;margin:0;min-height:100vh}
+
+.insights-main{max-width:1100px;margin:0 auto;padding:36px 24px 80px}
+
+.insights-hero{text-align:center;margin-bottom:28px}
+.insights-eyebrow{
+  display:inline-block;background:#fff;color:#ff4e8a;
+  font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+  padding:5px 14px;border-radius:999px;margin:0 0 12px;
+  box-shadow:0 4px 14px rgba(255,77,138,.08);
+}
+.insights-hero h1{font-size:42px;line-height:1.1;letter-spacing:-.6px;margin:0 0 12px;font-weight:800}
+.insights-hero h1 .brand{color:#ff4e8a}
+.insights-lead{max-width:640px;margin:0 auto;font-size:15px;line-height:1.55;color:#5a3a48}
+
+/* ---- Status banner ---- */
+.insights-status{
+  max-width:760px;margin:24px auto 32px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:18px;
+  padding:18px 22px;display:flex;flex-direction:column;gap:10px;
+  box-shadow:0 10px 28px rgba(255,77,138,.06);
+}
+.status-pill{
+  align-self:flex-start;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  padding:5px 12px;border-radius:999px;background:#f7f0f3;color:#7a5f6c;
+}
+.status-pill.is-locked{background:#fff5e6;color:#c2811a}
+.status-pill.is-live{background:#dff7e2;color:#2b9b48}
+.status-bar{background:#ffeaf2;height:8px;border-radius:999px;overflow:hidden}
+.status-bar-fill{height:100%;background:linear-gradient(90deg,#ff4e8a,#ff7aa6);border-radius:999px;transition:width .6s ease}
+.status-text{margin:0;font-size:13px;color:#5a3a48}
+.status-text strong{color:#2b1922;font-weight:700}
+
+/* ---- Category grid ---- */
+.insights-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;
+}
+@media (max-width:760px){.insights-grid{grid-template-columns:1fr}}
+.cat-card{
+  background:#fff;border:1px solid #ffeaf2;border-radius:20px;
+  padding:20px 22px;display:flex;flex-direction:column;gap:14px;
+  box-shadow:0 10px 26px rgba(255,77,138,.06);
+  transition:transform .14s, box-shadow .15s, border-color .15s;
+}
+.cat-card:hover{transform:translateY(-2px);border-color:#ffd6e0;box-shadow:0 16px 34px rgba(255,77,138,.10)}
+.cat-head{display:flex;gap:14px;align-items:center}
+.cat-emoji{
+  width:48px;height:48px;flex-shrink:0;
+  background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+  border-radius:14px;display:grid;place-items:center;
+  font-size:24px;
+}
+.cat-head h2{margin:0;font-size:18px;font-weight:800;color:#2b1922;letter-spacing:-.2px}
+.cat-sub{margin:2px 0 0;font-size:12px;color:#7a5f6c;line-height:1.4}
+
+.cat-rows{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.cat-rows li{
+  background:#fff5f8;border-radius:12px;padding:10px 12px;
+  display:flex;flex-direction:column;gap:2px;border-left:3px solid #ff4e8a;
+}
+.cat-rows strong{font-size:13px;font-weight:700;color:#2b1922}
+.cat-rows span{font-size:12px;color:#5a3a48;line-height:1.45}
+
+/* ---- Footer / CTA ---- */
+.insights-foot{
+  margin-top:36px;padding:28px;border-radius:20px;
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  display:flex;justify-content:center;text-align:center;
+  box-shadow:0 18px 40px rgba(255,77,138,.28);
+}
+.insights-foot h3{margin:0 0 8px;font-size:20px;font-weight:800;color:#fff}
+.insights-foot p{margin:0 0 16px;font-size:14px;line-height:1.55;max-width:560px;opacity:.95}
+.insights-foot p strong{font-weight:800}
+.insights-cta{
+  display:inline-block;background:#fff;color:#ff4e8a;
+  text-decoration:none;font-weight:800;font-size:15px;
+  padding:12px 24px;border-radius:999px;
+  box-shadow:0 10px 24px rgba(0,0,0,.12);
+  transition:transform .14s, box-shadow .14s;
+}
+.insights-cta:hover{transform:translateY(-2px);box-shadow:0 16px 32px rgba(0,0,0,.18)}
+
+/* Top nav reuses .donate-topbar from donate.css, but that's not loaded here.
+   Inline the small bits we need. */
+.donate-topbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid #ffeaf2;box-shadow:0 2px 8px rgba(255,77,138,.04)}
+.donate-topbar-inner{max-width:1100px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:24px}
+.donate-topbar-inner .logo{display:flex;align-items:center;gap:8px;text-decoration:none;color:#2b1922;font-weight:700;font-size:16px}
+.donate-nav{margin-left:auto;display:flex;gap:18px}
+.donate-nav a{color:#7a5f6c;text-decoration:none;font-size:14px;font-weight:600;padding:8px 12px;border-radius:8px;transition:background .15s,color .15s}
+.donate-nav a:hover{background:#fff5f8;color:#ff4e8a}

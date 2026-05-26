@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <title>Public Research Dashboard – EndoMe</title>
+  <meta name="description" content="Public, plain-English findings from the EndoMe AI research engine. Inflammation, oestrogen, immune confusion, nerve sensitisation. Updated daily." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=2" />
+  <link rel="stylesheet" href="/insights.css?v=1" />
+</head>
+<body class="insights-body">
+  <header class="donate-topbar">
+    <div class="donate-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <nav class="donate-nav">
+        <a href="/">Home</a>
+        <a href="/donate">Donate</a>
+        <a href="/dashboard">Dashboard</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="insights-main">
+    <section class="insights-hero">
+      <p class="insights-eyebrow">Public Research Dashboard</p>
+      <h1>Endometriosis, <span class="brand">in pieces</span>.</h1>
+      <p class="insights-lead">The AI engine breaks endometriosis into four moving parts and ranks what's most fixable in each. Every finding is cited to a source study. Free for everyone, forever.</p>
+    </section>
+
+    <!-- Milestone status -->
+    <section class="insights-status" id="insights-status">
+      <div class="status-pill" id="status-pill">Loading…</div>
+      <div class="status-bar"><div class="status-bar-fill" id="status-bar-fill" style="width:0%"></div></div>
+      <p class="status-text" id="status-text">Checking dashboard funding status.</p>
+    </section>
+
+    <!-- Sub-problem categories -->
+    <section class="insights-grid">
+      <article class="cat-card" data-cat="inflammation">
+        <header class="cat-head">
+          <div class="cat-emoji">🔥</div>
+          <div>
+            <h2>Inflammation</h2>
+            <p class="cat-sub">Why endo lesions hurt, and what calms them down.</p>
+          </div>
+        </header>
+        <ul class="cat-rows">
+          <li><strong>NF-κB pathway</strong><span>Master switch for chronic pain signalling. Curcumin, sulfasalazine candidates.</span></li>
+          <li><strong>COX-2 / prostaglandins</strong><span>Why NSAIDs work. Celecoxib being explored for endo-specific dosing.</span></li>
+          <li><strong>TNF-α</strong><span>Drives lesion growth. Anti-TNFs (adalimumab, infliximab) under investigation.</span></li>
+          <li><strong>IL-6 axis</strong><span>Elevated in peritoneal fluid. Tocilizumab being trialled in related conditions.</span></li>
+        </ul>
+      </article>
+
+      <article class="cat-card" data-cat="oestrogen">
+        <header class="cat-head">
+          <div class="cat-emoji">🌸</div>
+          <div>
+            <h2>Excess oestrogen</h2>
+            <p class="cat-sub">Lesions are oestrogen-fuelled. Where can we starve them?</p>
+          </div>
+        </header>
+        <ul class="cat-rows">
+          <li><strong>Aromatase activity</strong><span>Lesions make their own oestrogen. Letrozole and anastrozole are the strongest candidates.</span></li>
+          <li><strong>17β-HSD type 1</strong><span>Local oestrogen conversion. Small-molecule inhibitors in early-stage development.</span></li>
+          <li><strong>ERα signalling</strong><span>SERMs (raloxifene, bazedoxifene) explored as add-on therapy.</span></li>
+          <li><strong>Sulfatase pathway</strong><span>Backdoor oestrogen activation. Sulfatase inhibitors under preclinical study.</span></li>
+        </ul>
+      </article>
+
+      <article class="cat-card" data-cat="immune">
+        <header class="cat-head">
+          <div class="cat-emoji">🛡</div>
+          <div>
+            <h2>Immune confusion</h2>
+            <p class="cat-sub">Why the body doesn't clear ectopic tissue.</p>
+          </div>
+        </header>
+        <ul class="cat-rows">
+          <li><strong>NK cell dysregulation</strong><span>Natural-killer cells fail to remove misplaced tissue. Target for immune modulation.</span></li>
+          <li><strong>Macrophage polarisation</strong><span>M2 ("repair") macrophages dominate lesion sites and feed growth.</span></li>
+          <li><strong>Treg deficiency</strong><span>Regulatory T-cells under-represented. Possible biomarker for severity.</span></li>
+          <li><strong>Autoimmune overlap</strong><span>Hashimoto's, lupus, RA all show stronger co-occurrence. Shared pathways possible.</span></li>
+        </ul>
+      </article>
+
+      <article class="cat-card" data-cat="nerve">
+        <header class="cat-head">
+          <div class="cat-emoji">⚡</div>
+          <div>
+            <h2>Nerve sensitisation</h2>
+            <p class="cat-sub">Why pain persists even after lesions are removed.</p>
+          </div>
+        </header>
+        <ul class="cat-rows">
+          <li><strong>Nerve Growth Factor (NGF)</strong><span>Lesions grow new pain fibres into surrounding tissue. Anti-NGF antibodies in trial.</span></li>
+          <li><strong>TRPV1 channel</strong><span>Heat + capsaicin receptor. Persistently active in chronic endo pain.</span></li>
+          <li><strong>Central sensitisation</strong><span>Spinal-cord rewiring amplifies signals. Why low-dose amitriptyline can help.</span></li>
+          <li><strong>Vagus modulation</strong><span>Vagal tone correlates with pain levels. Stimulation studies underway elsewhere.</span></li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="insights-foot">
+      <div>
+        <h3>How this gets built</h3>
+        <p>This dashboard goes live when the community hits the <strong>$85,000 cumulative</strong> donation milestone. The AI engine boots earlier (at $10k); the dashboard is its public face. Until then, the structure above is a preview of what's coming.</p>
+        <a href="/donate" class="insights-cta">Donate to unlock the dashboard →</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/insights.js?v=1" defer></script>
+</body>
+</html>
