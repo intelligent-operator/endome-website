@@ -48,6 +48,48 @@ p{margin:0 0 .6em}
 }
 .btn-ghost.light{background:transparent;color:#fff;border-color:rgba(255,255,255,.85)}
 .btn-ghost:hover{transform:translateY(-1px)}
+/* Sizing override for compact buttons in modals + side cards. */
+.btn.small,
+.btn-soft.small,
+.btn-danger.small{padding:8px 14px;font-size:12px;font-weight:700}
+
+/* ---- Brand button family (used app-wide) ---- */
+/* Pink-outlined pill. Replaces all the grey secondary buttons that
+   used to leak through. Lives in styles.css so every page picks it up
+   without each one having to import community.css. */
+.btn-soft{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  background:#fff;border:1.5px solid #ffd6e0;color:#ff4e8a;
+  border-radius:999px;padding:9px 18px;font-size:13px;font-weight:700;
+  font-family:inherit;line-height:1;cursor:pointer;white-space:nowrap;
+  transition:background .12s, color .12s, border-color .12s, transform .12s, box-shadow .12s;
+}
+.btn-soft:hover{background:#ffeaf2;border-color:#ff4e8a;transform:translateY(-1px);box-shadow:0 6px 14px rgba(255,77,138,.14)}
+.btn-soft:active{transform:translateY(0) scale(.98)}
+.btn-soft.danger{color:#c4344b;border-color:#ffd0d8}
+.btn-soft.danger:hover{background:#fff0f3;border-color:#c4344b;color:#c4344b}
+
+/* Ghost-pink — text-only button for low-emphasis "Cancel" actions. */
+.btn-ghost-pink{
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  background:transparent;border:none;color:#ff4e8a;
+  padding:9px 16px;font-family:inherit;font-size:13px;font-weight:700;
+  cursor:pointer;border-radius:999px;white-space:nowrap;
+  transition:background .12s, color .12s;
+}
+.btn-ghost-pink:hover{background:#fff5f8;color:#c4344b}
+
+/* Solid danger button for destructive actions inside modals. */
+.btn-danger{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  background:linear-gradient(135deg,#c4344b,#9a2b3b);color:#fff;border:none;
+  border-radius:999px;padding:11px 20px;font-size:13px;font-weight:700;
+  font-family:inherit;line-height:1;cursor:pointer;white-space:nowrap;
+  box-shadow:0 6px 14px rgba(196,52,75,.28);
+  transition:transform .12s, box-shadow .12s;
+}
+.btn-danger:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(196,52,75,.4)}
+.btn-danger:active{transform:translateY(0) scale(.98)}
 .pill-btn{
   background:linear-gradient(135deg,#ff4e8a,#ff7aa6);
   color:#fff;border:none;border-radius:999px;padding:10px 18px;
