@@ -377,11 +377,19 @@
 /* =====================================================================
    Recipe photo tile on the card
    ===================================================================== */
-.recipe-card{padding:0;overflow:hidden}
+/* Recipe card — the photo tile takes care of its own corner-clipping
+   via border-radius on the .recipe-tile element, so the card itself
+   stays overflow:visible. This lets hover tooltips on the love/down
+   chips escape the card boundaries instead of being clipped. */
+.recipe-card{padding:0;overflow:visible}
 .recipe-tile{
   width:100%;aspect-ratio:16/10;background:#fff5f8;
   background-size:cover;background-position:center;
+  /* Round only the top corners so we match the card's top edge. The
+     card itself stays overflow:visible (so tooltips escape), and we
+     do the clipping here instead. */
   border-bottom:1px solid #ffeaf2;
+  border-radius:18px 18px 0 0;
 }
 .recipe-tile-empty{
   display:flex;align-items:center;justify-content:center;

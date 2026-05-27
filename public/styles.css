@@ -1063,8 +1063,13 @@ body.modal-open{overflow:hidden}
   position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
   opacity:0;pointer-events:none;
   transition:opacity .12s ease, transform .12s ease;
-  z-index:50;
+  /* Sit above modals, sidebars and cards so the tip is never clipped
+     when the host element is inside an overflow:hidden container. */
+  z-index:9000;
 }
+/* When the element is hovered, force the hover target to act as a
+   stacking context so the tooltip floats above siblings reliably. */
+[data-tip]:hover{z-index:9001;position:relative}
 [data-tip]::after{
   content:attr(data-tip);
   background:#2b1922;color:#fff;

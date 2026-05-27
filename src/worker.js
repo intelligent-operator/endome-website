@@ -390,6 +390,13 @@ export default {
           if (url.pathname === "/api/me/results/map" && request.method === "POST") {
             return jsonHeaders(await postTestResults(request, env, user, "map"));
           }
+          if (url.pathname === "/api/me/test-results" && request.method === "GET") {
+            return jsonHeaders(await listTestResults(env, user));
+          }
+          const trMatch = url.pathname.match(/^\/api\/me\/test-results\/(\d+)$/);
+          if (trMatch && request.method === "GET") {
+            return jsonHeaders(await getTestResult(env, user, +trMatch[1]));
+          }
           const dismissMatch = url.pathname.match(/^\/api\/me\/notifications\/(\d+)\/dismiss$/);
           if (dismissMatch && request.method === "POST") {
             return jsonHeaders(await dismissNotification(env, user, +dismissMatch[1]));
@@ -1353,6 +1360,7 @@ async function bootstrapSchema(env) {
       ensureAppointmentSchema(env),
       ensureReadSchema(env),
       ensureEmailLogSchema(env),
+      ensureTestResultsSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -6962,5 +6970,219 @@ async function listTopRecipes(env, user) {
       loves: r.loves || 0,
       isMine: r.user_id === user.id,
     })),
+  });
+}
+
+// =============================================================================
+// TEST RESULTS — once a user's EndoMe DNA / Bloods / Map test has been
+// processed, the assessed dataset lands in `test_results`. The page at
+// /tests reads from here to render the rich, infographic-style detail view.
+// =============================================================================
+const ALLOWED_TEST_KINDS = new Set(["dna", "bloods", "map", "hormone"]);
+
+let _testResultsSchemaChecked = false;
+async function ensureTestResultsSchema(env) {
+  if (_testResultsSchemaChecked) return;
+  _testResultsSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS test_results (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  kind TEXT NOT NULL," +              // dna | bloods | map | hormone
+    "  title TEXT NOT NULL," +
+    "  summary TEXT," +
+    "  data_json TEXT NOT NULL," +         // structured result + ranges
+    "  assessed_at INTEGER NOT NULL," +
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_test_results_user ON test_results(user_id, assessed_at DESC)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+// Seed a curated demo result of each kind for tom@bluerydge.com so the page
+// has something to render out of the box. Runs once per user — checks for
+// any existing test_results row before inserting.
+async function seedDemoTestResults(env, user) {
+  if (user.username !== "tom@bluerydge.com") return;
+  await ensureTestResultsSchema(env);
+  const existing = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM test_results WHERE user_id = ?"
+  ).bind(user.id).first().catch(() => ({ n: 0 }));
+  if ((existing?.n || 0) > 0) return;
+
+  const now = nowSec();
+  const oneMonthAgo = now - 30 * 86400;
+  const twoMonthsAgo = now - 60 * 86400;
+  const rows = [
+    {
+      kind: "dna", title: "EndoMe DNA — September panel",
+      summary: "Your genetics suggest slower oestrogen clearance and reduced folate metabolism. Magnesium glycinate, methylfolate and NAC are the strongest leverage points.",
+      assessed_at: now - 3 * 86400,
+      data: demoDnaResult(),
+    },
+    {
+      kind: "bloods", title: "EndoMe Bloods — August draw",
+      summary: "Vitamin D and ferritin are running low and inflammation is mildly elevated. Iron + vitamin D supplementation and an anti-inflammatory week recommended.",
+      assessed_at: oneMonthAgo,
+      data: demoBloodsResult(),
+    },
+    {
+      kind: "map", title: "EndoMe Map — July hormone profile",
+      summary: "Oestrogen-dominant pattern with sluggish 2-OH clearance and a flattened cortisol curve. The pattern matches early-luteal endo flares.",
+      assessed_at: twoMonthsAgo,
+      data: demoMapResult(),
+    },
+  ];
+
+  for (const r of rows) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO test_results (user_id, kind, title, summary, data_json, assessed_at, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)"
+      ).bind(user.id, r.kind, r.title, r.summary, JSON.stringify(r.data), r.assessed_at, now).run();
+    } catch (err) {
+      console.warn("seed test result:", err?.message);
+    }
+  }
+}
+
+function demoDnaResult() {
+  // Each marker is rendered as a stat bar in the UI. value is the user's
+  // result; range is the population reference; cohort is a placeholder for
+  // "average of other EndoMe users" so we can show the comparison line.
+  return {
+    overview: {
+      themes: [
+        { label: "Oestrogen processing", score: "slower than average", tone: "warn" },
+        { label: "Inflammation tendency", score: "moderate", tone: "warn" },
+        { label: "Detox pathways", score: "needs nutrient support", tone: "warn" },
+        { label: "Nutrient absorption", score: "good — most pathways intact", tone: "ok" },
+      ],
+    },
+    sections: [
+      {
+        title: "Hormone processing",
+        metrics: [
+          { name: "COMT (catechol-O-methyltransferase)", value: "Val/Met", status: "slow", note: "Slower oestrogen clearance. Magnesium glycinate + methylated B vitamins help." },
+          { name: "CYP1A1", value: "Wild-type", status: "normal", note: "Phase 1 oestrogen metabolism running normally." },
+          { name: "CYP1B1", value: "Variant", status: "warn", note: "Higher production of 4-OH oestrogen metabolites — pair with antioxidants." },
+        ],
+      },
+      {
+        title: "Inflammation + detox",
+        metrics: [
+          { name: "MTHFR C677T", value: "Heterozygous", status: "warn", note: "Reduced folate metabolism. Switch to methylfolate over folic acid." },
+          { name: "GSTM1 / GSTT1", value: "Single deletion", status: "warn", note: "Reduced glutathione detox. NAC + cruciferous vegetables daily." },
+          { name: "SOD2", value: "Variant", status: "warn", note: "Lower mitochondrial antioxidant capacity. CoQ10 + manganese support helps." },
+        ],
+      },
+      {
+        title: "Nutrient + energy",
+        metrics: [
+          { name: "VDR (vitamin D receptor)", value: "BsmI bb", status: "ok", note: "Standard vitamin D response. Aim for 1000–2000 IU daily." },
+          { name: "FTO", value: "Wild-type", status: "ok", note: "No appetite-regulation variant." },
+          { name: "MTRR A66G", value: "Heterozygous", status: "normal", note: "Slightly slower B12 recycling — methylcobalamin form preferred." },
+        ],
+      },
+    ],
+    actions: [
+      { emoji: "💊", label: "Methylfolate 400mcg + methylcobalamin 1000mcg daily" },
+      { emoji: "🍵", label: "NAC 600mg twice daily for 8 weeks" },
+      { emoji: "🥦", label: "Cruciferous vegetables (broccoli, kale) at least 4 days/week" },
+      { emoji: "🧴", label: "Magnesium glycinate 300mg at night" },
+    ],
+  };
+}
+
+function demoBloodsResult() {
+  return {
+    overview: {
+      themes: [
+        { label: "Inflammation", score: "mildly elevated", tone: "warn" },
+        { label: "Iron status", score: "low — replenish", tone: "warn" },
+        { label: "Vitamin D", score: "below target", tone: "warn" },
+        { label: "Thyroid", score: "in range", tone: "ok" },
+      ],
+    },
+    markers: [
+      { name: "C-reactive protein (CRP)", value: 4.8, unit: "mg/L", low: 0, high: 3, cohort: 3.6, prev: 6.1, tone: "warn", note: "Mildly elevated — typical for endo flares. Anti-inflammatory diet + omega-3 recommended." },
+      { name: "Ferritin", value: 18, unit: "ng/mL", low: 30, high: 200, cohort: 42, prev: 22, tone: "warn", note: "Below the floor of the healthy range. Heavy periods are likely the cause." },
+      { name: "Iron (serum)", value: 9.2, unit: "umol/L", low: 11, high: 30, cohort: 16, prev: 10.4, tone: "warn", note: "Low. Pair iron supplements with vitamin C, away from coffee + tea." },
+      { name: "Vitamin D (25-OH)", value: 42, unit: "nmol/L", low: 75, high: 200, cohort: 78, prev: 38, tone: "warn", note: "Below the optimal 75+ nmol/L target. 2000 IU/day for 12 weeks then re-test." },
+      { name: "Vitamin B12", value: 412, unit: "pmol/L", low: 200, high: 900, cohort: 480, prev: 390, tone: "ok", note: "Comfortably in range." },
+      { name: "TSH", value: 1.8, unit: "mIU/L", low: 0.4, high: 4, cohort: 2.1, prev: 1.7, tone: "ok", note: "Thyroid stimulating hormone in target range." },
+      { name: "Free T4", value: 14.5, unit: "pmol/L", low: 12, high: 22, cohort: 15.6, prev: 14.2, tone: "ok", note: "Stable." },
+      { name: "Estradiol (day 3)", value: 178, unit: "pmol/L", low: 90, high: 250, cohort: 165, prev: 192, tone: "ok", note: "Within follicular-phase reference range." },
+      { name: "Progesterone (day 21)", value: 28, unit: "nmol/L", low: 16, high: 80, cohort: 38, prev: 24, tone: "ok", note: "Adequate ovulation marker." },
+      { name: "AMH", value: 14.2, unit: "pmol/L", low: 7, high: 47, cohort: 18, prev: 15.4, tone: "ok", note: "Normal ovarian reserve for your age cohort." },
+    ],
+  };
+}
+
+function demoMapResult() {
+  return {
+    overview: {
+      themes: [
+        { label: "Oestrogen dominance", score: "elevated estradiol", tone: "warn" },
+        { label: "2-OH clearance", score: "sluggish", tone: "warn" },
+        { label: "Cortisol rhythm", score: "flattened curve", tone: "warn" },
+        { label: "Progesterone", score: "ok", tone: "ok" },
+      ],
+    },
+    estrogens: [
+      { name: "Estradiol (E2)", value: 4.2, unit: "ng/mg Cr", low: 1, high: 3.5, cohort: 2.6, prev: 4.0, tone: "warn", note: "Elevated. Drives endometrial proliferation." },
+      { name: "Estrone (E1)", value: 8.1, unit: "ng/mg Cr", low: 2, high: 7, cohort: 5.2, prev: 7.8, tone: "warn", note: "High. Often follows from elevated E2." },
+      { name: "Estriol (E3)", value: 3.8, unit: "ng/mg Cr", low: 1, high: 5, cohort: 3.4, prev: 3.6, tone: "ok", note: "Within range — the protective metabolite." },
+    ],
+    metabolites: [
+      { name: "2-OH oestrogen (protective)", value: 28, unit: "%", low: 60, high: 80, cohort: 62, prev: 30, tone: "warn", note: "Lower than ideal. NAC + DIM support this pathway." },
+      { name: "4-OH oestrogen (risky)", value: 22, unit: "%", low: 0, high: 10, cohort: 8, prev: 20, tone: "warn", note: "Elevated. Pair with antioxidants (curcumin, NAC, glutathione)." },
+      { name: "16-OH oestrogen (proliferative)", value: 50, unit: "%", low: 10, high: 30, cohort: 30, prev: 50, tone: "warn", note: "High. Cruciferous vegetables + fibre help shift the ratio." },
+    ],
+    progesterone: [
+      { name: "Progesterone (24h)", value: 2.4, unit: "ng/mg Cr", low: 1.5, high: 5, cohort: 3.1, prev: 2.6, tone: "ok", note: "Within range." },
+    ],
+    cortisol: [
+      { name: "Cortisol AM (waking)", value: 35, unit: "ng/mg Cr", low: 50, high: 120, cohort: 78, prev: 32, tone: "warn", note: "Low morning cortisol — often correlates with fatigue." },
+      { name: "Cortisol noon", value: 38, unit: "ng/mg Cr", low: 25, high: 75, cohort: 42, prev: 36, tone: "ok", note: "Adequate." },
+      { name: "Cortisol PM", value: 32, unit: "ng/mg Cr", low: 8, high: 25, cohort: 18, prev: 30, tone: "warn", note: "Elevated evening cortisol — disrupts sleep." },
+    ],
+    androgens: [
+      { name: "DHEA-S", value: 142, unit: "ng/mg Cr", low: 50, high: 300, cohort: 165, prev: 138, tone: "ok", note: "Adequate adrenal androgen." },
+      { name: "Testosterone", value: 0.42, unit: "ng/mg Cr", low: 0.1, high: 1, cohort: 0.55, prev: 0.40, tone: "ok", note: "Within range." },
+    ],
+  };
+}
+
+async function listTestResults(env, user) {
+  await ensureTestResultsSchema(env);
+  // Lazy-seed for the demo account on first list call.
+  await seedDemoTestResults(env, user).catch(() => {});
+  const rows = await env.DB.prepare(
+    "SELECT id, kind, title, summary, assessed_at, created_at " +
+    "FROM test_results WHERE user_id = ? ORDER BY assessed_at DESC LIMIT 100"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  return json({
+    results: (rows.results || []).map((r) => ({
+      id: r.id, kind: r.kind, title: r.title, summary: r.summary,
+      assessedAt: r.assessed_at, createdAt: r.created_at,
+    })),
+  });
+}
+
+async function getTestResult(env, user, id) {
+  await ensureTestResultsSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT * FROM test_results WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!row) return json({ error: "Result not found" }, 404);
+  let data = {};
+  try { data = JSON.parse(row.data_json); } catch {}
+  return json({
+    result: {
+      id: row.id, kind: row.kind, title: row.title, summary: row.summary,
+      assessedAt: row.assessed_at, createdAt: row.created_at, data,
+    },
   });
 }
