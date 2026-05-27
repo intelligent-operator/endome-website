@@ -373,3 +373,117 @@
 /* ---------- Common ---------- */
 .empty-state.small{font-size:12px;padding:18px}
 .modal-h p{font-size:13px;color:#7a5f6c;line-height:1.5;margin:6px 0 0}
+
+/* =====================================================================
+   Recipe photo tile on the card
+   ===================================================================== */
+.recipe-card{padding:0;overflow:hidden}
+.recipe-tile{
+  width:100%;aspect-ratio:16/10;background:#fff5f8;
+  background-size:cover;background-position:center;
+  border-bottom:1px solid #ffeaf2;
+}
+.recipe-tile-empty{
+  display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,#ffeaf2,#ffd6e0);
+}
+.recipe-tile-empty span{font-size:54px;line-height:1;opacity:.7}
+.recipe-card-body{padding:14px 18px 16px;display:flex;flex-direction:column;gap:8px}
+.recipe-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:0}
+
+.recipe-edit-btn{
+  width:30px;height:30px;border-radius:50%;
+  background:#fff;border:1px solid #ffd6e0;color:#ff4e8a;
+  font-size:14px;line-height:1;cursor:pointer;font-family:inherit;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .12s, color .12s, transform .12s, border-color .12s;
+}
+.recipe-edit-btn:hover{background:#ff4e8a;color:#fff;border-color:#ff4e8a;transform:scale(1.05)}
+
+/* =====================================================================
+   Recipe detail modal hero + owner actions
+   ===================================================================== */
+.recipe-detail-card{padding-top:0;overflow:hidden}
+.recipe-detail-hero{
+  width:calc(100% + 56px);margin:-28px -28px 0;
+  aspect-ratio:21/9;
+  background-size:cover;background-position:center;background-color:#fff5f8;
+  border-bottom:1px solid #ffeaf2;
+}
+.recipe-detail-owner-actions{
+  display:flex;justify-content:flex-end;gap:8px;margin-bottom:6px;
+}
+
+/* =====================================================================
+   Recipe photo upload tile inside the modal
+   ===================================================================== */
+.recipe-photo-field{
+  margin-bottom:14px;
+}
+.recipe-photo-field .field-label{
+  display:block;font-size:13px;font-weight:700;color:#2b1922;margin-bottom:4px;
+}
+.recipe-photo-wrap{
+  display:flex;gap:16px;align-items:center;flex-wrap:wrap;
+  background:#fff5f8;border:1px dashed #ffd6e0;border-radius:14px;
+  padding:14px;
+}
+.recipe-photo-preview{
+  width:110px;height:88px;border-radius:12px;flex-shrink:0;
+  background:#fff;border:2px dashed #ffd6e0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:32px;line-height:1;color:#a08596;
+  background-size:cover;background-position:center;overflow:hidden;
+}
+.recipe-photo-preview.has-image{border-style:solid;border-color:#ff4e8a;font-size:0}
+.recipe-photo-actions{display:flex;flex-direction:column;gap:8px;flex:1;min-width:200px}
+.recipe-photo-actions .btn-primary,
+.recipe-photo-actions .btn-ghost-pink{align-self:flex-start;cursor:pointer}
+.recipe-photo-actions label.btn{cursor:pointer}
+
+/* =====================================================================
+   Right sidebar — Top recipes
+   ===================================================================== */
+.recipes-right .side-card{padding:18px}
+.recipes-right .section-head{margin-bottom:4px}
+.recipes-right .section-head h2{font-size:18px;font-weight:800;margin:0;color:#2b1922;letter-spacing:-.2px}
+.side-sub{margin:0 0 12px;font-size:12px;color:#7a5f6c}
+.top-recipes-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.top-recipe-row{
+  display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:center;
+  background:#fff5f8;border:1px solid #ffe2eb;border-radius:12px;
+  padding:8px;cursor:pointer;
+  transition:transform .12s, box-shadow .12s, background .12s, border-color .12s;
+}
+.top-recipe-row:hover{transform:translateY(-1px);background:#fff;border-color:#ffd6e0;box-shadow:0 6px 14px rgba(255,77,138,.10)}
+.top-recipe-tile{
+  width:64px;height:64px;border-radius:10px;
+  background:#ffeaf2;background-size:cover;background-position:center;flex-shrink:0;
+}
+.top-recipe-tile-empty{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ffeaf2,#ffd6e0)}
+.top-recipe-tile-empty span{font-size:28px;line-height:1;opacity:.7}
+.top-recipe-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.top-recipe-cat{font-size:10px;font-weight:700;color:#ff4e8a;letter-spacing:.04em;text-transform:uppercase}
+.top-recipe-body strong{
+  font-size:13px;color:#2b1922;line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.top-recipe-meta{font-size:11px;color:#7a5f6c}
+.top-recipes-empty{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:#fff5f8;border:1px dashed #ffd6e0;border-radius:12px;
+  padding:18px 12px;font-size:12px;color:#7a5f6c;line-height:1.5;text-align:center;
+}
+.top-recipes-empty-art{font-size:28px;line-height:1}
+
+/* =====================================================================
+   Food library — search-only placeholder
+   ===================================================================== */
+.food-library-placeholder{
+  list-style:none;text-align:center;padding:28px 20px;width:100%;
+  background:#fff;border:1px dashed #ffd6e0;border-radius:18px;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+}
+.food-library-placeholder-emoji{font-size:32px;line-height:1;margin-bottom:4px}
+.food-library-placeholder strong{font-size:15px;color:#2b1922;font-weight:700}
+.food-library-placeholder span{font-size:13px;color:#7a5f6c;max-width:460px;line-height:1.5}

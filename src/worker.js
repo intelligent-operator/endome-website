@@ -173,6 +173,9 @@ export default {
           if (url.pathname === "/api/me/recipes" && request.method === "POST") {
             return jsonHeaders(await createRecipe(request, env, user));
           }
+          if (url.pathname === "/api/me/recipes/top" && request.method === "GET") {
+            return jsonHeaders(await listTopRecipes(env, user));
+          }
           if (url.pathname === "/api/me/recipe-foods" && request.method === "GET") {
             return jsonHeaders(await listRecipeFoods(request, env, user));
           }
@@ -187,8 +190,11 @@ export default {
             const id = +recipeMatch[1];
             const action = recipeMatch[2];
             if (!action     && request.method === "GET")    return jsonHeaders(await getRecipe(env, user, id));
+            if (!action     && request.method === "PUT")    return jsonHeaders(await updateRecipe(request, env, user, id));
             if (!action     && request.method === "DELETE") return jsonHeaders(await deleteRecipe(env, user, id));
             if (action === "react" && request.method === "POST") return jsonHeaders(await postRecipeReaction(request, env, user, id));
+            if (action === "image" && request.method === "POST")   return jsonHeaders(await uploadRecipeImage(request, env, user, id));
+            if (action === "image" && request.method === "DELETE") return jsonHeaders(await deleteRecipeImage(env, user, id));
           }
 
           // --- Documents (private file storage in R2) ---------------------
@@ -437,6 +443,11 @@ export default {
     const avatarMatch = url.pathname.match(/^\/api\/u\/([^/]+)\/avatar$/);
     if (avatarMatch && request.method === "GET") {
       return withSecurityHeaders(await serveAvatar(env, decodeURIComponent(avatarMatch[1])));
+    }
+    // --- Public recipe photo fetch ------------------------------------------
+    const recipeImgMatch = url.pathname.match(/^\/api\/r\/(\d+)\/image$/);
+    if (recipeImgMatch && request.method === "GET") {
+      return withSecurityHeaders(await serveRecipeImage(env, +recipeImgMatch[1]));
     }
 
     // --- /u/<username> — serve the shared u.html page (JS reads the path). --
@@ -4334,7 +4345,7 @@ async function getPublicProfile(env, viewer, target) {
   const t = target.toLowerCase().trim();
   if (!t || t.length > 200) return json({ error: "User not found" }, 404);
   const row = await env.DB.prepare(
-    "SELECT id, username, display_name, alias, avatar, bio, created_at FROM users " +
+    "SELECT id, username, display_name, alias, avatar, avatar_image_key, bio, created_at FROM users " +
     "WHERE LOWER(username) = ? OR LOWER(alias) = ? LIMIT 1"
   ).bind(t, t).first().catch(() => null);
   if (!row) return json({ error: "User not found" }, 404);
@@ -5193,6 +5204,9 @@ async function ensureRecipeSchema(env) {
     "  updated_at INTEGER NOT NULL" +
     ")",
     "CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id, created_at DESC)",
+    // Best-effort ALTER for the recipe photo column. Existing tables won't
+    // have it; the duplicate-column error is swallowed below.
+    "ALTER TABLE recipes ADD COLUMN image_key TEXT",
     "CREATE INDEX IF NOT EXISTS idx_recipes_cat  ON recipes(category, created_at DESC)",
     "CREATE TABLE IF NOT EXISTS recipe_ingredients (" +
     "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -5303,7 +5317,8 @@ async function listRecipes(request, env, user) {
   }
 
   const rows = await env.DB.prepare(
-    "SELECT r.*, u.display_name AS author_display, u.username AS author_username, " +
+    "SELECT r.id AS id, r.user_id, r.title, r.category, r.summary, r.body, r.servings, r.prep_minutes, r.cook_minutes, r.image_key, r.is_active, r.created_at, r.updated_at, " +
+    "  u.display_name AS author_display, u.username AS author_username, " +
     "  u.avatar_image_key AS author_avatar_key, u.avatar AS author_avatar, " +
     "  (SELECT COUNT(*) FROM recipe_reactions WHERE recipe_id = r.id AND reaction='love') AS loves, " +
     "  (SELECT COUNT(*) FROM recipe_reactions WHERE recipe_id = r.id AND reaction='down') AS downs, " +
@@ -5317,6 +5332,7 @@ async function listRecipes(request, env, user) {
       id: r.id, title: r.title, category: r.category, summary: r.summary,
       servings: r.servings, prepMinutes: r.prep_minutes, cookMinutes: r.cook_minutes,
       createdAt: r.created_at,
+      imageUrl: r.image_key ? `/api/r/${r.id}/image?v=${r.updated_at || r.created_at || 0}` : null,
       author: r.author_display || r.author_username || "Member",
       authorAvatar: r.author_avatar || null,
       authorAvatarUrl: r.author_avatar_key
@@ -5371,6 +5387,7 @@ async function getRecipe(env, user, id) {
       id: r.id, title: r.title, category: r.category, summary: r.summary,
       body: r.body, servings: r.servings, prepMinutes: r.prep_minutes,
       cookMinutes: r.cook_minutes, createdAt: r.created_at,
+      imageUrl: r.image_key ? `/api/r/${r.id}/image?v=${r.updated_at || r.created_at || 0}` : null,
       author: r.author_display || r.author_username || "Member",
       authorAvatar: r.author_avatar || null,
       authorAvatarUrl: r.author_avatar_key
@@ -6786,4 +6803,163 @@ async function serveAvatar(env, userId) {
   headers.set("content-type", obj.httpMetadata?.contentType || "image/jpeg");
   headers.set("cache-control", "public, max-age=3600");
   return new Response(obj.body, { headers });
+}
+
+// =============================================================================
+// RECIPE EDIT + PHOTO — owners can update their own recipes and attach a
+// hero image stored in R2 under recipes/<id>/cover.<ext>. The public GET
+// route at /api/r/:id/image lets cards embed the photo without auth.
+// =============================================================================
+const ALLOWED_RECIPE_IMAGE_TYPES = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/webp",
+]);
+const MAX_RECIPE_IMAGE_BYTES = 6 * 1024 * 1024;
+const RECIPE_IMAGE_EXT_FOR = {
+  "image/png":"png","image/jpeg":"jpg","image/jpg":"jpg","image/webp":"webp",
+};
+
+async function updateRecipe(request, env, user, id) {
+  await ensureRecipeSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT id FROM recipes WHERE id = ? AND user_id = ? AND is_active = 1"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Recipe not found" }, 404);
+
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+
+  const title = sanitizeText(body.title, 140);
+  if (!title) return json({ error: "Title is required." }, 400);
+  const category = RECIPE_CATEGORY_IDS.has(body.category) ? body.category : "other";
+  const summary  = sanitizeText(body.summary, 500) || null;
+  const bodyText = sanitizeText(body.body, 8000) || null;
+  const servings = clampIntOrNull(body.servings, 1, 30);
+  const prep     = clampIntOrNull(body.prepMinutes, 0, 600);
+  const cook     = clampIntOrNull(body.cookMinutes, 0, 600);
+
+  const now = nowSec();
+  await env.DB.prepare(
+    "UPDATE recipes SET title = ?, category = ?, summary = ?, body = ?, " +
+    "servings = ?, prep_minutes = ?, cook_minutes = ?, updated_at = ? " +
+    "WHERE id = ? AND user_id = ?"
+  ).bind(
+    title, category, summary, bodyText,
+    servings, prep, cook, now, id, user.id
+  ).run();
+
+  // If the client supplied an ingredients array, replace the whole list. The
+  // editor always sends the full list it intends to keep, so this is the
+  // cleanest path and saves a per-row diff.
+  if (Array.isArray(body.ingredients)) {
+    await env.DB.prepare("DELETE FROM recipe_ingredients WHERE recipe_id = ?")
+      .bind(id).run();
+    for (const ing of body.ingredients.slice(0, 60)) {
+      const foodName = sanitizeText(ing.foodName || ing.name, 120);
+      if (!foodName) continue;
+      const foodId   = ing.foodId ? (+ing.foodId || null) : null;
+      const quantity = (ing.quantity == null || ing.quantity === "") ? null : Math.max(0, Math.min(99999, +ing.quantity || 0));
+      const unit     = RECIPE_FOOD_UNITS.has(ing.unit) ? ing.unit : (ing.unit ? sanitizeText(ing.unit, 20) : null);
+      const notes    = sanitizeText(ing.notes, 200) || null;
+      try {
+        await env.DB.prepare(
+          "INSERT INTO recipe_ingredients (recipe_id, food_id, food_name, quantity, unit, notes) " +
+          "VALUES (?, ?, ?, ?, ?, ?)"
+        ).bind(id, foodId, foodName, quantity, unit, notes).run();
+      } catch {}
+    }
+  }
+  return json({ ok: true });
+}
+
+async function uploadRecipeImage(request, env, user, id) {
+  if (!env.DOCS) return json({ error: "Image storage not configured" }, 503);
+  await ensureRecipeSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT id, image_key FROM recipes WHERE id = ? AND user_id = ? AND is_active = 1"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Recipe not found" }, 404);
+
+  const ct = request.headers.get("content-type") || "";
+  if (!ct.startsWith("multipart/form-data")) {
+    return json({ error: "Upload must be multipart/form-data" }, 400);
+  }
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!(file instanceof File)) return json({ error: "Missing file" }, 400);
+  if (!ALLOWED_RECIPE_IMAGE_TYPES.has(file.type)) {
+    return json({ error: "Image must be PNG, JPG or WEBP." }, 400);
+  }
+  if (file.size <= 0 || file.size > MAX_RECIPE_IMAGE_BYTES) {
+    return json({ error: `Image too large — max ${Math.round(MAX_RECIPE_IMAGE_BYTES / 1024 / 1024)} MB.` }, 413);
+  }
+
+  const ext = RECIPE_IMAGE_EXT_FOR[file.type] || "jpg";
+  const key = `recipes/${id}/cover.${ext}`;
+  const buf = await file.arrayBuffer();
+  await env.DOCS.put(key, buf, {
+    httpMetadata: { contentType: file.type, cacheControl: "public, max-age=86400" },
+  });
+  // Old photo with a different extension would be orphaned otherwise.
+  if (owned.image_key && owned.image_key !== key) {
+    try { await env.DOCS.delete(owned.image_key); } catch {}
+  }
+  await env.DB.prepare(
+    "UPDATE recipes SET image_key = ?, updated_at = ? WHERE id = ?"
+  ).bind(key, nowSec(), id).run();
+  return json({ ok: true, imageUrl: `/api/r/${id}/image?v=${nowSec()}` });
+}
+
+async function deleteRecipeImage(env, user, id) {
+  await ensureRecipeSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT id, image_key FROM recipes WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Recipe not found" }, 404);
+  if (owned.image_key && env.DOCS) {
+    try { await env.DOCS.delete(owned.image_key); } catch {}
+  }
+  await env.DB.prepare(
+    "UPDATE recipes SET image_key = NULL, updated_at = ? WHERE id = ?"
+  ).bind(nowSec(), id).run();
+  return json({ ok: true });
+}
+
+async function serveRecipeImage(env, id) {
+  if (!env.DOCS) return new Response("no storage", { status: 404 });
+  await ensureRecipeSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT image_key FROM recipes WHERE id = ? AND is_active = 1"
+  ).bind(id).first().catch(() => null);
+  if (!row?.image_key) return new Response("not found", { status: 404 });
+  const obj = await env.DOCS.get(row.image_key);
+  if (!obj) return new Response("not found", { status: 404 });
+  const headers = new Headers();
+  headers.set("content-type", obj.httpMetadata?.contentType || "image/jpeg");
+  headers.set("cache-control", "public, max-age=3600");
+  return new Response(obj.body, { headers });
+}
+
+// =============================================================================
+// TOP RECIPES — used by the right rail on /recipes. Ranked by ❤ count then
+// recency. Cap small so it visually balances the calendar-style cards.
+// =============================================================================
+async function listTopRecipes(env, user) {
+  await ensureRecipeSchema(env);
+  const rows = await env.DB.prepare(
+    "SELECT r.id, r.title, r.category, r.image_key, r.created_at, r.updated_at, r.user_id, " +
+    "  u.display_name AS author_display, u.username AS author_username, " +
+    "  (SELECT COUNT(*) FROM recipe_reactions WHERE recipe_id = r.id AND reaction='love') AS loves " +
+    "FROM recipes r LEFT JOIN users u ON u.id = r.user_id " +
+    "WHERE r.is_active = 1 " +
+    "ORDER BY loves DESC, r.created_at DESC LIMIT 6"
+  ).all().catch(() => ({ results: [] }));
+  return json({
+    recipes: (rows.results || []).map((r) => ({
+      id: r.id, title: r.title, category: r.category,
+      imageUrl: r.image_key ? `/api/r/${r.id}/image?v=${r.updated_at || r.created_at || 0}` : null,
+      author: r.author_display || r.author_username || "Member",
+      loves: r.loves || 0,
+      isMine: r.user_id === user.id,
+    })),
+  });
 }

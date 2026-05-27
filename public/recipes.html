@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=11" />
-  <link rel="stylesheet" href="/recipes.css?v=4" />
+  <link rel="stylesheet" href="/recipes.css?v=5" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -98,17 +98,34 @@
       <section class="community-section">
         <div class="section-head">
           <h2>🥬 Food library</h2>
-          <span class="section-hint">Every ingredient anyone has added. Used by the recipe builder and (soon) the food tracker.</span>
+          <span class="section-hint">Search the catalog by name — chicken, oats, magnesium, turmeric…</span>
         </div>
         <div class="food-library-toolbar">
-          <input type="search" id="food-library-search" placeholder="Search foods (chicken, oats, magnesium…)" />
-          <button type="button" class="btn-soft small" id="btn-add-food">+ Add a food</button>
+          <input type="search" id="food-library-search" placeholder="Start typing a food…" />
+          <button type="button" class="btn btn-primary small" id="btn-add-food">+ Add a food</button>
         </div>
         <ul class="food-library-grid" id="food-library-grid">
-          <li class="empty-state">Loading…</li>
+          <li class="food-library-placeholder">
+            <span class="food-library-placeholder-emoji">🔎</span>
+            <strong>Type to search the food library</strong>
+            <span>We hide the full list to keep the page light — start typing and matching foods appear here.</span>
+          </li>
         </ul>
       </section>
     </main>
+
+    <!-- ===== RIGHT SIDEBAR — Top recipes ===== -->
+    <aside class="dash-right recipes-right">
+      <section class="side-card top-recipes-card">
+        <div class="section-head">
+          <h2>🏆 Top recipes</h2>
+        </div>
+        <p class="side-sub">Most loved by the community right now. Tap one to open.</p>
+        <ul class="top-recipes-list" id="top-recipes-list">
+          <li class="top-recipes-empty">Loading…</li>
+        </ul>
+      </section>
+    </aside>
   </div>
 
   <!-- Post / edit recipe modal -->
@@ -122,6 +139,26 @@
         <p>Share what works for you. Be specific about ingredients and quantities so others can recreate it (and the food tracker can pick it up).</p>
       </header>
       <form id="recipe-form" novalidate>
+        <input type="hidden" name="id" />
+
+        <!-- Photo: shows up as the tile on the recipe card so it's the
+             first thing the user sees on the grid. -->
+        <div class="recipe-photo-field">
+          <span class="field-label">Recipe photo</span>
+          <p class="field-hint">A clear, well-lit shot is what draws people in. PNG, JPG or WEBP up to 6MB.</p>
+          <div class="recipe-photo-wrap">
+            <div class="recipe-photo-preview" id="recipe-photo-preview">📷</div>
+            <div class="recipe-photo-actions">
+              <label class="btn btn-primary small">
+                📷 Choose photo
+                <input type="file" id="recipe-photo-file" accept="image/png,image/jpeg,image/webp" hidden />
+              </label>
+              <button type="button" class="btn-ghost-pink small" id="recipe-photo-remove" hidden>Remove photo</button>
+              <p class="form-status" id="recipe-photo-status"></p>
+            </div>
+          </div>
+        </div>
+
         <div class="field-grid-2">
           <label class="field"><span>Title</span>
             <input type="text" name="title" required maxlength="140" placeholder="e.g. Anti-inflammatory turmeric porridge" />
@@ -218,8 +255,9 @@
         </fieldset>
 
         <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Publish recipe</button>
-          <button type="button" class="btn-soft" data-close-recipe>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="recipe-submit">Publish recipe</button>
+          <button type="button" class="btn btn-danger" id="recipe-delete-btn" hidden>Delete recipe</button>
+          <button type="button" class="btn-ghost-pink" data-close-recipe>Cancel</button>
           <p class="form-status" id="recipe-status" role="status"></p>
         </div>
       </form>
@@ -317,6 +355,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=3" defer></script>
-  <script src="/recipes.js?v=4" defer></script>
+  <script src="/recipes.js?v=5" defer></script>
 </body>
 </html>

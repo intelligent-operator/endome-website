@@ -65,7 +65,9 @@ console.info("EndoMe u-profile build v1");
     body.innerHTML = `
       <header class="profile-hero">
         <div class="profile-avatar-wrap">
-          <div class="profile-avatar">${escapeHtml(p.avatar || "🌸")}</div>
+          ${p.avatarUrl
+            ? `<div class="profile-avatar has-image" style="background-image:url('${escapeHtml(p.avatarUrl)}')"></div>`
+            : `<div class="profile-avatar">${escapeHtml(p.avatar || "🌸")}</div>`}
         </div>
         <div class="profile-hero-body">
           <h1>${escapeHtml(p.name)} ${statusPill(p.friendStatus)}</h1>

@@ -33,6 +33,9 @@ console.info("EndoMe recipes build v1");
   let pendingIngredients = [];   // for the post-recipe modal
   let pendingMethodSteps = [];   // for the step-list editor
   let lastFoodLookup = [];       // cache for autocomplete
+  let editingId = null;          // null = new recipe; otherwise recipe id
+  let pendingPhotoFile = null;   // File chosen for upload on next save
+  let pendingPhotoPreviewUrl = null; // object-url for the in-modal preview
 
   // -- Fraction helpers --------------------------------------------------
   // Common fraction strings (and the unicode variants) → decimal value.
@@ -136,7 +139,7 @@ console.info("EndoMe recipes build v1");
     await loadCategories();
     paintCategoryChips();
     populateCategorySelect();
-    await Promise.all([loadRecipes(), loadFoods()]);
+    await Promise.all([loadRecipes(), loadFoods(), loadTopRecipes()]);
     document.getElementById("page-loader")?.classList.add("is-hidden");
   })();
 
@@ -195,33 +198,52 @@ console.info("EndoMe recipes build v1");
     grid.innerHTML = recipes.map(recipeCardHtml).join("");
     grid.querySelectorAll("[data-open-recipe]").forEach((el) => {
       el.addEventListener("click", (e) => {
-        if (e.target.closest("[data-react]") || e.target.closest("[data-delete-recipe]")) return;
+        if (e.target.closest("[data-react]") || e.target.closest("[data-edit-recipe]")) return;
         openRecipeDetail(+el.dataset.openRecipe);
+      });
+    });
+    // Owner-only edit button on cards → fetch full recipe (with ingredients)
+    // then open the modal in edit mode.
+    grid.querySelectorAll("[data-edit-recipe]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+          const data = await fetchJson(`/api/me/recipes/${btn.dataset.editRecipe}`);
+          if (data.recipe) openRecipeModal(data.recipe);
+        } catch (err) { toast(err.message || "Couldn't load recipe", "err"); }
       });
     });
   }
 
   function recipeCardHtml(r) {
     const cat = categories.find((c) => c.id === r.category) || { emoji: "🍳", label: r.category || "Other" };
+    // Photo tile sits on top — full-width hero on the card. Falls back to a
+    // gradient + category emoji when there's no upload yet.
+    const tile = r.imageUrl
+      ? `<div class="recipe-tile" style="background-image:url('${escapeHtml(r.imageUrl)}')"></div>`
+      : `<div class="recipe-tile recipe-tile-empty"><span>${escapeHtml(cat.emoji)}</span></div>`;
     return `<li class="recipe-card" data-open-recipe="${r.id}">
-      <header class="recipe-card-head">
-        <span class="recipe-cat-pill">${escapeHtml(cat.emoji)} ${escapeHtml(cat.label)}</span>
-        ${r.isMine ? `<button class="recipe-delete-btn" data-delete-recipe="${r.id}" title="Remove">×</button>` : ""}
-      </header>
-      <h3>${escapeHtml(r.title)}</h3>
-      ${r.summary ? `<p class="recipe-summary">${escapeHtml(r.summary)}</p>` : ""}
-      <div class="recipe-meta">
-        ${r.servings ? `<span>🍽 ${r.servings} serv.</span>` : ""}
-        ${r.prepMinutes != null ? `<span>⏱ ${r.prepMinutes}m prep</span>` : ""}
-        ${r.cookMinutes != null ? `<span>🔥 ${r.cookMinutes}m cook</span>` : ""}
-      </div>
-      <footer class="recipe-card-foot">
-        <span class="recipe-author">${authorBadge(r)} by ${escapeHtml(r.author || "Member")}</span>
-        <div class="recipe-react">
-          <button class="react-chip love ${r.myReaction === "love" ? "on" : ""}" data-react="love" data-id="${r.id}" aria-label="Love">❤ <span>${r.loves}</span></button>
-          <button class="react-chip down ${r.myReaction === "down" ? "on" : ""}" data-react="down" data-id="${r.id}" aria-label="Thumbs down">👎 <span>${r.downs}</span></button>
+      ${tile}
+      <div class="recipe-card-body">
+        <header class="recipe-card-head">
+          <span class="recipe-cat-pill">${escapeHtml(cat.emoji)} ${escapeHtml(cat.label)}</span>
+          ${r.isMine ? `<button class="recipe-edit-btn" data-edit-recipe="${r.id}" title="Edit">✎</button>` : ""}
+        </header>
+        <h3>${escapeHtml(r.title)}</h3>
+        ${r.summary ? `<p class="recipe-summary">${escapeHtml(r.summary)}</p>` : ""}
+        <div class="recipe-meta">
+          ${r.servings ? `<span>🍽 ${r.servings} serv.</span>` : ""}
+          ${r.prepMinutes != null ? `<span>⏱ ${r.prepMinutes}m prep</span>` : ""}
+          ${r.cookMinutes != null ? `<span>🔥 ${r.cookMinutes}m cook</span>` : ""}
         </div>
-      </footer>
+        <footer class="recipe-card-foot">
+          <span class="recipe-author">${authorBadge(r)} by ${escapeHtml(r.author || "Member")}</span>
+          <div class="recipe-react">
+            <button class="react-chip love ${r.myReaction === "love" ? "on" : ""}" data-react="love" data-id="${r.id}" aria-label="Love">❤ <span>${r.loves}</span></button>
+            <button class="react-chip down ${r.myReaction === "down" ? "on" : ""}" data-react="down" data-id="${r.id}" aria-label="Thumbs down">👎 <span>${r.downs}</span></button>
+          </div>
+        </footer>
+      </div>
     </li>`;
   }
 
@@ -244,8 +266,18 @@ console.info("EndoMe recipes build v1");
   function paintRecipeDetail(r) {
     const body = document.getElementById("recipe-detail-body");
     const cat = categories.find((c) => c.id === r.category) || { emoji: "🍳", label: r.category || "Other" };
+    const hero = r.imageUrl
+      ? `<div class="recipe-detail-hero" style="background-image:url('${escapeHtml(r.imageUrl)}')"></div>`
+      : "";
+    const ownerControls = r.isMine
+      ? `<div class="recipe-detail-owner-actions">
+          <button type="button" class="btn btn-primary small" data-detail-edit="${r.id}">✎ Edit recipe</button>
+        </div>`
+      : "";
     body.innerHTML = `
+      ${hero}
       <header class="recipe-detail-head">
+        ${ownerControls}
         <p class="recipe-detail-eyebrow">${escapeHtml(cat.emoji)} ${escapeHtml(cat.label)} · ${authorBadge(r)} by ${escapeHtml(r.author || "Member")}</p>
         <h2>${escapeHtml(r.title)}</h2>
         ${r.summary ? `<p class="recipe-detail-summary">${escapeHtml(r.summary)}</p>` : ""}
@@ -288,8 +320,52 @@ console.info("EndoMe recipes build v1");
           </ul>` : ""}
       </section>
     `;
+    // Owner "Edit" button inside the detail modal → close detail, open edit.
+    body.querySelectorAll("[data-detail-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        closeDetailModal();
+        openRecipeModal(r);
+      });
+    });
   }
 
+  // ------------------------------------------------------------------
+  // Top recipes sidebar
+  // ------------------------------------------------------------------
+  async function loadTopRecipes() {
+    const list = document.getElementById("top-recipes-list");
+    if (!list) return;
+    try {
+      const data = await fetchJson("/api/me/recipes/top");
+      const items = data.recipes || [];
+      if (!items.length) {
+        list.innerHTML = `<li class="top-recipes-empty">
+          <span class="top-recipes-empty-art">🍳</span>
+          <span>Once people start hearting recipes, the top picks land here.</span>
+        </li>`;
+        return;
+      }
+      list.innerHTML = items.map((r) => {
+        const cat = categories.find((c) => c.id === r.category) || { emoji: "🍳", label: r.category || "Other" };
+        const tile = r.imageUrl
+          ? `<div class="top-recipe-tile" style="background-image:url('${escapeHtml(r.imageUrl)}')"></div>`
+          : `<div class="top-recipe-tile top-recipe-tile-empty"><span>${escapeHtml(cat.emoji)}</span></div>`;
+        return `<li class="top-recipe-row" data-open-recipe="${r.id}">
+          ${tile}
+          <div class="top-recipe-body">
+            <span class="top-recipe-cat">${escapeHtml(cat.emoji)} ${escapeHtml(cat.label)}</span>
+            <strong>${escapeHtml(r.title)}</strong>
+            <span class="top-recipe-meta">❤ ${r.loves} · by ${escapeHtml(r.author)}</span>
+          </div>
+        </li>`;
+      }).join("");
+      list.querySelectorAll("[data-open-recipe]").forEach((el) => {
+        el.addEventListener("click", () => openRecipeDetail(+el.dataset.openRecipe));
+      });
+    } catch {
+      list.innerHTML = `<li class="top-recipes-empty">Couldn't load — try refreshing.</li>`;
+    }
+  }
 
   // ------------------------------------------------------------------
   // Toolbar wiring
@@ -325,19 +401,61 @@ console.info("EndoMe recipes build v1");
   // ------------------------------------------------------------------
   document.getElementById("btn-add-recipe").addEventListener("click", () => openRecipeModal());
 
-  function openRecipeModal() {
-    document.getElementById("recipe-form").reset();
-    pendingIngredients = [];
-    pendingMethodSteps = [];
+  function openRecipeModal(recipe) {
+    const form = document.getElementById("recipe-form");
+    form.reset();
+    editingId = recipe?.id || null;
+    pendingIngredients = recipe?.ingredients ? recipe.ingredients.map((i) => ({ ...i })) : [];
+    pendingMethodSteps = recipe?.body ? parseStepsFromBulk(recipe.body) : [];
+    pendingPhotoFile = null;
+    if (pendingPhotoPreviewUrl) URL.revokeObjectURL(pendingPhotoPreviewUrl);
+    pendingPhotoPreviewUrl = null;
+
     const bulk = document.getElementById("method-bulk-input");
-    if (bulk) bulk.value = "";
+    if (bulk) bulk.value = pendingMethodSteps.join("\n");
     paintIngredientList();
     paintMethodSteps();
+    paintPhotoPreview(recipe?.imageUrl || null);
+
+    // Hydrate form fields when editing.
+    if (recipe) {
+      form.id.value = recipe.id;
+      form.title.value = recipe.title || "";
+      form.category.value = recipe.category || "other";
+      form.summary.value = recipe.summary || "";
+      form.servings.value = recipe.servings || "";
+      form.prepMinutes.value = recipe.prepMinutes ?? "";
+      form.cookMinutes.value = recipe.cookMinutes ?? "";
+    } else {
+      form.id.value = "";
+    }
+
+    document.querySelector("#recipe-modal .modal-h h3").textContent =
+      recipe ? "Edit your recipe" : "Post a recipe";
+    document.getElementById("recipe-submit").textContent =
+      recipe ? "Save changes" : "Publish recipe";
+    document.getElementById("recipe-delete-btn").hidden = !recipe;
     document.getElementById("recipe-status").textContent = "";
+    document.getElementById("recipe-photo-status").textContent = "";
     recipeModal.classList.add("open");
     recipeModal.setAttribute("aria-hidden", "false");
-    // Land focus on the title for the fastest possible start.
-    setTimeout(() => document.querySelector("#recipe-form [name='title']")?.focus(), 80);
+    setTimeout(() => form.title?.focus(), 80);
+  }
+
+  function paintPhotoPreview(url) {
+    const preview = document.getElementById("recipe-photo-preview");
+    const removeBtn = document.getElementById("recipe-photo-remove");
+    if (url) {
+      preview.style.backgroundImage = `url("${url}")`;
+      preview.classList.add("has-image");
+      preview.textContent = "";
+      removeBtn.hidden = false;
+    } else {
+      preview.style.backgroundImage = "";
+      preview.classList.remove("has-image");
+      preview.textContent = "📷";
+      removeBtn.hidden = true;
+    }
   }
   function closeRecipeModal() {
     recipeModal.classList.remove("open");
@@ -681,7 +799,6 @@ console.info("EndoMe recipes build v1");
     }
     // Auto-add a half-typed ingredient that the user forgot to click "Add" on.
     if (document.getElementById("ingredient-name").value.trim()) addPendingIngredient();
-    // Method body: prefer the step list, fall back to the textarea.
     const bodyText = pendingMethodSteps.length
       ? pendingMethodSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")
       : (form.body.value.trim() || null);
@@ -696,18 +813,90 @@ console.info("EndoMe recipes build v1");
         cookMinutes: form.cookMinutes.value || null,
         ingredients: pendingIngredients,
       };
-      await fetchJson("/api/me/recipes", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      toast("Recipe published ✨", "ok");
-      celebrate();
+      let recipeId = editingId;
+      if (editingId) {
+        await fetchJson(`/api/me/recipes/${editingId}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        const res = await fetchJson("/api/me/recipes", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        recipeId = res.id;
+      }
+
+      // If the user picked a new photo, push it now that we have an id.
+      if (pendingPhotoFile && recipeId) {
+        try {
+          const fd = new FormData();
+          fd.append("file", pendingPhotoFile);
+          const res = await fetch(`/api/me/recipes/${recipeId}/image`, {
+            method: "POST", credentials: "same-origin", body: fd,
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Couldn't upload photo");
+          }
+        } catch (err) {
+          toast(err.message || "Photo upload failed", "err");
+        }
+      }
+
+      toast(editingId ? "Recipe updated ✨" : "Recipe published ✨", "ok");
+      if (!editingId) celebrate();
       closeRecipeModal();
-      await loadRecipes();
+      await Promise.all([loadRecipes(), loadTopRecipes()]);
     } catch (err) {
       status.textContent = err.message || "Couldn't save."; status.className = "form-status err";
     }
+  });
+
+  // -------------- Photo input wiring --------------
+  document.getElementById("recipe-photo-file")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 6 * 1024 * 1024) {
+      document.getElementById("recipe-photo-status").textContent = "Photo too large — max 6MB.";
+      document.getElementById("recipe-photo-status").className = "form-status err";
+      e.target.value = ""; return;
+    }
+    pendingPhotoFile = file;
+    if (pendingPhotoPreviewUrl) URL.revokeObjectURL(pendingPhotoPreviewUrl);
+    pendingPhotoPreviewUrl = URL.createObjectURL(file);
+    paintPhotoPreview(pendingPhotoPreviewUrl);
+    document.getElementById("recipe-photo-status").textContent = "Photo ready — saves when you publish.";
+    document.getElementById("recipe-photo-status").className = "form-status ok";
+    e.target.value = "";
+  });
+  document.getElementById("recipe-photo-remove")?.addEventListener("click", async () => {
+    pendingPhotoFile = null;
+    if (pendingPhotoPreviewUrl) { URL.revokeObjectURL(pendingPhotoPreviewUrl); pendingPhotoPreviewUrl = null; }
+    paintPhotoPreview(null);
+    // If we're editing an existing recipe with a stored photo, ask the server
+    // to delete it too. New-recipe drafts just clear locally.
+    if (editingId) {
+      try {
+        await fetchJson(`/api/me/recipes/${editingId}/image`, { method: "DELETE" });
+        toast("Photo removed", "ok");
+        await loadRecipes();
+      } catch (err) { toast(err.message || "Couldn't remove photo", "err"); }
+    }
+  });
+
+  // -------------- Delete from inside the modal --------------
+  document.getElementById("recipe-delete-btn")?.addEventListener("click", async () => {
+    if (!editingId) return;
+    if (!confirm("Delete this recipe? This can't be undone.")) return;
+    try {
+      await fetchJson(`/api/me/recipes/${editingId}`, { method: "DELETE" });
+      toast("Recipe removed", "ok");
+      closeRecipeModal();
+      await Promise.all([loadRecipes(), loadTopRecipes()]);
+    } catch (err) { toast(err.message || "Couldn't remove", "err"); }
   });
 
   // Tiny confetti burst on publish — keeps the moment feeling fun without
@@ -818,40 +1007,48 @@ console.info("EndoMe recipes build v1");
     }
   });
 
-  // Recipe delete (owner only)
-  document.addEventListener("click", async (e) => {
-    const del = e.target.closest("[data-delete-recipe]");
-    if (!del) return;
-    e.stopPropagation();
-    if (!confirm("Remove this recipe? This can't be undone.")) return;
-    try {
-      await fetchJson(`/api/me/recipes/${del.dataset.deleteRecipe}`, { method: "DELETE" });
-      toast("Recipe removed", "ok");
-      await loadRecipes();
-    } catch (err) { toast(err.message || "Couldn't remove", "err"); }
-  });
+  // Card-level delete now happens inside the edit modal (Delete recipe
+  // button). The previous floating × on the card has been removed in favour
+  // of an ✎ Edit button that takes the user to the full editor.
 
   // ------------------------------------------------------------------
   // Food library
   // ------------------------------------------------------------------
   async function loadFoods() {
+    // Pre-fetch the catalog once so search is instant. We just don't render
+    // anything until the user types — the visible list stays a placeholder.
     try {
       const data = await fetchJson("/api/me/recipe-foods");
       foods = data.foods || [];
-      paintFoods();
-    } catch {
-      document.getElementById("food-library-grid").innerHTML =
-        `<li class="empty-state">Couldn't load foods.</li>`;
-    }
+    } catch {}
   }
   function paintFoods() {
     const grid = document.getElementById("food-library-grid");
-    const q = (document.getElementById("food-library-search").value || "").trim().toLowerCase();
-    let items = foods;
-    if (q) items = items.filter((f) => f.name.toLowerCase().includes(q) || (f.category || "").includes(q));
-    items = items.slice(0, 240);
+    const raw = document.getElementById("food-library-search").value || "";
+    const q = raw.trim().toLowerCase();
+    if (!q) {
+      // Empty search → friendly placeholder, no dump of every food.
+      grid.innerHTML = `<li class="food-library-placeholder">
+        <span class="food-library-placeholder-emoji">🔎</span>
+        <strong>Type to search the food library</strong>
+        <span>We hide the full list to keep the page light — start typing and matching foods appear here.</span>
+      </li>`;
+      return;
+    }
+    // Fuzzy ranking so name-prefix wins over category match.
+    const ranked = [];
+    for (const f of foods) {
+      const score = scoreFoodMatch(f, q);
+      if (score > 0) ranked.push({ f, score });
+    }
+    ranked.sort((a, b) => b.score - a.score || a.f.name.localeCompare(b.f.name));
+    const items = ranked.slice(0, 60).map((x) => x.f);
     if (!items.length) {
-      grid.innerHTML = `<li class="empty-state">Nothing matches. Add a new food →</li>`;
+      grid.innerHTML = `<li class="food-library-placeholder">
+        <span class="food-library-placeholder-emoji">🌱</span>
+        <strong>"${escapeHtml(raw)}" isn't in the library yet</strong>
+        <span>Tap "+ Add a food" to add it — it'll show up in the recipe builder right away.</span>
+      </li>`;
       return;
     }
     grid.innerHTML = items.map((f) => `
@@ -861,7 +1058,21 @@ console.info("EndoMe recipes build v1");
         <span class="food-pill-unit">${f.defaultUnit ? escapeHtml(UNIT_LABEL[f.defaultUnit] || f.defaultUnit) : ""}</span>
       </li>`).join("");
   }
-  document.getElementById("food-library-search").addEventListener("input", () => paintFoods());
+  function scoreFoodMatch(f, q) {
+    const n = (f.name || "").toLowerCase();
+    if (n === q) return 100;
+    if (n.startsWith(q)) return 80;
+    if (n.includes(q)) return 50;
+    const c = (f.category || "").toLowerCase();
+    if (c.includes(q)) return 20;
+    return 0;
+  }
+  // Debounce so we don't repaint on every keystroke for fast typers.
+  let foodSearchTimer = null;
+  document.getElementById("food-library-search").addEventListener("input", () => {
+    clearTimeout(foodSearchTimer);
+    foodSearchTimer = setTimeout(paintFoods, 120);
+  });
 
   document.getElementById("btn-add-food").addEventListener("click", () => {
     document.getElementById("food-form").reset();
