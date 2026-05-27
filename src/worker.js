@@ -33,7 +33,7 @@ const SECURITY_HEADERS = {
 };
 
 export default {
-  async fetch(request, env, _ctx) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // --- API routes ---------------------------------------------------------
@@ -153,7 +153,7 @@ export default {
             return jsonHeaders(await listAppointments(request, env, user));
           }
           if (url.pathname === "/api/me/appointments" && request.method === "POST") {
-            return jsonHeaders(await createAppointment(request, env, user));
+            return jsonHeaders(await createAppointment(request, env, user, ctx));
           }
           if (url.pathname === "/api/me/appointments/upcoming" && request.method === "GET") {
             return jsonHeaders(await listUpcomingAppointments(env, user));
@@ -162,7 +162,7 @@ export default {
           if (apptMatch) {
             const id = +apptMatch[1];
             if (request.method === "GET")    return jsonHeaders(await getAppointment(env, user, id));
-            if (request.method === "PUT")    return jsonHeaders(await updateAppointment(request, env, user, id));
+            if (request.method === "PUT")    return jsonHeaders(await updateAppointment(request, env, user, id, ctx));
             if (request.method === "DELETE") return jsonHeaders(await deleteAppointment(env, user, id));
           }
 
@@ -207,7 +207,7 @@ export default {
           }
 
           if (url.pathname === "/api/me/today" && request.method === "GET") {
-            return jsonHeaders(await getMeToday(request, env, user));
+            return jsonHeaders(await getMeToday(request, env, user, ctx));
           }
           if (url.pathname === "/api/me/checkin/morning" && request.method === "POST") {
             return jsonHeaders(await postMorningCheckin(request, env, user));
@@ -225,7 +225,7 @@ export default {
             return jsonHeaders(await getMeWeek(env, user));
           }
           if (url.pathname === "/api/me/notifications" && request.method === "GET") {
-            return jsonHeaders(await getNotifications(env, user));
+            return jsonHeaders(await getNotifications(env, user, ctx));
           }
           if (url.pathname === "/api/me/pet" && request.method === "GET") {
             return jsonHeaders(await getMePet(env, user));
@@ -1317,6 +1317,7 @@ async function bootstrapSchema(env) {
       ensureRecipeSchema(env),
       ensureAppointmentSchema(env),
       ensureReadSchema(env),
+      ensureEmailLogSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -1343,6 +1344,7 @@ async function adminBootstrapSchema(env) {
   await run("recipes",    ensureRecipeSchema);
   await run("appointments", ensureAppointmentSchema);
   await run("read_state",   ensureReadSchema);
+  await run("email_log",    ensureEmailLogSchema);
   return json({ ok: true, results });
 }
 
@@ -1376,9 +1378,12 @@ async function getOrCreateUser(env, username) {
 }
 
 // --- /api/me/today ---------------------------------------------------------
-async function getMeToday(request, env, user) {
+async function getMeToday(request, env, user, ctx) {
   const url = new URL(request.url);
   const date = normaliseDate(url.searchParams.get("date"));
+  // Fire any due email reminders in the background so the page response is
+  // never gated by Mandrill latency.
+  dispatchDueAppointmentEmails(env, ctx, user).catch(() => {});
 
   // Every query individually .catch()ed so a missing column in any one
   // table (mid-migration) can't take down the whole /api/me/today response.
@@ -1814,7 +1819,8 @@ async function getMeWeek(env, user) {
 }
 
 // --- Notifications --------------------------------------------------------
-async function getNotifications(env, user) {
+async function getNotifications(env, user, ctx) {
+  dispatchDueAppointmentEmails(env, ctx, user).catch(() => {});
   const res = await env.DB
     .prepare(
       "SELECT id, type, title, body, action_url, created_at, read_at " +
@@ -6165,7 +6171,7 @@ async function getAppointment(env, user, id) {
   return json({ appointment: apptRow(r) });
 }
 
-async function createAppointment(request, env, user) {
+async function createAppointment(request, env, user, ctx) {
   await ensureAppointmentSchema(env);
   const body = await readJsonSafe(request);
   if (!body) return json({ error: "Invalid body" }, 400);
@@ -6191,10 +6197,13 @@ async function createAppointment(request, env, user) {
     fields.color || null, fields.remind_in_app, fields.remind_email,
     fields.remind_minutes_before, now, now
   ).run();
+  // Kick off any email reminder whose window is already open (e.g. user
+  // schedules a "remind 1 day before" for tomorrow morning — we send now).
+  dispatchDueAppointmentEmails(env, ctx, user).catch(() => {});
   return json({ ok: true, id: res.meta?.last_row_id });
 }
 
-async function updateAppointment(request, env, user, id) {
+async function updateAppointment(request, env, user, id, ctx) {
   await ensureAppointmentSchema(env);
   const body = await readJsonSafe(request);
   if (!body) return json({ error: "Invalid body" }, 400);
@@ -6215,6 +6224,9 @@ async function updateAppointment(request, env, user, id) {
   await env.DB.prepare(
     `UPDATE appointments SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`
   ).bind(...binds).run();
+  // If the user just turned email reminders on (or the lead time changed
+  // and put the window into the present), fire any newly-due sends now.
+  dispatchDueAppointmentEmails(env, ctx, user).catch(() => {});
   return json({ ok: true });
 }
 
@@ -6365,4 +6377,196 @@ async function getDismissedReminderKeys(env, user) {
     ).bind(user.id, since).all();
     return new Set((rows.results || []).map((r) => r.reminder_key));
   } catch { return new Set(); }
+}
+
+// =============================================================================
+// EMAIL REMINDERS — sends a branded EndoMe email for any upcoming appointment
+// that has remind_email=1 once its reminder window opens. We track sent
+// emails in email_log so we never double-send, then use ctx.waitUntil so
+// /api/me/today doesn't block on Mandrill.
+// =============================================================================
+let _emailLogSchemaChecked = false;
+async function ensureEmailLogSchema(env) {
+  if (_emailLogSchemaChecked) return;
+  _emailLogSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS email_log (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  kind TEXT NOT NULL," +
+    "  ref_key TEXT NOT NULL," +
+    "  sent_at INTEGER NOT NULL," +
+    "  UNIQUE(user_id, kind, ref_key)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_email_log_user ON email_log(user_id, sent_at DESC)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+// Find appointments whose email reminder is due AND hasn't been sent yet,
+// then send each one async. The ref_key encodes the appointment id + start
+// time + lead minutes so rescheduling the same appointment produces a fresh
+// send opportunity.
+async function dispatchDueAppointmentEmails(env, ctx, user) {
+  if (!env.MANDRILL_API_KEY) return;
+  await ensureEmailLogSchema(env);
+  await ensureAppointmentSchema(env);
+  const now = nowSec();
+  const rows = await env.DB.prepare(
+    "SELECT id, title, kind, doctor, location, notes, starts_at, all_day, " +
+    "       remind_email, remind_minutes_before " +
+    "FROM appointments " +
+    "WHERE user_id = ? AND remind_email = 1 AND starts_at BETWEEN ? AND ? " +
+    "ORDER BY starts_at ASC LIMIT 30"
+  ).bind(user.id, now - 600, now + 14 * 86400).all().catch(() => ({ results: [] }));
+  if (!(rows.results || []).length) return;
+
+  // Get the user's email + display name for the To: field. We can't send
+  // anywhere without it.
+  const userRow = await env.DB.prepare(
+    "SELECT email, display_name FROM users WHERE id = ?"
+  ).bind(user.id).first().catch(() => null);
+  if (!userRow?.email) return;
+
+  for (const r of rows.results) {
+    const lead = (r.remind_minutes_before || 0) * 60;
+    const opens = r.starts_at - lead;
+    const closes = r.starts_at + 3600;  // an hour after start: too late to email
+    if (now < opens || now > closes) continue;
+
+    const refKey = `appt:${r.id}:${r.starts_at}:${r.remind_minutes_before || 0}`;
+    // Skip if we've already sent this exact reminder.
+    const seen = await env.DB.prepare(
+      "SELECT id FROM email_log WHERE user_id = ? AND kind = 'appt_remind' AND ref_key = ?"
+    ).bind(user.id, refKey).first().catch(() => null);
+    if (seen) continue;
+
+    // Reserve the slot first so concurrent requests can't double-send.
+    let inserted = false;
+    try {
+      await env.DB.prepare(
+        "INSERT INTO email_log (user_id, kind, ref_key, sent_at) VALUES (?, 'appt_remind', ?, ?)"
+      ).bind(user.id, refKey, now).run();
+      inserted = true;
+    } catch { /* unique conflict — another worker won the race */ }
+    if (!inserted) continue;
+
+    const job = (async () => {
+      try {
+        await sendAppointmentReminderEmail(env, userRow, r);
+      } catch (err) {
+        console.warn("appt email failed:", err?.message);
+        // Roll back so we'll retry next request.
+        try {
+          await env.DB.prepare(
+            "DELETE FROM email_log WHERE user_id = ? AND kind = 'appt_remind' AND ref_key = ?"
+          ).bind(user.id, refKey).run();
+        } catch {}
+      }
+    })();
+    if (ctx?.waitUntil) ctx.waitUntil(job); else await job;
+  }
+}
+
+async function sendAppointmentReminderEmail(env, userRow, appt) {
+  const siteUrl = env.SITE_URL || "https://endome.com";
+  const safeName = sanitizeForHtml(userRow.display_name || "there");
+  const safeTitle = sanitizeForHtml(appt.title);
+  const safeDoctor = appt.doctor ? sanitizeForHtml(appt.doctor) : null;
+  const safeLocation = appt.location ? sanitizeForHtml(appt.location) : null;
+  const safeNotes = appt.notes ? sanitizeForHtml(appt.notes) : null;
+  const kindLabel = appointmentKindLabel(appt.kind);
+  const kindEmoji = appointmentKindEmoji(appt.kind);
+
+  const dt = new Date(appt.starts_at * 1000);
+  // Server runs UTC. Print both the date+time and a relative-when line so the
+  // user gets an immediate sense of urgency without having to mentally diff.
+  const dateLine = dt.toUTCString().replace(" GMT", " UTC");
+  const minsAway = Math.max(0, Math.round((appt.starts_at - nowSec()) / 60));
+  const whenSoon = minsAway === 0 ? "Right now" :
+    minsAway < 60 ? `In about ${minsAway} minute${minsAway === 1 ? "" : "s"}` :
+    minsAway < 1440 ? `In about ${Math.round(minsAway / 60)} hour${minsAway >= 120 ? "s" : ""}` :
+    minsAway < 2880 ? "Tomorrow" :
+    `In ${Math.round(minsAway / 1440)} days`;
+
+  const detailRow = (label, value) => value ? `
+    <tr>
+      <td valign="top" style="padding:4px 12px 4px 0;color:#7a5f6c;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">${label}</td>
+      <td valign="top" style="padding:4px 0;color:#3a2330;font-size:15px;line-height:1.55">${value}</td>
+    </tr>` : "";
+
+  const html = renderEmail({
+    siteUrl,
+    preheader: `${whenSoon} · ${safeTitle}`,
+    headline: `${kindEmoji} ${safeTitle}`,
+    body: `
+      <p style="margin:0 0 18px;color:#3a2330;font-size:16px;line-height:1.65">
+        Hi ${safeName}, this is your reminder that you have an appointment coming up.
+      </p>
+
+      <!-- When card -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 22px">
+        <tr><td bgcolor="#fff0f5" style="background-color:#fff0f5;border-left:4px solid #ff4e8a;padding:18px 22px;border-radius:0 14px 14px 0">
+          <p style="margin:0 0 4px;color:#ff4e8a;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase">
+            ${sanitizeForHtml(whenSoon)}
+          </p>
+          <p style="margin:0;color:#3a2330;font-size:16px;line-height:1.5">
+            ${sanitizeForHtml(dateLine)}
+          </p>
+        </td></tr>
+      </table>
+
+      <!-- Detail table -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 22px">
+        ${detailRow("Type",     sanitizeForHtml(kindLabel))}
+        ${detailRow("Doctor",   safeDoctor)}
+        ${detailRow("Location", safeLocation)}
+        ${detailRow("Notes",    safeNotes ? safeNotes.replace(/\n/g, "<br>") : null)}
+      </table>
+
+      <p style="margin:0 0 14px;color:#7a5f6c;font-size:13px;line-height:1.6">
+        You're getting this email because you ticked "email me too" when you saved this appointment. You can change the reminder settings any time from the appointment editor.
+      </p>`,
+    ctaText: "Open in EndoMe",
+    ctaUrl: `${siteUrl}/appointments?id=${appt.id}`,
+  });
+
+  const text =
+    `${kindEmoji} ${appt.title}\n` +
+    `${whenSoon} · ${dateLine}\n\n` +
+    (appt.doctor   ? `Doctor: ${appt.doctor}\n`     : "") +
+    (appt.location ? `Location: ${appt.location}\n` : "") +
+    (appt.notes    ? `\nNotes: ${appt.notes}\n`     : "") +
+    `\nOpen in EndoMe: ${siteUrl}/appointments?id=${appt.id}\n\n` +
+    `You're getting this because email reminders are on for this appointment. Update them in the EndoMe appointment editor.`;
+
+  await mandrillSend(env, {
+    to: [{ email: userRow.email, type: "to" }],
+    subject: `🔔 ${appt.title} — ${whenSoon.toLowerCase()}`,
+    from_email: env.NEWSLETTER_FROM_EMAIL || FROM_EMAIL_DEFAULT,
+    from_name: env.NEWSLETTER_FROM_NAME || "EndoMe",
+    headers: { "Reply-To": env.NOTIFY_EMAIL || FROM_EMAIL_DEFAULT },
+    html, text,
+  });
+}
+
+function appointmentKindLabel(k) {
+  return ({
+    general: "General", gp: "GP visit", specialist: "Specialist",
+    surgery: "Surgery", test: "Test", imaging: "Imaging", scan: "Scan",
+    therapy: "Therapy", physio: "Physio", follow_up: "Follow-up",
+    other: "Other",
+  })[k] || "Appointment";
+}
+function appointmentKindEmoji(k) {
+  return ({
+    general: "📅", gp: "🩺", specialist: "👩‍⚕️", surgery: "🏥",
+    test: "🧪", imaging: "🔬", scan: "📡", therapy: "🧠",
+    physio: "🤸", follow_up: "🔁", other: "✨",
+  })[k] || "📅";
+}
+function sanitizeForHtml(s) {
+  return String(s ?? "").replace(/[<>&"']/g, (c) => ({
+    "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
+  })[c]);
 }
