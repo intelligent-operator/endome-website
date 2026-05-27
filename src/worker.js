@@ -366,6 +366,17 @@ export default {
           if (dismissMatch && request.method === "POST") {
             return jsonHeaders(await dismissNotification(env, user, +dismissMatch[1]));
           }
+          if (url.pathname === "/api/me/notifications/read-all" && request.method === "POST") {
+            return jsonHeaders(await markAllNotificationsRead(env, user));
+          }
+          const readMatch = url.pathname.match(/^\/api\/me\/notifications\/([^/]+)\/read$/);
+          if (readMatch && request.method === "POST") {
+            return jsonHeaders(await markNotificationRead(env, user, decodeURIComponent(readMatch[1])));
+          }
+          const virtDismissMatch = url.pathname.match(/^\/api\/me\/notifications\/([^/]+)\/dismiss$/);
+          if (virtDismissMatch && request.method === "POST") {
+            return jsonHeaders(await dismissVirtualNotification(env, user, decodeURIComponent(virtDismissMatch[1])));
+          }
           return json({ error: "Not found" }, 404);
         }
 
@@ -1305,6 +1316,7 @@ async function bootstrapSchema(env) {
       ensureDonationsSchema(env),
       ensureRecipeSchema(env),
       ensureAppointmentSchema(env),
+      ensureReadSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -1330,6 +1342,7 @@ async function adminBootstrapSchema(env) {
   await run("donations",  ensureDonationsSchema);
   await run("recipes",    ensureRecipeSchema);
   await run("appointments", ensureAppointmentSchema);
+  await run("read_state",   ensureReadSchema);
   return json({ ok: true, results });
 }
 
@@ -1465,6 +1478,8 @@ async function computeMedReminders(env, user) {
     "WHERE user_id = ? AND taken_at >= ?"
   ).bind(user.id, nowSec() - 6 * 3600).all().catch(() => ({ results: [] }));
 
+  const dismissed = await getDismissedReminderKeys(env, user);
+
   const out = [];
   const now = nowSec();
   for (const s of (slots.results || [])) {
@@ -1479,8 +1494,10 @@ async function computeMedReminders(env, user) {
       (l) => l.medication_id === s.medication_id && Math.abs(l.taken_at - slotSec) < 2 * 3600
     );
     if (taken) continue;
+    const key = `med:${s.medication_id}:${s.time_of_day}`;
+    if (dismissed.has(key)) continue;
     out.push({
-      id: `med:${s.medication_id}:${s.time_of_day}`,
+      id: key,
       type: "med_due",
       title: `💊 Time for ${s.name}`,
       body: `Scheduled ${s.time_of_day}. Did you take it? Tap to mark yes or no.`,
@@ -6222,6 +6239,8 @@ async function computeAppointmentReminders(env, user) {
     "ORDER BY starts_at ASC LIMIT 30"
   ).bind(user.id, now - 3600, now + 14 * 86400).all().catch(() => ({ results: [] }));
 
+  const dismissed = await getDismissedReminderKeys(env, user);
+
   const out = [];
   for (const r of (rows.results || [])) {
     const lead = (r.remind_minutes_before || 0) * 60;
@@ -6229,9 +6248,11 @@ async function computeAppointmentReminders(env, user) {
     const windowCloses = r.starts_at + 3600;
     if (now < windowOpens) continue;
     if (now > windowCloses) continue;
+    const key = `appt:${r.id}`;
+    if (dismissed.has(key)) continue;
     const minsAway = Math.max(0, Math.round((r.starts_at - now) / 60));
     out.push({
-      id: `appt:${r.id}`,
+      id: key,
       type: "appointment_due",
       title: `📅 ${r.title}`,
       body: minsAway === 0
@@ -6249,4 +6270,99 @@ function humanMins(m) {
   if (m < 60) return `${m} min`;
   if (m < 1440) return `${Math.round(m / 60)}h`;
   return `${Math.round(m / 1440)}d`;
+}
+
+// =============================================================================
+// NOTIFICATION READ STATE — for both real notification rows (read_at column)
+// and the synthetic reminders we build for med schedules and appointments. We
+// can't add a read_at to something we didn't store, so virtual reminders get
+// their own dismissed_reminders row instead. Both endpoints accept any id.
+// =============================================================================
+
+let _readSchemaChecked = false;
+async function ensureReadSchema(env) {
+  if (_readSchemaChecked) return;
+  _readSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS dismissed_reminders (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  reminder_key TEXT NOT NULL," +
+    "  read_at INTEGER NOT NULL," +
+    "  UNIQUE(user_id, reminder_key)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_dismissed_reminders_user ON dismissed_reminders(user_id, read_at DESC)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+async function markNotificationRead(env, user, id) {
+  await ensureReadSchema(env);
+  // Numeric id → real notification row; anything else (med:…, appt:…) is a
+  // synthetic reminder and we dismiss by key.
+  if (/^\d+$/.test(id)) {
+    try {
+      await env.DB.prepare(
+        "UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ?"
+      ).bind(nowSec(), +id, user.id).run();
+    } catch {}
+  } else {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO dismissed_reminders (user_id, reminder_key, read_at) VALUES (?, ?, ?) " +
+        "ON CONFLICT(user_id, reminder_key) DO UPDATE SET read_at = excluded.read_at"
+      ).bind(user.id, id, nowSec()).run();
+    } catch {}
+  }
+  return json({ ok: true });
+}
+
+async function dismissVirtualNotification(env, user, key) {
+  // Same effect as marking read — once dismissed, the reminder no longer
+  // surfaces in the feed until the underlying record changes (new schedule
+  // slot, rescheduled appointment).
+  return markNotificationRead(env, user, key);
+}
+
+async function markAllNotificationsRead(env, user) {
+  await ensureReadSchema(env);
+  const now = nowSec();
+  // Real DB rows
+  try {
+    await env.DB.prepare(
+      "UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL AND dismissed_at IS NULL"
+    ).bind(now, user.id).run();
+  } catch {}
+  // Virtual reminders that are currently active: persist their keys so the
+  // bell shows zero until something new pops up.
+  try {
+    const [meds, appts] = await Promise.all([
+      computeMedReminders(env, user).catch(() => []),
+      computeAppointmentReminders(env, user).catch(() => []),
+    ]);
+    const all = [...meds, ...appts];
+    for (const r of all) {
+      try {
+        await env.DB.prepare(
+          "INSERT INTO dismissed_reminders (user_id, reminder_key, read_at) VALUES (?, ?, ?) " +
+          "ON CONFLICT(user_id, reminder_key) DO UPDATE SET read_at = excluded.read_at"
+        ).bind(user.id, r.id, now).run();
+      } catch {}
+    }
+  } catch {}
+  return json({ ok: true });
+}
+
+// Pull the set of dismissed reminder keys that are still "fresh" — we ignore
+// dismissals older than 24h so a reminder for tomorrow's appointment isn't
+// silenced because the user dismissed yesterday's identical one.
+async function getDismissedReminderKeys(env, user) {
+  await ensureReadSchema(env);
+  const since = nowSec() - 24 * 3600;
+  try {
+    const rows = await env.DB.prepare(
+      "SELECT reminder_key FROM dismissed_reminders WHERE user_id = ? AND read_at >= ?"
+    ).bind(user.id, since).all();
+    return new Set((rows.results || []).map((r) => r.reminder_key));
+  } catch { return new Set(); }
 }

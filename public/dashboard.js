@@ -810,41 +810,94 @@ function renderSymptomsTodayHint(count) {
 
 function renderNotifBadge() {
   const badge = document.querySelector('[data-bind="notifCount"]');
-  if (!badge) return;
   const items = computeNotifications();
-  if (items.length === 0) { badge.hidden = true; badge.textContent = "0"; }
-  else { badge.hidden = false; badge.textContent = String(items.length); }
-  // Build dropdown
+  // Badge counts unread only — read items still show in the dropdown for
+  // history but don't keep nudging the user.
+  const unread = items.filter((n) => !n.read).length;
+  if (badge) {
+    if (unread === 0) { badge.hidden = true; badge.textContent = "0"; }
+    else { badge.hidden = false; badge.textContent = String(unread); }
+  }
+  const pill = document.getElementById("notif-unread-pill");
+  if (pill) {
+    if (unread === 0) { pill.hidden = true; }
+    else { pill.hidden = false; pill.textContent = String(unread); }
+  }
+  const markAll = document.getElementById("notif-mark-all");
+  if (markAll) markAll.hidden = unread === 0;
+
   const list = document.getElementById("notif-list");
   if (!list) return;
   if (items.length === 0) {
-    list.innerHTML = `<p class="notif-empty">You're all caught up.</p>`;
+    list.innerHTML = `<p class="notif-empty">🎉 You're all caught up. Nothing needs your attention right now.</p>`;
   } else {
     list.innerHTML = items.map(itemHtml).join("");
   }
 }
 function itemHtml(n) {
+  // Build a data-payload of everything the click handler needs so the
+  // delegated listener doesn't have to look it up again.
+  const id = n.server ?? "";
+  const url = n.actionUrl || "";
+  const modal = n.modal || "";
   return `
-    <button class="notif-item" type="button" ${n.modal ? `data-modal="${n.modal}"` : ""}>
-      <span class="notif-emoji">${n.icon}</span>
-      <span class="notif-text">
-        <strong>${n.title}</strong>
-        <span>${n.body}</span>
-      </span>
-    </button>`;
+    <div class="notif-item ${n.read ? "is-read" : "is-unread"}"
+         data-notif-id="${escapeAttr(String(id))}"
+         data-notif-url="${escapeAttr(url)}"
+         data-notif-modal="${escapeAttr(modal)}"
+         data-notif-virtual="${n.virtual ? "1" : "0"}">
+      <button class="notif-main" type="button" data-notif-open>
+        <span class="notif-emoji">${n.icon}</span>
+        <span class="notif-text">
+          <strong>${escapeAttr(n.title)}</strong>
+          <span>${escapeAttr(n.body)}</span>
+        </span>
+        ${n.read ? "" : `<span class="notif-dot" aria-label="Unread"></span>`}
+      </button>
+      <button class="notif-dismiss" type="button" data-notif-dismiss aria-label="Dismiss">×</button>
+    </div>`;
 }
+function escapeAttr(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;",
+  })[c]);
+}
+// Client-side memory of which built-in reminders (morning / evening
+// check-ins) the user has read this session. Server-side notifications
+// carry their own read_at; medication + appointment reminders use the
+// server's dismissed_reminders table.
+const localReadKeys = new Set();
 function computeNotifications() {
   if (!state) return [];
   const items = [];
   const hour = new Date().getHours();
   if (!state.morning && hour >= 5 && hour < 12) {
-    items.push({ icon: "🌅", title: "Morning check-in", body: "Log how you're feeling today.", modal: "morning" });
+    const key = "builtin:morning";
+    items.push({
+      key, icon: "🌅", title: "Morning check-in",
+      body: "Log how you're feeling today.", modal: "morning",
+      read: localReadKeys.has(key), local: true,
+    });
   }
   if (state.morning && !state.evening && hour >= 18) {
-    items.push({ icon: "🌙", title: "Evening check-in", body: "Reflect on your day.", modal: "evening" });
+    const key = "builtin:evening";
+    items.push({
+      key, icon: "🌙", title: "Evening check-in",
+      body: "Reflect on your day.", modal: "evening",
+      read: localReadKeys.has(key), local: true,
+    });
   }
   for (const n of state.notifications || []) {
-    items.push({ icon: "🔔", title: n.title, body: n.body || "", server: n.id });
+    const virtual = typeof n.id === "string" && !/^\d+$/.test(String(n.id));
+    items.push({
+      icon: virtual ? (String(n.id).startsWith("appt:") ? "📅" : "💊") : "🔔",
+      title: n.title,
+      body: n.body || "",
+      server: n.id,
+      actionUrl: n.action_url || "",
+      virtual,
+      read: !!n.read_at,
+    });
   }
   return items;
 }
@@ -1207,9 +1260,88 @@ if (bell && dropdown) {
       dropdown.hidden = true;
     }
   });
-  dropdown.addEventListener("click", (e) => {
-    if (e.target.closest("[data-close-notif]")) dropdown.hidden = true;
+  dropdown.addEventListener("click", async (e) => {
+    if (e.target.closest("[data-close-notif]")) { dropdown.hidden = true; return; }
+
+    // Mark all as read
+    if (e.target.closest("#notif-mark-all")) {
+      e.preventDefault();
+      try {
+        await fetch("/api/me/notifications/read-all", {
+          method: "POST", credentials: "same-origin",
+        });
+        // Locally clear the in-session read set so the morning/evening pills
+        // also reset visually.
+        for (const k of ["builtin:morning","builtin:evening"]) localReadKeys.add(k);
+        await refresh();
+      } catch {}
+      return;
+    }
+
+    const row = e.target.closest(".notif-item");
+    if (!row) return;
+    const id = row.dataset.notifId;
+    const url = row.dataset.notifUrl;
+    const modal = row.dataset.notifModal;
+
+    // Per-item dismiss button — fully removes the notification from the
+    // feed (real rows get dismissed_at; virtuals get a dismissed_reminders
+    // entry that filters them out on next compute).
+    if (e.target.closest("[data-notif-dismiss]")) {
+      e.preventDefault();
+      e.stopPropagation();
+      row.classList.add("is-dismissing");
+      try {
+        if (id && id.startsWith && id.startsWith("builtin:")) {
+          localReadKeys.add(id);
+        } else if (id) {
+          await fetch(`/api/me/notifications/${encodeURIComponent(id)}/dismiss`, {
+            method: "POST", credentials: "same-origin",
+          });
+        }
+      } catch {}
+      setTimeout(refresh, 220);
+      return;
+    }
+
+    // Main button — open the target (modal, url, or appointment id).
+    if (e.target.closest("[data-notif-open]")) {
+      e.preventDefault();
+      await markNotifRead(id, row);
+      dropdown.hidden = true;
+      if (modal) {
+        openModal(modal);
+      } else if (id && id.startsWith && id.startsWith("appt:")) {
+        const apptId = id.slice(5);
+        location.href = `/appointments?id=${encodeURIComponent(apptId)}`;
+      } else if (url) {
+        location.href = url;
+      }
+      // Refresh shortly after so the badge count drops.
+      setTimeout(refresh, 250);
+    }
   });
+}
+
+// Persist the read state, then optimistically grey out the row so the user
+// sees instant feedback even before refresh() repaints the dropdown.
+async function markNotifRead(id, row) {
+  if (!id) return;
+  if (id.startsWith && id.startsWith("builtin:")) {
+    // Built-in (check-in nudges) — session-only memory.
+    localReadKeys.add(id);
+  } else {
+    try {
+      await fetch(`/api/me/notifications/${encodeURIComponent(id)}/read`, {
+        method: "POST", credentials: "same-origin",
+      });
+    } catch {}
+  }
+  if (row) {
+    row.classList.remove("is-unread");
+    row.classList.add("is-read");
+    row.querySelector(".notif-dot")?.remove();
+  }
 }
 
 // --- Sidebar nav: real navigation, no preventDefault -----------------------

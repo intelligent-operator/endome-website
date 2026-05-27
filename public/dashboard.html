@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="stylesheet" href="/dashboard.css?v=9" />
+  <link rel="stylesheet" href="/dashboard.css?v=10" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -277,8 +277,11 @@
   <!-- Notification dropdown (anchored to the bell) -->
   <div id="notif-dropdown" class="notif-dropdown" hidden role="dialog" aria-label="Notifications">
     <div class="notif-head">
-      <strong>Notifications</strong>
-      <button type="button" data-close-notif aria-label="Close">×</button>
+      <strong>Notifications <span class="notif-unread-pill" id="notif-unread-pill" hidden>0</span></strong>
+      <div class="notif-head-actions">
+        <button type="button" class="notif-mark-all" id="notif-mark-all" hidden>Mark all read</button>
+        <button type="button" class="notif-close-btn" data-close-notif aria-label="Close">×</button>
+      </div>
     </div>
     <div id="notif-list" class="notif-list">
       <p class="notif-empty">You're all caught up.</p>

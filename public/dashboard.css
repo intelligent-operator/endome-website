@@ -727,25 +727,68 @@ body.drawer-open{overflow:hidden}
 }
 .notif-head{
   display:flex;justify-content:space-between;align-items:center;
-  padding:14px 16px;border-bottom:1px solid #ffe2eb;
+  padding:14px 16px;border-bottom:1px solid #ffe2eb;gap:10px;
 }
-.notif-head strong{font-size:14px}
-.notif-head button{background:transparent;border:none;font-size:22px;cursor:pointer;color:#7a5f6c;line-height:1}
-.notif-list{max-height:360px;overflow-y:auto}
-.notif-empty{padding:24px 16px;text-align:center;color:#7a5f6c;font-size:13px;margin:0}
+.notif-head strong{font-size:14px;display:inline-flex;align-items:center;gap:8px}
+.notif-unread-pill{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:20px;height:20px;padding:0 6px;border-radius:999px;
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;
+}
+.notif-head-actions{display:inline-flex;align-items:center;gap:6px}
+.notif-mark-all{
+  background:#fff5f8;border:1px solid #ffd6e0;color:#ff4e8a;
+  padding:5px 10px;border-radius:999px;font-family:inherit;
+  font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.02em;
+  transition:background .12s, transform .12s, box-shadow .12s;
+}
+.notif-mark-all:hover{background:#ffeaf2;transform:translateY(-1px);box-shadow:0 4px 10px rgba(255,77,138,.18)}
+.notif-close-btn{background:transparent;border:none;font-size:22px;cursor:pointer;color:#7a5f6c;line-height:1;padding:0 4px}
+.notif-close-btn:hover{color:#ff4e8a}
+
+.notif-list{max-height:420px;overflow-y:auto}
+.notif-empty{padding:32px 18px;text-align:center;color:#7a5f6c;font-size:13px;margin:0;line-height:1.5}
+
+/* Each item is a flex row of [main button | dismiss ×]. The main button
+   carries the action (open modal / nav to event), the × is dismiss. */
 .notif-item{
-  width:100%;text-align:left;
-  display:grid;grid-template-columns:36px 1fr;gap:12px;align-items:flex-start;
-  padding:12px 16px;background:transparent;border:none;border-bottom:1px solid #fff5f8;
-  cursor:pointer;font-family:inherit;
+  display:flex;align-items:stretch;gap:0;
+  border-bottom:1px solid #fff5f8;
+  background:transparent;
+  transition:background .15s, opacity .2s, transform .2s;
 }
 .notif-item:hover{background:#fff5f8}
+.notif-item.is-read{background:#fdfafa}
+.notif-item.is-read .notif-text strong{color:#7a5f6c;font-weight:600}
+.notif-item.is-read .notif-emoji{background:#f5e9ef;opacity:.7}
+.notif-item.is-dismissing{opacity:0;transform:translateX(20px)}
+.notif-main{
+  flex:1;min-width:0;text-align:left;
+  display:grid;grid-template-columns:36px 1fr auto;gap:12px;align-items:center;
+  padding:12px 8px 12px 16px;background:transparent;border:none;
+  cursor:pointer;font-family:inherit;
+}
 .notif-emoji{
   width:36px;height:36px;border-radius:10px;background:#ffeaf2;
   display:flex;align-items:center;justify-content:center;font-size:18px;
+  flex-shrink:0;
 }
-.notif-text strong{display:block;font-size:13px;color:#3a2330}
-.notif-text span{display:block;font-size:12px;color:#7a5f6c;margin-top:2px}
+.notif-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.notif-text strong{display:block;font-size:13px;color:#3a2330;line-height:1.3}
+.notif-text span{display:block;font-size:12px;color:#7a5f6c;line-height:1.45}
+.notif-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:#ff4e8a;flex-shrink:0;
+  box-shadow:0 0 0 3px rgba(255,77,138,.18);
+}
+.notif-dismiss{
+  flex-shrink:0;width:36px;
+  background:transparent;border:none;border-left:1px solid #fff5f8;
+  color:#a08596;font-size:18px;line-height:1;cursor:pointer;
+  transition:background .12s, color .12s;
+}
+.notif-dismiss:hover{background:#fff0f3;color:#c4344b}
 
 /* ============ Toast ============ */
 .toast-stack{
