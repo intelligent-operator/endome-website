@@ -22,8 +22,15 @@ console.info("EndoMe appointments build v1");
 
   // Calendar rendering state.
   let viewYear, viewMonth;       // Month currently displayed
-  let appointments = [];         // Cache of appointments for the visible window
+  let weekAnchor = null;         // Monday of the visible week (Date)
+  let appointments = [];         // Cache of appointments for the visible month
+  let weekAppointments = [];     // Cache for the visible week window
   let editingId = null;
+
+  // How many appointments to show in the "Next up" right sidebar. Kept small
+  // so the rail stays the same visual height as the calendar card it sits
+  // alongside.
+  const NEXT_UP_CAP = 5;
 
   // ------------------------------------------------------------------
   // Boot
@@ -41,8 +48,9 @@ console.info("EndoMe appointments build v1");
     const today = new Date();
     viewYear = today.getFullYear();
     viewMonth = today.getMonth();
-    await loadMonth();
-    await loadUpcoming();
+    weekAnchor = mondayOf(today);
+    await Promise.all([loadMonth(), loadWeek()]);
+    await loadNextUp();
     document.getElementById("page-loader")?.classList.add("is-hidden");
 
     // Deep-link: ?id=123 → open that appointment's modal.
@@ -151,17 +159,23 @@ console.info("EndoMe appointments build v1");
       });
     });
     grid.querySelectorAll("[data-day-overflow]").forEach((el) => {
-      el.addEventListener("click", (e) => {
+      el.addEventListener("click", async (e) => {
         e.stopPropagation();
-        // Show all appointments for that day in the upcoming list. Smooth-
-        // scroll there + filter inline by adding a highlight class.
+        // Jump the focused week view to the week containing that day, then
+        // smooth-scroll + flash the matching day column so the overflow
+        // appointments are immediately visible in full.
         const key = el.dataset.dayOverflow;
-        const target = document.querySelector("#upcoming-list");
-        target?.scrollIntoView({ behavior: "smooth", block: "start" });
-        target?.querySelectorAll("li").forEach((li) => {
-          li.classList.toggle("flash", li.dataset.day === key);
+        const [y, m, d] = key.split("-").map(Number);
+        weekAnchor = mondayOf(new Date(y, m - 1, d));
+        await loadWeek();
+        const wkGrid = document.querySelector("#week-grid");
+        wkGrid?.scrollIntoView({ behavior: "smooth", block: "start" });
+        wkGrid?.querySelectorAll(".week-day").forEach((dc) => {
+          dc.classList.toggle("flash", dc.dataset.date === key);
         });
-        setTimeout(() => target?.querySelectorAll("li.flash").forEach((li) => li.classList.remove("flash")), 1800);
+        setTimeout(() =>
+          wkGrid?.querySelectorAll(".week-day.flash").forEach((dc) => dc.classList.remove("flash")),
+        1800);
       });
     });
   }
@@ -204,22 +218,126 @@ console.info("EndoMe appointments build v1");
   });
 
   // ------------------------------------------------------------------
-  // Upcoming list
+  // Week view (primary, focused)
   // ------------------------------------------------------------------
-  async function loadUpcoming() {
-    const list = document.getElementById("upcoming-list");
+  async function loadWeek() {
+    if (!weekAnchor) weekAnchor = mondayOf(new Date());
+    const startSec = Math.floor(weekAnchor.getTime() / 1000);
+    const endSec   = startSec + 7 * 86400 - 1;
+    try {
+      const data = await fetchJson(`/api/me/appointments?from=${startSec}&to=${endSec}`);
+      weekAppointments = data.appointments || [];
+    } catch {
+      weekAppointments = [];
+    }
+    paintWeek();
+  }
+
+  function paintWeek() {
+    const grid = document.getElementById("week-grid");
+    const titleEl = document.getElementById("wk-title");
+    const summaryEl = document.getElementById("wk-summary");
+    if (!grid || !titleEl) return;
+
+    // Title: "Mon 3 Jun – Sun 9 Jun" or with year if it crosses years.
+    const start = new Date(weekAnchor);
+    const end   = new Date(weekAnchor.getFullYear(), weekAnchor.getMonth(), weekAnchor.getDate() + 6);
+    const fmtShort = { month: "short", day: "numeric" };
+    const fmtFull  = { month: "short", day: "numeric", year: "numeric" };
+    const sameYear = start.getFullYear() === end.getFullYear();
+    titleEl.textContent = sameYear
+      ? `${start.toLocaleDateString(undefined, fmtShort)} – ${end.toLocaleDateString(undefined, fmtFull)}`
+      : `${start.toLocaleDateString(undefined, fmtFull)} – ${end.toLocaleDateString(undefined, fmtFull)}`;
+    const count = weekAppointments.length;
+    summaryEl.textContent = count
+      ? `${count} appointment${count === 1 ? "" : "s"} this week`
+      : "Nothing on the calendar this week";
+
+    const todayKey = dateKey(new Date());
+    let html = "";
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const key = dateKey(d);
+      const isToday = key === todayKey;
+      const dayAppts = weekAppointments
+        .filter((a) => dateKey(new Date(a.startsAt * 1000)) === key)
+        .sort((a, b) => (a.allDay ? 0 : a.startsAt) - (b.allDay ? 0 : b.startsAt));
+      const dayName = d.toLocaleDateString(undefined, { weekday: "short" });
+      const dayNum = d.getDate();
+      html += `<div class="week-day ${isToday ? "is-today" : ""}" data-date="${key}">
+        <header class="week-day-head">
+          <span class="week-day-name">${dayName}</span>
+          <span class="week-day-num">${dayNum}</span>
+          <button type="button" class="week-day-add" data-add-date="${key}" aria-label="Add appointment on ${d.toDateString()}">+</button>
+        </header>
+        <ul class="week-day-list">
+          ${dayAppts.length ? dayAppts.map((a) => weekChip(a)).join("") : `<li class="week-empty">No appointments</li>`}
+        </ul>
+      </div>`;
+    }
+    grid.innerHTML = html;
+
+    grid.querySelectorAll("[data-add-date]").forEach((b) => {
+      b.addEventListener("click", (e) => { e.stopPropagation(); openNewModalOnDate(b.dataset.addDate); });
+    });
+    grid.querySelectorAll(".week-day").forEach((cell) => {
+      cell.addEventListener("click", (e) => {
+        if (e.target.closest("[data-open-appt]") || e.target.closest("[data-add-date]")) return;
+        openNewModalOnDate(cell.dataset.date);
+      });
+    });
+    grid.querySelectorAll("[data-open-appt]").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const a = weekAppointments.find((x) => x.id === +el.dataset.openAppt);
+        if (a) openModal(a);
+      });
+    });
+  }
+
+  function weekChip(a) {
+    const k = KIND_BY_ID[a.kind] || KIND_BY_ID.general;
+    const color = a.color || k.color;
+    const time = a.allDay ? "All-day" : formatHm(a.startsAt);
+    return `<li class="week-appt" style="--c:${color}" data-open-appt="${a.id}">
+      <span class="week-appt-time">${time}</span>
+      <strong class="week-appt-title">${k.emoji} ${escapeHtml(a.title)}</strong>
+      ${a.doctor ? `<span class="week-appt-sub">${escapeHtml(a.doctor)}</span>` : ""}
+      ${a.location ? `<span class="week-appt-sub">📍 ${escapeHtml(a.location)}</span>` : ""}
+    </li>`;
+  }
+
+  document.getElementById("wk-prev").addEventListener("click", async () => {
+    weekAnchor = addDays(weekAnchor, -7);
+    await loadWeek();
+  });
+  document.getElementById("wk-next").addEventListener("click", async () => {
+    weekAnchor = addDays(weekAnchor, 7);
+    await loadWeek();
+  });
+  document.getElementById("wk-today").addEventListener("click", async () => {
+    weekAnchor = mondayOf(new Date());
+    await loadWeek();
+  });
+
+  // ------------------------------------------------------------------
+  // "Next up" sidebar — capped list of the next N appointments
+  // ------------------------------------------------------------------
+  async function loadNextUp() {
+    const list = document.getElementById("next-up-list");
+    const cap = document.getElementById("next-up-cap");
+    if (cap) cap.textContent = String(NEXT_UP_CAP);
     try {
       const data = await fetchJson("/api/me/appointments/upcoming");
-      const items = data.appointments || [];
+      const items = (data.appointments || []).slice(0, NEXT_UP_CAP);
       if (!items.length) {
-        list.innerHTML = `<li class="empty-state upcoming-empty">
-          <div class="upcoming-empty-art">📅</div>
-          <strong>Nothing in the next 2 weeks.</strong>
-          <span>Tap <strong>+ Add appointment</strong> above to get one on the calendar.</span>
+        list.innerHTML = `<li class="next-up-empty">
+          <span class="next-up-empty-art">📅</span>
+          <span>Nothing booked yet. Tap <strong>+ Add appointment</strong> to start.</span>
         </li>`;
         return;
       }
-      list.innerHTML = items.map((a) => upcomingRow(a)).join("");
+      list.innerHTML = items.map((a) => nextUpRow(a)).join("");
       list.querySelectorAll("[data-open-appt]").forEach((el) => {
         el.addEventListener("click", () => {
           const a = items.find((x) => x.id === +el.dataset.openAppt);
@@ -227,48 +345,52 @@ console.info("EndoMe appointments build v1");
         });
       });
     } catch {
-      list.innerHTML = `<li class="empty-state">Couldn't load upcoming appointments.</li>`;
+      list.innerHTML = `<li class="next-up-empty">Couldn't load. Refresh to try again.</li>`;
     }
   }
 
-  function upcomingRow(a) {
+  function nextUpRow(a) {
     const k = KIND_BY_ID[a.kind] || KIND_BY_ID.general;
     const color = a.color || k.color;
     const d = new Date(a.startsAt * 1000);
-    const key = dateKey(d);
-    const dateLabel = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-    const timeLabel = a.allDay ? "All-day" : formatHm(a.startsAt);
-    const remind = reminderSummary(a);
-    return `<li class="upcoming-row" data-open-appt="${a.id}" data-day="${key}" style="--c:${color}">
-      <div class="upcoming-date">
-        <span class="upcoming-day">${d.getDate()}</span>
-        <span class="upcoming-month">${d.toLocaleDateString(undefined, { month: "short" })}</span>
+    return `<li class="next-up-row" data-open-appt="${a.id}" style="--c:${color}">
+      <div class="next-up-date">
+        <span class="next-up-day">${d.getDate()}</span>
+        <span class="next-up-month">${d.toLocaleDateString(undefined, { month: "short" })}</span>
       </div>
-      <div class="upcoming-body">
-        <span class="upcoming-kind">${k.emoji} ${k.label}</span>
+      <div class="next-up-body">
         <strong>${escapeHtml(a.title)}</strong>
-        <span class="upcoming-meta">${escapeHtml(dateLabel)} · ${escapeHtml(timeLabel)}${a.doctor ? " · " + escapeHtml(a.doctor) : ""}${a.location ? " · " + escapeHtml(a.location) : ""}</span>
-        <span class="upcoming-remind">${remind}</span>
+        <span class="next-up-meta">${k.emoji} ${escapeHtml(k.label)} · ${escapeHtml(a.allDay ? "All-day" : formatHm(a.startsAt))}</span>
+        <span class="next-up-when">${escapeHtml(relativeWhen(a.startsAt))}</span>
       </div>
-      <span class="upcoming-arrow">›</span>
     </li>`;
   }
 
-  function reminderSummary(a) {
-    const channels = [];
-    if (a.remindInApp) channels.push("in-app");
-    if (a.remindEmail) channels.push("email");
-    if (!channels.length) return "🔕 No reminders";
-    const lead = humanLead(a.remindMinutesBefore);
-    return `🔔 ${channels.join(" + ")} · ${lead}`;
+  function relativeWhen(unixSec) {
+    const diffSec = unixSec - Math.floor(Date.now() / 1000);
+    if (diffSec <= 0) return "happening now";
+    const mins = Math.round(diffSec / 60);
+    if (mins < 60) return `in ${mins} min`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `in ${hrs}h`;
+    const days = Math.round(hrs / 24);
+    if (days === 1) return "tomorrow";
+    if (days < 7) return `in ${days} days`;
+    const weeks = Math.round(days / 7);
+    return weeks === 1 ? "next week" : `in ${weeks} weeks`;
   }
-  function humanLead(mins) {
-    if (!mins) return "at the time";
-    if (mins < 60) return `${mins} min before`;
-    if (mins < 1440) return `${Math.round(mins / 60)} hour${mins >= 120 ? "s" : ""} before`;
-    if (mins === 1440) return "1 day before";
-    if (mins < 10080) return `${Math.round(mins / 1440)} days before`;
-    return `${Math.round(mins / 10080)} week${mins >= 20160 ? "s" : ""} before`;
+
+  // Mon=0 ... Sun=6, get the Monday of the week containing `d`.
+  function mondayOf(d) {
+    const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dow = (date.getDay() + 6) % 7;
+    date.setDate(date.getDate() - dow);
+    return date;
+  }
+  function addDays(d, n) {
+    const out = new Date(d);
+    out.setDate(out.getDate() + n);
+    return out;
   }
 
   // ------------------------------------------------------------------
@@ -388,7 +510,7 @@ console.info("EndoMe appointments build v1");
       });
       toast(editingId ? "Appointment updated" : "Appointment added ✨", "ok");
       closeModal();
-      await Promise.all([loadMonth(), loadUpcoming()]);
+      await Promise.all([loadMonth(), loadWeek(), loadNextUp()]);
     } catch (err) {
       status.textContent = err.message || "Couldn't save."; status.className = "form-status err";
     }
@@ -401,7 +523,7 @@ console.info("EndoMe appointments build v1");
       await fetchJson(`/api/me/appointments/${editingId}`, { method: "DELETE" });
       toast("Appointment removed", "ok");
       closeModal();
-      await Promise.all([loadMonth(), loadUpcoming()]);
+      await Promise.all([loadMonth(), loadWeek(), loadNextUp()]);
     } catch (err) { toast(err.message || "Couldn't remove", "err"); }
   });
 

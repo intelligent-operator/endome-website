@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=9" />
-  <link rel="stylesheet" href="/appointments.css?v=1" />
+  <link rel="stylesheet" href="/appointments.css?v=2" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -78,7 +78,23 @@
         <button class="btn btn-primary" id="btn-add-appt">+ Add appointment</button>
       </header>
 
-      <!-- Calendar -->
+      <!-- Week view (primary, focused) -->
+      <section class="community-section">
+        <div class="week-card">
+          <header class="cal-head week-head">
+            <div class="cal-nav">
+              <button type="button" class="cal-nav-btn" id="wk-prev" aria-label="Previous week">‹</button>
+              <button type="button" class="cal-today" id="wk-today">This week</button>
+              <button type="button" class="cal-nav-btn" id="wk-next" aria-label="Next week">›</button>
+            </div>
+            <h2 class="cal-title" id="wk-title">—</h2>
+            <span class="cal-subtle" id="wk-summary">—</span>
+          </header>
+          <div class="week-grid" id="week-grid"></div>
+        </div>
+      </section>
+
+      <!-- Month grid (broader context) -->
       <section class="community-section">
         <div class="cal-card">
           <header class="cal-head">
@@ -96,18 +112,20 @@
           </div>
         </div>
       </section>
+    </main>
 
-      <!-- Upcoming list -->
-      <section class="community-section">
+    <!-- ===== RIGHT SIDEBAR — Next appointments ===== -->
+    <aside class="dash-right appts-right">
+      <section class="side-card next-up-card">
         <div class="section-head">
-          <h2>Upcoming · next 2 weeks</h2>
-          <span class="section-hint">Click any appointment to edit or change reminders.</span>
+          <h2>📌 Next up</h2>
         </div>
-        <ul class="upcoming-list" id="upcoming-list">
-          <li class="empty-state">Loading…</li>
+        <p class="side-sub">Your next <span id="next-up-cap">5</span> appointments. Tap any to edit.</p>
+        <ul class="next-up-list" id="next-up-list">
+          <li class="next-up-empty">Loading…</li>
         </ul>
       </section>
-    </main>
+    </aside>
   </div>
 
   <!-- Add / edit appointment modal -->
@@ -217,6 +235,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=2" defer></script>
-  <script src="/appointments.js?v=1" defer></script>
+  <script src="/appointments.js?v=2" defer></script>
 </body>
 </html>
