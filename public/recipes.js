@@ -88,6 +88,19 @@ console.info("EndoMe recipes build v1");
     "0.1667":"⅙", "0.8333":"⅚",
     "0.125":"⅛", "0.375":"⅜", "0.625":"⅝", "0.875":"⅞",
   };
+  // Tiny inline avatar badge for the recipe card + detail header. Uploaded
+  // photo wins; otherwise the emoji avatar; otherwise nothing (the name
+  // alone carries the byline).
+  function authorBadge(r) {
+    if (r.authorAvatarUrl) {
+      return `<span class="recipe-author-pic"><img src="${escapeHtml(r.authorAvatarUrl)}" alt="" /></span>`;
+    }
+    if (r.authorAvatar) {
+      return `<span class="recipe-author-pic emoji">${escapeHtml(r.authorAvatar)}</span>`;
+    }
+    return "";
+  }
+
   function formatQty(q) {
     if (q == null) return "";
     if (!Number.isFinite(q)) return "";
@@ -203,7 +216,7 @@ console.info("EndoMe recipes build v1");
         ${r.cookMinutes != null ? `<span>🔥 ${r.cookMinutes}m cook</span>` : ""}
       </div>
       <footer class="recipe-card-foot">
-        <span class="recipe-author">by ${escapeHtml(r.author || "Member")}</span>
+        <span class="recipe-author">${authorBadge(r)} by ${escapeHtml(r.author || "Member")}</span>
         <div class="recipe-react">
           <button class="react-chip love ${r.myReaction === "love" ? "on" : ""}" data-react="love" data-id="${r.id}" aria-label="Love">❤ <span>${r.loves}</span></button>
           <button class="react-chip down ${r.myReaction === "down" ? "on" : ""}" data-react="down" data-id="${r.id}" aria-label="Thumbs down">👎 <span>${r.downs}</span></button>
@@ -233,7 +246,7 @@ console.info("EndoMe recipes build v1");
     const cat = categories.find((c) => c.id === r.category) || { emoji: "🍳", label: r.category || "Other" };
     body.innerHTML = `
       <header class="recipe-detail-head">
-        <p class="recipe-detail-eyebrow">${escapeHtml(cat.emoji)} ${escapeHtml(cat.label)} · by ${escapeHtml(r.author || "Member")}</p>
+        <p class="recipe-detail-eyebrow">${escapeHtml(cat.emoji)} ${escapeHtml(cat.label)} · ${authorBadge(r)} by ${escapeHtml(r.author || "Member")}</p>
         <h2>${escapeHtml(r.title)}</h2>
         ${r.summary ? `<p class="recipe-detail-summary">${escapeHtml(r.summary)}</p>` : ""}
         <div class="recipe-detail-meta">

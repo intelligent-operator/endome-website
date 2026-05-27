@@ -58,7 +58,7 @@ console.info("EndoMe profile build v1");
     document.getElementById("profile-handle").textContent = "@" + p.username;
     document.getElementById("profile-bio").textContent =
       p.bio || "Add a bio below — it shows on your profile.";
-    document.getElementById("profile-avatar").textContent = p.avatar || DEFAULT_AVATAR;
+    paintAvatarDisplay(p);
     document.getElementById("stat-posts").textContent   = p.postCount   || 0;
     document.getElementById("stat-circles").textContent = p.circleCount || 0;
     document.getElementById("stat-friends").textContent = p.friendCount || 0;
@@ -67,6 +67,83 @@ console.info("EndoMe profile build v1");
     form.alias.value = p.alias || "";
     form.bio.value   = p.bio   || "";
     setSelectedAvatar(p.avatar || DEFAULT_AVATAR);
+  }
+
+  // Paint the big hero avatar + the small upload preview tile. Uploaded
+  // image wins; otherwise the chosen emoji; otherwise the default 🌸.
+  function paintAvatarDisplay(p) {
+    const hero = document.getElementById("profile-avatar");
+    const preview = document.getElementById("avatar-upload-preview");
+    const removeBtn = document.getElementById("avatar-remove");
+    if (p.avatarUrl) {
+      const url = p.avatarUrl;
+      hero.textContent = "";
+      hero.style.backgroundImage = `url("${url}")`;
+      hero.classList.add("has-image");
+      if (preview) {
+        preview.textContent = "";
+        preview.style.backgroundImage = `url("${url}")`;
+        preview.classList.add("has-image");
+      }
+      if (removeBtn) removeBtn.hidden = false;
+    } else {
+      hero.textContent = p.avatar || DEFAULT_AVATAR;
+      hero.style.backgroundImage = "";
+      hero.classList.remove("has-image");
+      if (preview) {
+        preview.textContent = p.avatar || DEFAULT_AVATAR;
+        preview.style.backgroundImage = "";
+        preview.classList.remove("has-image");
+      }
+      if (removeBtn) removeBtn.hidden = true;
+    }
+  }
+
+  // --- Upload / remove photo -----------------------------------------
+  document.getElementById("avatar-file").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const status = document.getElementById("avatar-status");
+    status.textContent = "Uploading…"; status.className = "form-status";
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/me/avatar", {
+        method: "POST", credentials: "same-origin", body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+      status.textContent = "Photo uploaded ✨"; status.className = "form-status ok";
+      // Reload profile so the new avatar URL paints everywhere.
+      await loadProfile();
+      // Bust the topbar avatar too.
+      paintTopbarAvatar({ ...me?.user, avatarUrl: data.avatarUrl });
+    } catch (err) {
+      status.textContent = err.message || "Couldn't upload."; status.className = "form-status err";
+    } finally {
+      e.target.value = "";
+    }
+  });
+  document.getElementById("avatar-remove").addEventListener("click", async () => {
+    if (!confirm("Remove your uploaded photo and go back to the chosen emoji?")) return;
+    const status = document.getElementById("avatar-status");
+    status.textContent = "Removing…"; status.className = "form-status";
+    try {
+      await fetchJson("/api/me/avatar", { method: "DELETE" });
+      status.textContent = "Photo removed."; status.className = "form-status ok";
+      await loadProfile();
+      paintTopbarAvatar({ ...me?.user, avatarUrl: null });
+    } catch (err) {
+      status.textContent = err.message || "Couldn't remove."; status.className = "form-status err";
+    }
+  });
+
+  // Topbar avatar swap — replaces the inline SVG with the uploaded image.
+  function paintTopbarAvatar(u) {
+    if (!u?.avatarUrl) return;
+    document.querySelectorAll(".dash-topbar .avatar, .account-toggle .avatar").forEach((el) => {
+      el.innerHTML = `<img src="${u.avatarUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`;
+    });
   }
 
   // --- Save profile ----------------------------------------------------

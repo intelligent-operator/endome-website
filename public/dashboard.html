@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="stylesheet" href="/dashboard.css?v=10" />
+  <link rel="stylesheet" href="/dashboard.css?v=11" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -101,6 +101,7 @@
           <div class="wb-actions">
             <a class="btn btn-primary" href="#" data-modal="symptom"><span class="btn-ico">✏️</span> Log Today's Symptoms</a>
             <a class="btn btn-ghost" href="#" data-modal="morning"><span class="btn-ico">🌅</span> Morning Check-in</a>
+            <a class="btn btn-ghost" href="#" data-modal="afternoon"><span class="btn-ico">☀️</span> Midday Check-in</a>
             <a class="btn btn-ghost" href="#" data-modal="evening"><span class="btn-ico">🌙</span> Evening Check-in</a>
           </div>
         </div>
@@ -361,6 +362,30 @@
         </div>
 
         <div class="modal-section">
+          <h4 class="section-title">How is your body this morning? <span class="sec-hint">(tap any)</span> <span class="multi-count inline" data-multi-count-for="morningSymptoms" hidden>0</span></h4>
+          <div class="chip-pick wrap multi" data-multi="morningSymptoms">
+            <button type="button" data-val="cramps">🔥 Cramps</button>
+            <button type="button" data-val="pelvic_pain">⚡ Pelvic pain</button>
+            <button type="button" data-val="back_pain">🦴 Lower back</button>
+            <button type="button" data-val="endo_belly">🎈 Endo belly</button>
+            <button type="button" data-val="bloating">💧 Bloating</button>
+            <button type="button" data-val="nausea">🤢 Nausea</button>
+            <button type="button" data-val="fatigue">😴 Fatigue</button>
+            <button type="button" data-val="headaches">🧠 Headache</button>
+            <button type="button" data-val="dizziness">💫 Dizziness</button>
+            <button type="button" data-val="breast_tender">💗 Breast tender</button>
+            <button type="button" data-val="hot_flash">🥵 Hot flash</button>
+            <button type="button" data-val="brain_fog">☁️ Brain fog</button>
+            <button type="button" data-val="anxiety">😰 Anxiety</button>
+            <button type="button" data-val="mood">💭 Mood swing</button>
+            <button type="button" data-val="spotting">🩸 Spotting</button>
+            <button type="button" data-val="constipation">🚽 Constipation</button>
+            <button type="button" data-val="joint_pain">🦵 Joint pain</button>
+            <button type="button" data-val="muscle_aches">💪 Muscle aches</button>
+          </div>
+        </div>
+
+        <div class="modal-section">
           <h4 class="section-title">Cycle <span class="sec-hint">(optional, helps spot patterns)</span></h4>
           <div class="field-grid-2">
             <div class="counter-field">
@@ -430,6 +455,84 @@
         </label>
 
         <button type="submit" class="btn btn-primary full">Log morning check-in <em class="xp-badge">+10 XP</em></button>
+        <p class="form-status" role="status"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Afternoon / midday check-in -->
+  <div class="modal" id="modal-afternoon" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="afternoon-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card modal-xl">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">☀️</span>
+        <h3 id="afternoon-title">Midday check-in</h3>
+        <p>A quick pulse on how today is going so far.</p>
+      </header>
+      <form id="form-afternoon" novalidate>
+        <div class="modal-section">
+          <h4 class="section-title">Right now</h4>
+          <div class="seg-field">
+            <label>Mood</label>
+            <div class="seg-slider" data-scale="mood">
+              <button type="button" data-val="1"><span class="seg-icon">😢</span><span class="seg-label">Awful</span></button>
+              <button type="button" data-val="2"><span class="seg-icon">😟</span><span class="seg-label">Low</span></button>
+              <button type="button" data-val="3"><span class="seg-icon">😐</span><span class="seg-label">Okay</span></button>
+              <button type="button" data-val="4"><span class="seg-icon">🙂</span><span class="seg-label">Good</span></button>
+              <button type="button" data-val="5"><span class="seg-icon">😊</span><span class="seg-label">Great</span></button>
+            </div>
+          </div>
+          <div class="seg-field">
+            <label>Energy</label>
+            <div class="seg-slider" data-scale="energy">
+              <button type="button" data-val="1"><span class="seg-label">Drained</span></button>
+              <button type="button" data-val="2"><span class="seg-label">Low</span></button>
+              <button type="button" data-val="3"><span class="seg-label">Okay</span></button>
+              <button type="button" data-val="4"><span class="seg-label">Good</span></button>
+              <button type="button" data-val="5"><span class="seg-label">High</span></button>
+            </div>
+          </div>
+          <div class="seg-field">
+            <label>Pain</label>
+            <div class="seg-slider pain" data-scale="pain">
+              <button type="button" data-val="1"><span class="seg-label">None</span></button>
+              <button type="button" data-val="2"><span class="seg-label">Mild</span></button>
+              <button type="button" data-val="3"><span class="seg-label">Moderate</span></button>
+              <button type="button" data-val="4"><span class="seg-label">Strong</span></button>
+              <button type="button" data-val="5"><span class="seg-label">Severe</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <h4 class="section-title">What's coming up <span class="sec-hint">(tap any)</span> <span class="multi-count inline" data-multi-count-for="afternoonSymptoms" hidden>0</span></h4>
+          <div class="chip-pick wrap multi" data-multi="afternoonSymptoms">
+            <button type="button" data-val="cramps">🔥 Cramps</button>
+            <button type="button" data-val="pelvic_pain">⚡ Pelvic pain</button>
+            <button type="button" data-val="back_pain">🦴 Lower back</button>
+            <button type="button" data-val="endo_belly">🎈 Endo belly</button>
+            <button type="button" data-val="bloating">💧 Bloating</button>
+            <button type="button" data-val="nausea">🤢 Nausea</button>
+            <button type="button" data-val="fatigue">😴 Fatigue</button>
+            <button type="button" data-val="headaches">🧠 Headache</button>
+            <button type="button" data-val="dizziness">💫 Dizziness</button>
+            <button type="button" data-val="breast_tender">💗 Breast tender</button>
+            <button type="button" data-val="hot_flash">🥵 Hot flash</button>
+            <button type="button" data-val="brain_fog">☁️ Brain fog</button>
+            <button type="button" data-val="anxiety">😰 Anxiety</button>
+            <button type="button" data-val="mood">💭 Mood swing</button>
+            <button type="button" data-val="spotting">🩸 Spotting</button>
+            <button type="button" data-val="muscle_aches">💪 Muscle aches</button>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Anything on your mind? <em>(optional)</em></span>
+          <input type="text" name="notes" maxlength="1000" placeholder="A word or two…" />
+        </label>
+
+        <button type="submit" class="btn btn-primary full">Save midday check-in <em class="xp-badge">+10 XP</em></button>
         <p class="form-status" role="status"></p>
       </form>
     </div>
@@ -643,21 +746,49 @@
         </div>
 
         <div class="modal-section">
-          <h4 class="section-title">How was your body today?</h4>
-          <div class="seg-field">
-            <label>Anything you noticed <em>(pick any)</em></label>
-            <div class="chip-pick wrap multi" data-multi="eveningSymptoms">
-              <button type="button" data-val="bloating">💧 Bloating</button>
-              <button type="button" data-val="ovulation_pain">⚡ Ovulation pain</button>
-              <button type="button" data-val="nausea">🤢 Nausea</button>
-              <button type="button" data-val="fatigue">😴 Fatigue</button>
-              <button type="button" data-val="headaches">🧠 Headaches</button>
-              <button type="button" data-val="dizziness">💫 Dizziness</button>
-              <button type="button" data-val="pms">🌸 PMS</button>
-              <button type="button" data-val="skin_breakout">🪞 Skin breakout</button>
+          <h4 class="section-title">How was your body today? <span class="sec-hint">(tap any)</span> <span class="multi-count inline" data-multi-count-for="eveningSymptoms" hidden>0</span></h4>
+          <div class="chip-pick wrap multi" data-multi="eveningSymptoms">
+            <button type="button" data-val="cramps">🔥 Cramps</button>
+            <button type="button" data-val="pelvic_pain">⚡ Pelvic pain</button>
+            <button type="button" data-val="back_pain">🦴 Lower back</button>
+            <button type="button" data-val="endo_belly">🎈 Endo belly</button>
+            <button type="button" data-val="bloating">💧 Bloating</button>
+            <button type="button" data-val="ovulation_pain">⚡ Ovulation pain</button>
+            <button type="button" data-val="nausea">🤢 Nausea</button>
+            <button type="button" data-val="fatigue">😴 Fatigue</button>
+            <button type="button" data-val="headaches">🧠 Headaches</button>
+            <button type="button" data-val="dizziness">💫 Dizziness</button>
+            <button type="button" data-val="breast_tender">💗 Breast tender</button>
+            <button type="button" data-val="hot_flash">🥵 Hot flash</button>
+            <button type="button" data-val="brain_fog">☁️ Brain fog</button>
+            <button type="button" data-val="anxiety">😰 Anxiety</button>
+            <button type="button" data-val="mood">💭 Mood swing</button>
+            <button type="button" data-val="pms">🌸 PMS</button>
+            <button type="button" data-val="skin_breakout">🪞 Skin breakout</button>
+            <button type="button" data-val="spotting">🩸 Spotting</button>
+            <button type="button" data-val="painful_urination">🚽 Painful peeing</button>
+            <button type="button" data-val="painful_bowel">💩 Painful BM</button>
+            <button type="button" data-val="painful_sex">💔 Painful sex</button>
+            <button type="button" data-val="constipation">🚽 Constipation</button>
+            <button type="button" data-val="joint_pain">🦵 Joint pain</button>
+            <button type="button" data-val="muscle_aches">💪 Muscle aches</button>
+          </div>
+          <div class="seg-field" style="margin-top:14px">
+            <label>What helped today <em>(pick any)</em> <span class="multi-count inline" data-multi-count-for="relief" hidden>0</span></label>
+            <div class="chip-pick wrap multi" data-multi="relief">
+              <button type="button" data-val="heat">🔥 Heat</button>
+              <button type="button" data-val="tens">⚡ TENS machine</button>
+              <button type="button" data-val="rest">🛏 Rest</button>
+              <button type="button" data-val="medication">💊 Meds</button>
+              <button type="button" data-val="hydration">💧 Hydration</button>
+              <button type="button" data-val="movement">🧘 Movement</button>
+              <button type="button" data-val="massage">🤲 Massage</button>
+              <button type="button" data-val="bath">🛁 Bath</button>
+              <button type="button" data-val="sleep">😴 Sleep</button>
+              <button type="button" data-val="none">— Nothing yet</button>
             </div>
           </div>
-          <div class="seg-field">
+          <div class="seg-field" style="margin-top:14px">
             <label>Appetite</label>
             <div class="chip-pick wrap" data-chip="appetite">
               <button type="button" data-val="low">🥄 Low</button>
@@ -747,7 +878,7 @@
     </div>
   </div>
 
-  <script src="/account-menu.js?v=2" defer></script>
+  <script src="/account-menu.js?v=3" defer></script>
   <script src="/med-catalog.js?v=1" defer></script>
   <script src="/dashboard.js?v=7" defer></script>
 </body>

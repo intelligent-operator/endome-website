@@ -20,7 +20,7 @@
   .story-layout{grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 14px 32px}
 }
 
-.story-main{display:flex;flex-direction:column;gap:32px;min-width:0}
+.story-main{display:flex;flex-direction:column;gap:52px;min-width:0}
 
 /* ---------- Hero card ---------- */
 .story-hero-card{
@@ -54,11 +54,17 @@
 
 /* ---------- Phase section ---------- */
 .phase{
-  display:flex;flex-direction:column;gap:18px;
+  display:flex;flex-direction:column;gap:22px;
+  /* Breathing room above each phase header so the page reads as distinct
+     chapters rather than a single tall stack. The first phase doesn't need
+     the extra space (the hero sits above it). */
+  padding-top:18px;
+  border-top:1px dashed #ffe2eb;
 }
+.phase:first-of-type{padding-top:0;border-top:none}
 .phase-head{
   display:flex;align-items:center;justify-content:space-between;gap:18px;
-  padding:0 4px;
+  padding:0 4px;margin-bottom:4px;
 }
 .phase-head-text{min-width:0;flex:1}
 .phase-eyebrow{

@@ -28,6 +28,7 @@ const todayLocalDate = () => {
 const api = {
   async today() { return getJson("/api/me/today?date=" + todayLocalDate()); },
   async morningCheckin(body) { return postJson("/api/me/checkin/morning", { date: todayLocalDate(), ...body }); },
+  async afternoonCheckin(body) { return postJson("/api/me/checkin/afternoon", { date: todayLocalDate(), ...body }); },
   async eveningCheckin(body) { return postJson("/api/me/checkin/evening", { date: todayLocalDate(), ...body }); },
   async logSymptom(body) { return postJson("/api/me/symptoms", { date: todayLocalDate(), ...body }); },
   async dismissNotif(id) { return postJson(`/api/me/notifications/${id}/dismiss`, {}); },
@@ -1190,6 +1191,7 @@ submitForm(
       mood, energy, pain,
       sleepHours: form.sleepHours.value || null,
       sleepQuality: pickerVal(form, "sleepQuality"),
+      morningSymptoms: multiVals(form, "morningSymptoms"),
       cycleDay: form.cycleDay.value || null,
       cyclePhase: pickerVal(form, "cyclePhase", "chip"),
       flow: pickerVal(form, "flow", "chip"),
@@ -1201,6 +1203,23 @@ submitForm(
   },
   api.morningCheckin,
   "Morning check-in logged"
+);
+
+submitForm(
+  "form-afternoon",
+  (form) => {
+    const mood = pickerVal(form, "mood");
+    const energy = pickerVal(form, "energy");
+    const pain = pickerVal(form, "pain");
+    if (!mood || !energy || !pain) throw new Error("Pick a value for mood, energy and pain.");
+    return {
+      mood, energy, pain,
+      afternoonSymptoms: multiVals(form, "afternoonSymptoms"),
+      notes: form.notes.value || null,
+    };
+  },
+  api.afternoonCheckin,
+  "Midday check-in logged"
 );
 
 submitForm(
@@ -1236,6 +1255,7 @@ submitForm(
       bowelCount: form.bowelCount.value || null,
       bowelType: pickerVal(form, "bowelType", "chip"),
       eveningSymptoms: multiVals(form, "eveningSymptoms"),
+      relief: multiVals(form, "relief"),
       appetite: pickerVal(form, "appetite", "chip"),
       intimacy: pickerVal(form, "intimacy", "chip"),
       medications: form.medications.value || null,

@@ -190,10 +190,15 @@ console.info("EndoMe community build v2");
     </a>`;
   }
   function activityRow(a) {
-    const avatarInner = a.authorAvatar
-      ? `<span class="emoji">${escapeHtml(a.authorAvatar)}</span>`
-      : escapeHtml(initials(a.authorName));
-    const avatarClass = a.authorAvatar ? "activity-avatar has-emoji" : "activity-avatar";
+    // Uploaded photo wins, then chosen emoji, then initials fallback.
+    const avatarInner = a.authorAvatarUrl
+      ? `<img src="${escapeHtml(a.authorAvatarUrl)}" alt="" />`
+      : a.authorAvatar
+        ? `<span class="emoji">${escapeHtml(a.authorAvatar)}</span>`
+        : escapeHtml(initials(a.authorName));
+    const avatarClass = a.authorAvatarUrl
+      ? "activity-avatar has-image"
+      : a.authorAvatar ? "activity-avatar has-emoji" : "activity-avatar";
     return `<li class="activity-item">
       <a href="/community?c=${encodeURIComponent(a.circleSlug)}" class="activity-link" data-open="${escapeHtml(a.circleSlug)}">
         <div class="${avatarClass}">${avatarInner}</div>
@@ -467,10 +472,14 @@ console.info("EndoMe community build v2");
     list.innerHTML = posts.map(postHtml).join("");
   }
   function postHtml(p) {
-    const avatarInner = p.authorAvatar
-      ? `<span class="emoji">${escapeHtml(p.authorAvatar)}</span>`
-      : escapeHtml(initials(p.authorName));
-    const avatarClass = p.authorAvatar ? "author-avatar has-emoji" : "author-avatar";
+    const avatarInner = p.authorAvatarUrl
+      ? `<img src="${escapeHtml(p.authorAvatarUrl)}" alt="" />`
+      : p.authorAvatar
+        ? `<span class="emoji">${escapeHtml(p.authorAvatar)}</span>`
+        : escapeHtml(initials(p.authorName));
+    const avatarClass = p.authorAvatarUrl
+      ? "author-avatar has-image"
+      : p.authorAvatar ? "author-avatar has-emoji" : "author-avatar";
     const profileHref = p.authorUsername ? `/u/${encodeURIComponent(p.authorUsername)}` : null;
     return `
       <article class="post-card ${p.isQuestion ? "is-question" : ""}" data-post-id="${p.id}">
@@ -615,10 +624,14 @@ console.info("EndoMe community build v2");
   }
 
   function replyHtml(r) {
-    const avatarInner = r.authorAvatar
-      ? `<span class="emoji">${escapeHtml(r.authorAvatar)}</span>`
-      : escapeHtml(initials(r.authorName));
-    const avatarClass = r.authorAvatar ? "author-avatar small has-emoji" : "author-avatar small";
+    const avatarInner = r.authorAvatarUrl
+      ? `<img src="${escapeHtml(r.authorAvatarUrl)}" alt="" />`
+      : r.authorAvatar
+        ? `<span class="emoji">${escapeHtml(r.authorAvatar)}</span>`
+        : escapeHtml(initials(r.authorName));
+    const avatarClass = r.authorAvatarUrl
+      ? "author-avatar small has-image"
+      : r.authorAvatar ? "author-avatar small has-emoji" : "author-avatar small";
     const profileHref = r.authorUsername ? `/u/${encodeURIComponent(r.authorUsername)}` : null;
     return `
       <li class="reply">

@@ -25,6 +25,25 @@
     });
   }
 
+  // -- Topbar avatar swap ---------------------------------------------------
+  // If the user has uploaded a profile photo, replace the default SVG inside
+  // the topbar avatar tile site-wide. Cheap fetch on page load; the JSON
+  // response is small and most dashboard pages already hit /api/me/today.
+  (async () => {
+    try {
+      const res = await fetch("/api/me/today", { credentials: "same-origin" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const url = data?.user?.avatarUrl;
+      if (!url) return;
+      document.querySelectorAll(".dash-topbar .avatar").forEach((el) => {
+        if (el.dataset.avatarPainted === "1") return;
+        el.dataset.avatarPainted = "1";
+        el.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`;
+      });
+    } catch {}
+  })();
+
   // -- Mobile nav drawer ----------------------------------------------------
   // The left sidebar is sticky on desktop and slides in from the left on
   // mobile + iPad. We inject the trigger button next to the logo so every

@@ -212,6 +212,9 @@ export default {
           if (url.pathname === "/api/me/checkin/morning" && request.method === "POST") {
             return jsonHeaders(await postMorningCheckin(request, env, user));
           }
+          if (url.pathname === "/api/me/checkin/afternoon" && request.method === "POST") {
+            return jsonHeaders(await postAfternoonCheckin(request, env, user));
+          }
           if (url.pathname === "/api/me/checkin/evening" && request.method === "POST") {
             return jsonHeaders(await postEveningCheckin(request, env, user));
           }
@@ -277,6 +280,12 @@ export default {
           }
           if (url.pathname === "/api/me/profile" && request.method === "PUT") {
             return jsonHeaders(await putMyProfile(request, env, user));
+          }
+          if (url.pathname === "/api/me/avatar" && request.method === "POST") {
+            return jsonHeaders(await uploadAvatar(request, env, user));
+          }
+          if (url.pathname === "/api/me/avatar" && request.method === "DELETE") {
+            return jsonHeaders(await deleteAvatar(env, user));
           }
           if (url.pathname === "/api/me/password" && request.method === "POST") {
             return jsonHeaders(await postChangePassword(request, env, user));
@@ -421,6 +430,13 @@ export default {
       if (!isAdminSession(env, session)) {
         return Response.redirect(new URL("/dashboard", request.url).toString(), 302);
       }
+    }
+
+    // --- Public avatar fetch — anyone can pull a user's portrait so posts
+    // and circles can embed the image without leaking auth context. -------
+    const avatarMatch = url.pathname.match(/^\/api\/u\/([^/]+)\/avatar$/);
+    if (avatarMatch && request.method === "GET") {
+      return withSecurityHeaders(await serveAvatar(env, decodeURIComponent(avatarMatch[1])));
     }
 
     // --- /u/<username> — serve the shared u.html page (JS reads the path). --
@@ -1283,8 +1299,15 @@ const ALLOWED_INTIMACY = new Set(["none", "comfortable", "uncomfortable"]);
 const ALLOWED_TRIGGERS = new Set(["food","stress","exercise","intimacy","cold","hormones","travel","sleep","unknown"]);
 const ALLOWED_RELIEF   = new Set(["heat","tens","rest","medication","hydration","movement","massage","bath","sleep","none"]);
 const ALLOWED_EVENING_SYMPTOMS = new Set([
+  // Original light tags
   "bloating", "ovulation_pain", "nausea", "fatigue", "headaches",
   "dizziness", "pms", "skin_breakout",
+  // Expanded body-check tags so morning / midday / evening can share one
+  // allow-list. Mirrors the symptom logger so taps feel consistent.
+  "cramps", "pelvic_pain", "back_pain", "endo_belly", "breast_tender",
+  "hot_flash", "brain_fog", "mood", "anxiety", "spotting",
+  "painful_urination", "painful_bowel", "painful_sex",
+  "joint_pain", "muscle_aches", "constipation",
 ]);
 const ALLOWED_APPETITE = new Set(["low", "normal", "high"]);
 const ALLOWED_PAIN_TYPES = new Set([
@@ -1416,7 +1439,14 @@ async function getMeToday(request, env, user, ctx) {
   }
 
   return json({
-    user: { displayName: user.display_name, username: user.username },
+    user: {
+      displayName: user.display_name,
+      username: user.username,
+      avatar: userRow?.avatar || null,
+      avatarUrl: userRow?.avatar_image_key
+        ? `/api/u/${encodeURIComponent(user.id)}/avatar`
+        : null,
+    },
     date,
     morning: daily?.morning_logged_at ? {
       mood: daily.morning_mood,
@@ -1516,6 +1546,7 @@ async function computeMedReminders(env, user) {
 
 // --- /api/me/checkin/morning ----------------------------------------------
 async function postMorningCheckin(request, env, user) {
+  await ensureDailyExtras(env);
   const body = await readJsonSafe(request);
   if (!body) return json({ error: "Invalid body" }, 400);
 
@@ -1530,6 +1561,8 @@ async function postMorningCheckin(request, env, user) {
     ? null : clampFloat(body.sleepHours, 0, 24);
   const sleepQuality = clampInt(body.sleepQuality, 1, 5);
   const notes = sanitizeText(body.notes, 1000);
+  // Optional morning body-check multi-select (shares the evening allow-list).
+  const morningSymptoms = tagList(body.morningSymptoms, ALLOWED_EVENING_SYMPTOMS);
 
   // Cycle + body-awareness fields (all optional)
   const cycleDay   = body.cycleDay == null || body.cycleDay === "" ? null : clampInt(body.cycleDay, 1, 60);
@@ -1558,10 +1591,10 @@ async function postMorningCheckin(request, env, user) {
     `INSERT INTO daily_logs (
        user_id, log_date,
        morning_mood, morning_energy, morning_pain,
-       morning_sleep_hours, morning_sleep_quality, morning_notes, morning_logged_at,
+       morning_sleep_hours, morning_sleep_quality, morning_notes, morning_symptoms, morning_logged_at,
        cycle_day, cycle_phase, flow, bbt, cervical_mucus, breast_tenderness,
        points_total)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
      ON CONFLICT(user_id, log_date) DO UPDATE SET
        morning_mood          = excluded.morning_mood,
        morning_energy        = excluded.morning_energy,
@@ -1569,6 +1602,7 @@ async function postMorningCheckin(request, env, user) {
        morning_sleep_hours   = excluded.morning_sleep_hours,
        morning_sleep_quality = excluded.morning_sleep_quality,
        morning_notes         = excluded.morning_notes,
+       morning_symptoms      = excluded.morning_symptoms,
        morning_logged_at     = COALESCE(daily_logs.morning_logged_at, excluded.morning_logged_at),
        cycle_day             = COALESCE(excluded.cycle_day,         daily_logs.cycle_day),
        cycle_phase           = COALESCE(excluded.cycle_phase,       daily_logs.cycle_phase),
@@ -1576,11 +1610,11 @@ async function postMorningCheckin(request, env, user) {
        bbt                   = COALESCE(excluded.bbt,               daily_logs.bbt),
        cervical_mucus        = COALESCE(excluded.cervical_mucus,    daily_logs.cervical_mucus),
        breast_tenderness     = COALESCE(excluded.breast_tenderness, daily_logs.breast_tenderness),
-       points_total          = daily_logs.points_total + ?16`
+       points_total          = daily_logs.points_total + ?17`
   ).bind(
     user.id, date,
     mood, energy, pain,
-    sleepHours, sleepQuality, notes, now,
+    sleepHours, sleepQuality, notes, morningSymptoms, now,
     cycleDay, cyclePhase, flow, bbt, mucus, breastTender,
     pointsAwarded
   ).run();
@@ -1593,6 +1627,7 @@ async function postMorningCheckin(request, env, user) {
 
 // --- /api/me/checkin/evening ----------------------------------------------
 async function postEveningCheckin(request, env, user) {
+  await ensureDailyExtras(env);
   const body = await readJsonSafe(request);
   if (!body) return json({ error: "Invalid body" }, 400);
 
@@ -1611,6 +1646,7 @@ async function postEveningCheckin(request, env, user) {
   const intimacy  = oneOf(body.intimacy, ALLOWED_INTIMACY);
   const meds      = sanitizeText(body.medications, 500);
   const evenSyms  = tagList(body.eveningSymptoms, ALLOWED_EVENING_SYMPTOMS);
+  const relief    = tagList(body.relief, ALLOWED_RELIEF);
   const appetite  = oneOf(body.appetite, ALLOWED_APPETITE);
 
   const date = normaliseDate(body.date);
@@ -1633,9 +1669,9 @@ async function postEveningCheckin(request, env, user) {
        user_id, log_date,
        evening_overall, evening_reflection, evening_gratitude, evening_logged_at,
        water_glasses, movement_level, bowel_count, bowel_type, stress_level, intimacy, medications,
-       evening_symptoms, appetite,
+       evening_symptoms, evening_relief, appetite,
        points_total)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
      ON CONFLICT(user_id, log_date) DO UPDATE SET
        evening_overall    = excluded.evening_overall,
        evening_reflection = excluded.evening_reflection,
@@ -1649,13 +1685,14 @@ async function postEveningCheckin(request, env, user) {
        intimacy           = COALESCE(excluded.intimacy,       daily_logs.intimacy),
        medications        = COALESCE(excluded.medications,    daily_logs.medications),
        evening_symptoms   = COALESCE(excluded.evening_symptoms, daily_logs.evening_symptoms),
+       evening_relief     = COALESCE(excluded.evening_relief,   daily_logs.evening_relief),
        appetite           = COALESCE(excluded.appetite,         daily_logs.appetite),
-       points_total       = daily_logs.points_total + ?16`
+       points_total       = daily_logs.points_total + ?17`
   ).bind(
     user.id, date,
     overall, reflection, gratitude, now,
     water, movement, bowelCnt, bowelTyp, stress, intimacy, meds,
-    evenSyms, appetite,
+    evenSyms, relief, appetite,
     pointsAwarded
   ).run();
 
@@ -3731,7 +3768,7 @@ async function getCommunityStats(env, user) {
   const recentActivity = await safeAll(
     "SELECT p.id, p.body, p.created_at, p.is_question, " +
     "       c.slug AS circle_slug, c.name AS circle_name, c.is_official, " +
-    "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.alias AS author_alias " +
+    "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias " +
     "FROM circle_posts p " +
     "JOIN circles c ON c.id = p.circle_id " +
     "LEFT JOIN users u ON u.id = p.user_id " +
@@ -3771,6 +3808,9 @@ async function getCommunityStats(env, user) {
       authorName: p.author_name || p.author_username || "Someone",
       authorUsername: p.author_username || null,
       authorAvatar: p.author_avatar || null,
+      authorAvatarUrl: p.author_avatar_key
+        ? "/api/u/" + encodeURIComponent(p.author_id) + "/avatar"
+        : null,
     })),
   });
 }
@@ -3847,7 +3887,7 @@ async function getCircleDetail(env, user, slug) {
   try {
     posts = await env.DB.prepare(
       "SELECT p.id, p.body, p.is_question, p.created_at, p.user_id, " +
-      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.alias AS author_alias, " +
+      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias, " +
       "       (SELECT COUNT(*) FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.reaction='heart') AS heart_count, " +
       "       (SELECT COUNT(*) FROM circle_replies r WHERE r.post_id=p.id AND r.deleted_at IS NULL) AS reply_count, " +
       "       EXISTS(SELECT 1 FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.user_id=? AND r.reaction='heart') AS i_hearted " +
@@ -3871,6 +3911,9 @@ async function getCircleDetail(env, user, slug) {
       authorId: p.user_id, authorName: p.author_name || p.author_username || "Someone",
       authorUsername: p.author_username || null,
       authorAvatar: p.author_avatar || null,
+      authorAvatarUrl: p.author_avatar_key
+        ? "/api/u/" + encodeURIComponent(p.author_id) + "/avatar"
+        : null,
       heartCount: p.heart_count || 0, replyCount: p.reply_count || 0,
       iHearted: !!p.i_hearted, mine: p.user_id === user.id,
     })),
@@ -3988,7 +4031,7 @@ async function getReplies(env, user, postId) {
   try {
     rows = await env.DB.prepare(
       "SELECT r.id, r.body, r.created_at, r.parent_reply_id, r.user_id, " +
-      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.alias AS author_alias, " +
+      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias, " +
       "       (SELECT COUNT(*) FROM circle_reactions x WHERE x.target_type='reply' AND x.target_id=r.id AND x.reaction='heart') AS heart_count, " +
       "       EXISTS(SELECT 1 FROM circle_reactions x WHERE x.target_type='reply' AND x.target_id=r.id AND x.user_id=? AND x.reaction='heart') AS i_hearted " +
       "FROM circle_replies r LEFT JOIN users u ON u.id = r.user_id " +
@@ -4002,6 +4045,9 @@ async function getReplies(env, user, postId) {
       authorId: r.user_id, authorName: r.author_name || r.author_username || "Someone",
       authorUsername: r.author_username || null,
       authorAvatar: r.author_avatar || null,
+      authorAvatarUrl: r.author_avatar_key
+        ? "/api/u/" + encodeURIComponent(r.author_id) + "/avatar"
+        : null,
       heartCount: r.heart_count || 0, iHearted: !!r.i_hearted,
       mine: r.user_id === user.id,
     })),
@@ -4083,6 +4129,7 @@ async function ensureProfileSchema(env) {
   const tries = [
     "ALTER TABLE users ADD COLUMN alias TEXT",
     "ALTER TABLE users ADD COLUMN avatar TEXT",
+    "ALTER TABLE users ADD COLUMN avatar_image_key TEXT",
     "ALTER TABLE users ADD COLUMN bio TEXT",
     "CREATE TABLE IF NOT EXISTS friendships (" +
     "  user_id_a    TEXT    NOT NULL," +
@@ -4121,6 +4168,9 @@ function profileResponse(row, extras = {}) {
     alias:       row.alias || null,
     name:        publicName(row),
     avatar:      row.avatar || null,
+    avatarUrl:   row.avatar_image_key
+      ? `/api/u/${encodeURIComponent(row.id)}/avatar`
+      : null,
     bio:         row.bio || null,
     createdAt:   row.created_at || null,
     ...extras,
@@ -4215,7 +4265,7 @@ async function deleteMyAccount(request, env, user) {
 async function getMyProfile(env, user) {
   await ensureProfileSchema(env);
   const row = await env.DB.prepare(
-    "SELECT id, username, display_name, alias, avatar, bio, created_at FROM users WHERE id = ?"
+    "SELECT id, username, display_name, alias, avatar, avatar_image_key, bio, created_at FROM users WHERE id = ?"
   ).bind(user.id).first().catch(() => null);
   if (!row) return json({ error: "Profile not found" }, 404);
 
@@ -5254,6 +5304,7 @@ async function listRecipes(request, env, user) {
 
   const rows = await env.DB.prepare(
     "SELECT r.*, u.display_name AS author_display, u.username AS author_username, " +
+    "  u.avatar_image_key AS author_avatar_key, u.avatar AS author_avatar, " +
     "  (SELECT COUNT(*) FROM recipe_reactions WHERE recipe_id = r.id AND reaction='love') AS loves, " +
     "  (SELECT COUNT(*) FROM recipe_reactions WHERE recipe_id = r.id AND reaction='down') AS downs, " +
     "  (SELECT reaction FROM recipe_reactions WHERE recipe_id = r.id AND user_id = ?) AS mine " +
@@ -5267,6 +5318,10 @@ async function listRecipes(request, env, user) {
       servings: r.servings, prepMinutes: r.prep_minutes, cookMinutes: r.cook_minutes,
       createdAt: r.created_at,
       author: r.author_display || r.author_username || "Member",
+      authorAvatar: r.author_avatar || null,
+      authorAvatarUrl: r.author_avatar_key
+        ? "/api/u/" + encodeURIComponent(r.user_id) + "/avatar"
+        : null,
       authorUsername: r.author_username,
       isMine: r.user_id === user.id,
       loves: r.loves || 0, downs: r.downs || 0,
@@ -5278,7 +5333,8 @@ async function listRecipes(request, env, user) {
 async function getRecipe(env, user, id) {
   await ensureRecipeSchema(env);
   const r = await env.DB.prepare(
-    "SELECT r.*, u.display_name AS author_display, u.username AS author_username " +
+    "SELECT r.*, u.display_name AS author_display, u.username AS author_username, " +
+    "  u.avatar_image_key AS author_avatar_key, u.avatar AS author_avatar " +
     "FROM recipes r LEFT JOIN users u ON u.id = r.user_id " +
     "WHERE r.id = ? AND r.is_active = 1"
   ).bind(id).first();
@@ -5316,6 +5372,10 @@ async function getRecipe(env, user, id) {
       body: r.body, servings: r.servings, prepMinutes: r.prep_minutes,
       cookMinutes: r.cook_minutes, createdAt: r.created_at,
       author: r.author_display || r.author_username || "Member",
+      authorAvatar: r.author_avatar || null,
+      authorAvatarUrl: r.author_avatar_key
+        ? "/api/u/" + encodeURIComponent(r.user_id) + "/avatar"
+        : null,
       authorUsername: r.author_username,
       isMine: r.user_id === user.id,
       ingredients: (ings.results || []).map((i) => ({
@@ -6569,4 +6629,161 @@ function sanitizeForHtml(s) {
   return String(s ?? "").replace(/[<>&"']/g, (c) => ({
     "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
   })[c]);
+}
+
+// =============================================================================
+// DAILY LOG MIGRATIONS — best-effort ADD COLUMNs for the richer check-in
+// flow (morning + midday body-check tags, evening relief tags). SQLite has
+// no IF NOT EXISTS for ADD COLUMN so we swallow the duplicate-column errors.
+// =============================================================================
+let _dailyExtrasChecked = false;
+async function ensureDailyExtras(env) {
+  if (_dailyExtrasChecked) return;
+  _dailyExtrasChecked = true;
+  const stmts = [
+    "ALTER TABLE daily_logs ADD COLUMN morning_symptoms TEXT",
+    "ALTER TABLE daily_logs ADD COLUMN afternoon_logged_at INTEGER",
+    "ALTER TABLE daily_logs ADD COLUMN afternoon_mood INTEGER",
+    "ALTER TABLE daily_logs ADD COLUMN afternoon_energy INTEGER",
+    "ALTER TABLE daily_logs ADD COLUMN afternoon_pain INTEGER",
+    "ALTER TABLE daily_logs ADD COLUMN afternoon_symptoms TEXT",
+    "ALTER TABLE daily_logs ADD COLUMN afternoon_notes TEXT",
+    "ALTER TABLE daily_logs ADD COLUMN evening_relief TEXT",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+async function postAfternoonCheckin(request, env, user) {
+  await ensureDailyExtras(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+
+  const mood = clampInt(body.mood, 1, 5);
+  const energy = clampInt(body.energy, 1, 5);
+  const pain = clampInt(body.pain, 1, 5);
+  if (mood == null || energy == null || pain == null) {
+    return json({ error: "mood, energy and pain are required (1–5)" }, 400);
+  }
+  const symptoms = tagList(body.afternoonSymptoms, ALLOWED_EVENING_SYMPTOMS);
+  const notes    = sanitizeText(body.notes, 1000);
+
+  const date = normaliseDate(body.date);
+  const now = nowSec();
+
+  const existing = await env.DB
+    .prepare("SELECT afternoon_logged_at FROM daily_logs WHERE user_id = ? AND log_date = ?")
+    .bind(user.id, date).first().catch(() => null);
+
+  const firstTime = !existing?.afternoon_logged_at;
+  const pointsAwarded = firstTime ? 10 : 0;
+
+  await env.DB.prepare(
+    `INSERT INTO daily_logs (
+       user_id, log_date,
+       afternoon_mood, afternoon_energy, afternoon_pain,
+       afternoon_symptoms, afternoon_notes, afternoon_logged_at,
+       points_total)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+     ON CONFLICT(user_id, log_date) DO UPDATE SET
+       afternoon_mood       = excluded.afternoon_mood,
+       afternoon_energy     = excluded.afternoon_energy,
+       afternoon_pain       = excluded.afternoon_pain,
+       afternoon_symptoms   = excluded.afternoon_symptoms,
+       afternoon_notes      = excluded.afternoon_notes,
+       afternoon_logged_at  = COALESCE(daily_logs.afternoon_logged_at, excluded.afternoon_logged_at),
+       points_total         = daily_logs.points_total + ?9`
+  ).bind(
+    user.id, date,
+    mood, energy, pain,
+    symptoms, notes, now,
+    pointsAwarded
+  ).run();
+
+  const pet = await awardXp(env, user.id, pointsAwarded, date);
+  return json({ ok: true, pointsAwarded, pet });
+}
+
+// =============================================================================
+// AVATAR IMAGES — uploaded portraits in the same R2 bucket the documents
+// feature uses, namespaced under users/<id>/avatar.<ext>. GET is public so
+// embedding in posts works; POST/DELETE require the owner's session.
+// =============================================================================
+const ALLOWED_AVATAR_TYPES = new Set([
+  "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif",
+]);
+const MAX_AVATAR_BYTES = 4 * 1024 * 1024;
+const AVATAR_EXT_FOR = {
+  "image/png":"png","image/jpeg":"jpg","image/jpg":"jpg","image/webp":"webp","image/gif":"gif",
+};
+
+async function uploadAvatar(request, env, user) {
+  if (!env.DOCS) return json({ error: "Image storage not configured" }, 503);
+  const ct = request.headers.get("content-type") || "";
+  if (!ct.startsWith("multipart/form-data")) {
+    return json({ error: "Upload must be multipart/form-data" }, 400);
+  }
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!(file instanceof File)) return json({ error: "Missing file" }, 400);
+  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+    return json({ error: "Image must be PNG, JPG, WEBP or GIF." }, 400);
+  }
+  if (file.size <= 0 || file.size > MAX_AVATAR_BYTES) {
+    return json({ error: `Image too large — max ${Math.round(MAX_AVATAR_BYTES / 1024 / 1024)} MB.` }, 413);
+  }
+
+  await ensureProfileSchema(env);
+  const ext = AVATAR_EXT_FOR[file.type] || "jpg";
+  const key = `users/${user.id}/avatar.${ext}`;
+  const buf = await file.arrayBuffer();
+  await env.DOCS.put(key, buf, {
+    httpMetadata: { contentType: file.type, cacheControl: "public, max-age=86400" },
+  });
+
+  // Clean up the old image if its extension is different.
+  try {
+    const existing = await env.DB.prepare(
+      "SELECT avatar_image_key FROM users WHERE id = ?"
+    ).bind(user.id).first();
+    if (existing?.avatar_image_key && existing.avatar_image_key !== key) {
+      await env.DOCS.delete(existing.avatar_image_key);
+    }
+  } catch {}
+
+  await env.DB.prepare(
+    "UPDATE users SET avatar_image_key = ? WHERE id = ?"
+  ).bind(key, user.id).run();
+
+  return json({ ok: true, avatarUrl: `/api/u/${encodeURIComponent(user.id)}/avatar?v=${nowSec()}` });
+}
+
+async function deleteAvatar(env, user) {
+  await ensureProfileSchema(env);
+  try {
+    const row = await env.DB.prepare(
+      "SELECT avatar_image_key FROM users WHERE id = ?"
+    ).bind(user.id).first();
+    if (row?.avatar_image_key && env.DOCS) {
+      await env.DOCS.delete(row.avatar_image_key).catch(() => {});
+    }
+  } catch {}
+  await env.DB.prepare(
+    "UPDATE users SET avatar_image_key = NULL WHERE id = ?"
+  ).bind(user.id).run();
+  return json({ ok: true });
+}
+
+async function serveAvatar(env, userId) {
+  if (!env.DOCS) return new Response("no storage", { status: 404 });
+  await ensureProfileSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT avatar_image_key FROM users WHERE id = ?"
+  ).bind(userId).first().catch(() => null);
+  if (!row?.avatar_image_key) return new Response("not found", { status: 404 });
+  const obj = await env.DOCS.get(row.avatar_image_key);
+  if (!obj) return new Response("not found", { status: 404 });
+  const headers = new Headers();
+  headers.set("content-type", obj.httpMetadata?.contentType || "image/jpeg");
+  headers.set("cache-control", "public, max-age=3600");
+  return new Response(obj.body, { headers });
 }
