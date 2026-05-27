@@ -402,16 +402,16 @@
 
 /* =====================================================================
    Recipe detail modal hero + owner actions
+   - Hero sits inline as a normal rounded image at the top of the modal
+     body. Used to bleed to the modal edges via negative margin, but that
+     trapped the owner "Edit recipe" button above the modal frame on
+     certain content shapes. Inline + bordered is more predictable.
    ===================================================================== */
-.recipe-detail-card{padding-top:0;overflow:hidden}
 .recipe-detail-hero{
-  width:calc(100% + 56px);margin:-28px -28px 0;
-  aspect-ratio:21/9;
+  width:100%;aspect-ratio:21/9;
   background-size:cover;background-position:center;background-color:#fff5f8;
-  border-bottom:1px solid #ffeaf2;
-}
-.recipe-detail-owner-actions{
-  display:flex;justify-content:flex-end;gap:8px;margin-bottom:6px;
+  border-radius:14px;border:1px solid #ffeaf2;
+  margin-bottom:16px;
 }
 
 /* =====================================================================
@@ -561,26 +561,9 @@
 }
 .avatar-upload-actions .btn-soft:hover{background:#ffeaf2;border-color:#ff4e8a;transform:translateY(-1px)}
 
-/* Owner edit button now sits inline at the top of the detail card,
-   right-aligned with a margin so it doesn't look bolted on. */
-.recipe-detail-owner-actions{
-  position:absolute;top:14px;right:60px;z-index:2;
-  display:flex;gap:8px;
-}
-.recipe-detail-owner-actions .btn{
-  background:rgba(255,255,255,.95);color:#ff4e8a;
-  border:1.5px solid #ffd6e0;
-  padding:8px 14px;font-size:12px;font-weight:700;
-  border-radius:999px;cursor:pointer;font-family:inherit;line-height:1;
-  display:inline-flex;align-items:center;gap:6px;
-  box-shadow:0 6px 14px rgba(58,29,43,.18);
-  backdrop-filter:blur(4px);
-  transition:background .12s, color .12s, border-color .12s, transform .12s;
-}
-.recipe-detail-owner-actions .btn:hover{
-  background:#ff4e8a;color:#fff;border-color:#ff4e8a;transform:translateY(-1px);
-}
-.recipe-detail-card{position:relative}
+/* Detail modal stays as a normal modal-card — no fancy positioning needed
+   now that the owner CTA is inline. The default .modal-card already has
+   position:relative for the close button. */
 
 /* Method "Clear all" and ingredient editor buttons — force the brand
    pink outline. The community.css .btn-soft already does most of this;
@@ -621,17 +604,10 @@
   border-radius:10px;border:2px solid #fff;
 }
 
-/* Hero wrap so the owner edit CTA can float over the photo */
-.recipe-detail-hero-wrap{
-  position:relative;
-  margin:-30px -30px 0;
-}
-.recipe-detail-hero-wrap .recipe-detail-hero{margin:0}
-.recipe-detail-hero-wrap .recipe-detail-owner-actions{
-  position:absolute;top:14px;right:14px;
-}
+/* Inline owner-actions container — sits at the top of the modal body,
+   right-aligned, with space below before the hero or eyebrow starts. */
 .recipe-detail-owner-inline{
-  display:flex;justify-content:flex-end;margin-bottom:4px;
+  display:flex;justify-content:flex-end;margin:0 0 12px;
 }
 .recipe-detail-owner-inline .recipe-edit-cta{
   background:#fff;border:1.5px solid #ffd6e0;color:#ff4e8a;
