@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=5" />
-  <link rel="stylesheet" href="/meds.css?v=5" />
+  <link rel="stylesheet" href="/meds.css?v=6" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -240,6 +240,30 @@
           </form>
         </div>
       </div>
+      <!-- Thumbs-down comment modal: forces a useful comment before saving. -->
+      <div class="modal" id="med-down-modal" aria-hidden="true" role="dialog">
+        <div class="modal-backdrop" data-close-med-down></div>
+        <div class="modal-card">
+          <button class="modal-close" type="button" data-close-med-down aria-label="Close">×</button>
+          <header class="modal-h">
+            <span class="modal-emoji">👎</span>
+            <h3>What didn't work?</h3>
+            <p>Thumbs-down comments go to the moderation queue and are shown publicly on this medication. Be useful — what happened, what would you change, what should others know? Drive-by gripes get rejected.</p>
+          </header>
+          <form id="med-down-form" novalidate>
+            <input type="hidden" name="medName" />
+            <label class="field"><span>Your feedback</span>
+              <textarea name="comment" rows="4" minlength="10" maxlength="800" required placeholder="e.g. Took it for 3 months, made my headaches worse and didn't help cycle pain."></textarea>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Submit feedback</button>
+              <button type="button" class="btn-soft" data-close-med-down>Cancel</button>
+              <p class="form-status" id="med-down-status"></p>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- Quick-schedule chooser: pops when the user taps an empty slot
            in the weekly timetable and already has medications. -->
       <div class="modal" id="quick-sched-modal" aria-hidden="true" role="dialog">
@@ -279,7 +303,7 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1" defer></script>
-  <script src="/med-catalog.js?v=2" defer></script>
-  <script src="/meds.js?v=5" defer></script>
+  <script src="/med-catalog.js?v=3" defer></script>
+  <script src="/meds.js?v=6" defer></script>
 </body>
 </html>

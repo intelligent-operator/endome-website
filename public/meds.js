@@ -89,6 +89,7 @@ console.info("EndoMe meds build v3");
           <button class="react-chip down ${mine === "down" ? "on" : ""}" data-react="down" data-name="${escapeHtml(m.name)}" aria-label="Thumbs down">👎 <span>${c.downs}</span></button>
         </div>
       </div>
+      ${downCommentsHtml(c.downComments)}
       <div class="med-card-foot">
         <span class="med-last">Last taken: ${lastTaken}</span>
         <div class="med-card-actions">
@@ -98,6 +99,21 @@ console.info("EndoMe meds build v3");
         </div>
       </div>
     </li>`;
+  }
+
+  function downCommentsHtml(comments) {
+    if (!comments || !comments.length) return "";
+    const top = comments.slice(0, 3);
+    return `<details class="med-down-feedback">
+      <summary>👎 ${comments.length} ${comments.length === 1 ? "comment" : "comments"} from the community</summary>
+      <ul class="med-down-list">
+        ${top.map((c) => `<li>
+          <span class="med-down-text">"${escapeHtml(c.comment)}"</span>
+          <span class="med-down-date">${relTime(c.createdAt)}</span>
+        </li>`).join("")}
+        ${comments.length > top.length ? `<li class="med-down-more">+ ${comments.length - top.length} more</li>` : ""}
+      </ul>
+    </details>`;
   }
 
   function schedSummary(schedules) {
@@ -325,6 +341,67 @@ console.info("EndoMe meds build v3");
     }
   }
 
+  // --- Reaction helpers --------------------------------------------------
+  async function sendMedReaction(name, reaction, comment) {
+    try {
+      const res = await fetchJson("/api/me/medications/react", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, reaction, comment }),
+      });
+      // Update local state for any cards using this med name.
+      const target = meds.find((m) => m.name === name);
+      if (target) {
+        target.community = res.stats;
+        target.myReaction = res.reaction;
+        renderMeds();
+      }
+      applyCommunityToGlossary({ [medKey(name)]: { stats: res.stats, mine: res.reaction } });
+      await loadTopPicks();
+      if (reaction === "down") toast("Feedback sent to moderation", "ok");
+      else if (reaction === "love") toast("Loved ❤", "ok");
+      else toast("Vote cleared", "ok");
+    } catch (err) {
+      if (reaction === "down") {
+        openMedDownComment(name, err.message);
+      } else {
+        toast(err.message || "Couldn't save reaction", "err");
+      }
+    }
+  }
+
+  function openMedDownComment(name, errMsg) {
+    const modal = document.getElementById("med-down-modal");
+    const form = document.getElementById("med-down-form");
+    form.reset();
+    form.medName.value = name;
+    const status = document.getElementById("med-down-status");
+    status.textContent = errMsg || "";
+    status.className = errMsg ? "form-status err" : "form-status";
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+  }
+
+  document.getElementById("med-down-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const name = form.medName.value;
+    const comment = form.comment.value.trim();
+    const status = document.getElementById("med-down-status");
+    status.textContent = ""; status.className = "form-status";
+    if (comment.length < 10) {
+      status.textContent = "At least 10 characters — be useful."; status.className = "form-status err"; return;
+    }
+    try {
+      await sendMedReaction(name, "down", comment);
+      const modal = document.getElementById("med-down-modal");
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    } catch (err) {
+      status.textContent = err.message || "Couldn't save."; status.className = "form-status err";
+    }
+  });
+
   // --- Top picks sidebar -------------------------------------------------
   async function loadTopPicks() {
     try {
@@ -500,6 +577,13 @@ console.info("EndoMe meds build v3");
       m.setAttribute("aria-hidden", "true");
       return;
     }
+    if (e.target.closest("[data-close-med-down]")) {
+      e.preventDefault();
+      const m = document.getElementById("med-down-modal");
+      m.classList.remove("open");
+      m.setAttribute("aria-hidden", "true");
+      return;
+    }
     const log = e.target.closest("[data-log]");
     if (log) { openLogModal(+log.dataset.log); return; }
     const edit = e.target.closest("[data-edit]");
@@ -523,25 +607,11 @@ console.info("EndoMe meds build v3");
       e.preventDefault();
       const name = react.dataset.name;
       const wanted = react.dataset.react;
-      // If already on, clear; otherwise switch to the chosen reaction.
-      const reaction = react.classList.contains("on") ? null : wanted;
-      try {
-        const res = await fetchJson("/api/me/medications/react", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name, reaction }),
-        });
-        // Update local state in place
-        const target = meds.find((m) => m.name === name);
-        if (target) {
-          target.community = res.stats;
-          target.myReaction = res.reaction;
-          renderMeds();
-        }
-        // Also refresh the glossary item if it's expanded
-        applyCommunityToGlossary({ [medKey(name)]: { stats: res.stats, mine: res.reaction } });
-        await loadTopPicks();
-      } catch (err) { toast(err.message || "Couldn't save reaction", "err"); }
+      const already = react.classList.contains("on");
+      // Thumbs-down switching ON requires a comment via the modal.
+      if (wanted === "down" && !already) { openMedDownComment(name); return; }
+      const reaction = already ? null : wanted;
+      await sendMedReaction(name, reaction);
       return;
     }
     const greact = e.target.closest("[data-greact]");
@@ -549,19 +619,10 @@ console.info("EndoMe meds build v3");
       e.preventDefault();
       const name = greact.dataset.name;
       const wanted = greact.dataset.greact;
-      const reaction = greact.classList.contains("on") ? null : wanted;
-      try {
-        const res = await fetchJson("/api/me/medications/react", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name, reaction }),
-        });
-        applyCommunityToGlossary({ [medKey(name)]: { stats: res.stats, mine: res.reaction } });
-        // If user owns this med, also refresh card stats
-        const target = meds.find((m) => m.name === name);
-        if (target) { target.community = res.stats; target.myReaction = res.reaction; renderMeds(); }
-        await loadTopPicks();
-      } catch (err) { toast(err.message || "Couldn't save", "err"); }
+      const already = greact.classList.contains("on");
+      if (wanted === "down" && !already) { openMedDownComment(name); return; }
+      const reaction = already ? null : wanted;
+      await sendMedReaction(name, reaction);
       return;
     }
   });
@@ -805,7 +866,8 @@ console.info("EndoMe meds build v3");
       <div class="med-react">
         <button class="react-chip love ${mine === "love" ? "on" : ""}" data-greact="love" data-name="${escapeHtml(name)}" aria-label="Love this">❤ <span>${stats.loves || 0}</span></button>
         <button class="react-chip down ${mine === "down" ? "on" : ""}" data-greact="down" data-name="${escapeHtml(name)}" aria-label="Thumbs down">👎 <span>${stats.downs || 0}</span></button>
-      </div>`;
+      </div>
+      ${downCommentsHtml(stats.downComments)}`;
   }
 
   function glossaryItem(c) {

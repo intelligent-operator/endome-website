@@ -4464,10 +4464,27 @@ async function ensureMedSchema(env) {
     "  user_id TEXT NOT NULL," +
     "  med_key TEXT NOT NULL," +              // lower-cased name for grouping
     "  reaction TEXT NOT NULL," +              // 'love' | 'down'
+    "  comment TEXT," +                        // required for 'down'
     "  updated_at INTEGER NOT NULL," +
     "  UNIQUE(user_id, med_key)" +
     ")",
+    // Best-effort ALTER for installs that already had med_reactions without
+    // the comment column. The CREATE above no-ops if the table exists.
+    "ALTER TABLE med_reactions ADD COLUMN comment TEXT",
     "CREATE INDEX IF NOT EXISTS idx_medreact_key ON med_reactions(med_key, reaction)",
+    // Moderation queue for medication thumbs-down comments. Same pattern as
+    // recipe_mod_queue: every 👎 must come with a useful comment, which lands
+    // here for human review and is shown alongside the medication.
+    "CREATE TABLE IF NOT EXISTS med_mod_queue (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  med_key TEXT NOT NULL," +
+    "  user_id TEXT NOT NULL," +
+    "  comment TEXT NOT NULL," +
+    "  status TEXT NOT NULL DEFAULT 'pending'," +
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_medmod_key ON med_mod_queue(med_key, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_medmod_status ON med_mod_queue(status, created_at DESC)",
     // Recurring schedules: 0+ rows per medication. Each row is a single
     // weekly slot (days bitmask + HH:MM local time).
     "CREATE TABLE IF NOT EXISTS medication_schedules (" +
@@ -4679,7 +4696,7 @@ async function getMedCommunityStats(env, keys) {
   if (!keys.length) return {};
   await ensureMedSchema(env);
   const out = {};
-  for (const k of keys) out[k] = { loves: 0, downs: 0, users: 0 };
+  for (const k of keys) out[k] = { loves: 0, downs: 0, users: 0, downComments: [] };
 
   const ph = keys.map(() => "?").join(",");
   // Reaction counts
@@ -4692,6 +4709,21 @@ async function getMedCommunityStats(env, keys) {
       const bucket = out[r.med_key]; if (!bucket) continue;
       if (r.reaction === "love") bucket.loves = r.n;
       else if (r.reaction === "down") bucket.downs = r.n;
+    }
+  } catch {}
+
+  // Down-comments — anonymous in payload, capped per med for the UI thread.
+  try {
+    const comments = await env.DB.prepare(
+      `SELECT med_key, comment, updated_at FROM med_reactions
+       WHERE med_key IN (${ph}) AND reaction='down' AND comment IS NOT NULL
+       ORDER BY updated_at DESC LIMIT 200`
+    ).bind(...keys).all();
+    for (const r of (comments.results || [])) {
+      const bucket = out[r.med_key]; if (!bucket) continue;
+      if (bucket.downComments.length < 10) {
+        bucket.downComments.push({ comment: r.comment, createdAt: r.updated_at });
+      }
     }
   } catch {}
 
@@ -4744,24 +4776,60 @@ async function postMedReaction(request, env, user) {
     await env.DB.prepare(
       "DELETE FROM med_reactions WHERE user_id = ? AND med_key = ?"
     ).bind(user.id, key).run();
-  } else {
-    await env.DB.prepare(
-      "INSERT INTO med_reactions (user_id, med_key, reaction, updated_at) VALUES (?, ?, ?, ?) " +
-      "ON CONFLICT(user_id, med_key) DO UPDATE SET reaction = excluded.reaction, updated_at = excluded.updated_at"
-    ).bind(user.id, key, reaction, nowSec()).run();
+    const stats = (await getMedCommunityStats(env, [key]))[key] || { loves: 0, downs: 0, users: 0 };
+    return json({ ok: true, key, reaction: null, stats });
+  }
+
+  let comment = null;
+  if (reaction === "down") {
+    // Thumbs-down requires a useful comment. Drive-by negativity gets
+    // bounced; meaningful feedback (≥10 chars) is saved and copied to the
+    // moderation queue so admins can review borderline language.
+    comment = sanitizeText(body.comment, 800);
+    if (!comment || comment.length < 10) {
+      return json({
+        error: "Add a comment (at least 10 characters) explaining why this didn't work. Constructive feedback only — it goes to the moderation queue.",
+      }, 400);
+    }
+  }
+
+  await env.DB.prepare(
+    "INSERT INTO med_reactions (user_id, med_key, reaction, comment, updated_at) VALUES (?, ?, ?, ?, ?) " +
+    "ON CONFLICT(user_id, med_key) DO UPDATE SET reaction = excluded.reaction, comment = excluded.comment, updated_at = excluded.updated_at"
+  ).bind(user.id, key, reaction, comment, nowSec()).run();
+
+  if (reaction === "down" && comment) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO med_mod_queue (med_key, user_id, comment, status, created_at) " +
+        "VALUES (?, ?, ?, 'pending', ?)"
+      ).bind(key, user.id, comment, nowSec()).run();
+    } catch {}
   }
 
   const stats = (await getMedCommunityStats(env, [key]))[key] || { loves: 0, downs: 0, users: 0 };
-  return json({ ok: true, key, reaction, stats });
+  // Bubble the public down-comment list back so the UI can refresh.
+  let downComments = [];
+  try {
+    const rows = await env.DB.prepare(
+      "SELECT comment, updated_at FROM med_reactions " +
+      "WHERE med_key = ? AND reaction='down' AND comment IS NOT NULL " +
+      "ORDER BY updated_at DESC LIMIT 20"
+    ).bind(key).all();
+    downComments = (rows.results || []).map((r) => ({ comment: r.comment, createdAt: r.updated_at }));
+  } catch {}
+  return json({ ok: true, key, reaction, comment, stats, downComments });
 }
 
-// Top-ranked picks for the right sidebar. Ranked by (loves - downs) with a
-// minimum sample so a single user can't dominate, falling back to most-used.
+// Top-ranked picks for the right sidebar. Ranked by ❤ count: the medication
+// with the most loves wins, even if it's only one. Vote-only entries (loved
+// from the glossary by someone who doesn't take it) and usage-only entries
+// (everyone takes it but no one's voted yet) both surface.
 async function getMedTopPicks(env) {
   await ensureMedSchema(env);
   const out = { medication: null, vitamin: null };
 
-  // 1) Aggregate vote scores across med_reactions
+  // 1) Aggregate vote counts per med name.
   let voteRows = { results: [] };
   try {
     voteRows = await env.DB.prepare(
@@ -4772,7 +4840,7 @@ async function getMedTopPicks(env) {
     ).all();
   } catch {}
 
-  // 2) Pull usage counts grouped by lower(name) + kind
+  // 2) Pull usage counts (and the original-cased name + kind) per med name.
   let usageRows = { results: [] };
   try {
     usageRows = await env.DB.prepare(
@@ -4782,38 +4850,65 @@ async function getMedTopPicks(env) {
     ).all();
   } catch {}
 
-  const voteMap = new Map();
-  for (const r of (voteRows.results || [])) voteMap.set(r.med_key, { loves: +r.loves || 0, downs: +r.downs || 0 });
-
-  const ranked = (usageRows.results || []).map((r) => {
-    const v = voteMap.get(r.med_key) || { loves: 0, downs: 0 };
-    const score = v.loves - v.downs;
-    return {
+  const byKey = new Map();
+  for (const r of (usageRows.results || [])) {
+    byKey.set(r.med_key, {
       key: r.med_key,
       name: r.display_name,
       kind: r.kind || "medication",
       users: r.users || 0,
-      loves: v.loves,
-      downs: v.downs,
-      score,
-    };
-  });
+      loves: 0, downs: 0,
+    });
+  }
+  for (const v of (voteRows.results || [])) {
+    const existing = byKey.get(v.med_key);
+    if (existing) {
+      existing.loves = +v.loves || 0;
+      existing.downs = +v.downs || 0;
+    } else {
+      // Vote came from the glossary on something nobody is taking yet — still
+      // worth surfacing. We don't know the canonical kind, so fall back to
+      // looking it up in the catalog payload via a guess; otherwise classify
+      // as 'medication' and rely on the catalog client-side for the label.
+      byKey.set(v.med_key, {
+        key: v.med_key,
+        name: prettyMedName(v.med_key),
+        kind: "medication",
+        users: 0,
+        loves: +v.loves || 0,
+        downs: +v.downs || 0,
+      });
+    }
+  }
 
   function pick(kinds) {
-    const pool = ranked.filter((r) => kinds.includes(r.kind));
-    if (!pool.length) return null;
-    pool.sort((a, b) => {
-      // Score first, then usage, then alphabetical for determinism.
-      if (b.score !== a.score) return b.score - a.score;
+    const pool = [...byKey.values()].filter((r) => kinds.includes(r.kind));
+    // Drop entries with zero engagement entirely so the empty sidebar copy
+    // shows instead of an arbitrary med.
+    const ranked = pool.filter((r) => r.loves > 0 || r.users > 0);
+    if (!ranked.length) return null;
+    ranked.sort((a, b) => {
+      // Highest love count wins first — that's the "high score".
+      if (b.loves !== a.loves) return b.loves - a.loves;
+      // Then most-used as tiebreaker.
       if (b.users !== a.users) return b.users - a.users;
+      // Fewer downs is better.
+      if (a.downs !== b.downs) return a.downs - b.downs;
       return a.name.localeCompare(b.name);
     });
-    return pool[0];
+    return ranked[0];
   }
 
   out.medication = pick(["medication"]);
   out.vitamin    = pick(["vitamin", "supplement", "herbal"]);
   return json(out);
+}
+
+// Best-effort title casing for a med name that we only have lower-cased.
+function prettyMedName(key) {
+  return String(key || "").split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 // =============================================================================
