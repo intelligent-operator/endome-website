@@ -418,9 +418,13 @@ console.info("EndoMe recipes build v1");
     paintMethodSteps();
     paintPhotoPreview(recipe?.imageUrl || null);
 
-    // Hydrate form fields when editing.
+    // Hydrate form fields when editing. The hidden field is named
+    // "recipeId" — never "id" — because `form.id` is the form element's own
+    // DOM property (the form's id attribute), not the named input. A field
+    // called "id" silently no-ops on assignment and gives us a confusing
+    // "edit is broken" experience.
     if (recipe) {
-      form.id.value = recipe.id;
+      form.recipeId.value = recipe.id;
       form.title.value = recipe.title || "";
       form.category.value = recipe.category || "other";
       form.summary.value = recipe.summary || "";
@@ -428,7 +432,7 @@ console.info("EndoMe recipes build v1");
       form.prepMinutes.value = recipe.prepMinutes ?? "";
       form.cookMinutes.value = recipe.cookMinutes ?? "";
     } else {
-      form.id.value = "";
+      form.recipeId.value = "";
     }
 
     document.querySelector("#recipe-modal .modal-h h3").textContent =
