@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=5" />
-  <link rel="stylesheet" href="/recipes.css?v=1" />
+  <link rel="stylesheet" href="/recipes.css?v=2" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -132,21 +132,33 @@
         <label class="field"><span>One-line summary <em>(optional)</em></span>
           <input type="text" name="summary" maxlength="200" placeholder="A short pitch — what makes it worth trying" />
         </label>
-        <div class="field-grid-3">
-          <label class="field"><span>Servings</span>
-            <input type="number" name="servings" min="1" max="30" placeholder="e.g. 2" />
+        <div class="field-grid-3 stepper-grid">
+          <label class="field stepper-field"><span>Servings</span>
+            <div class="stepper">
+              <button type="button" class="stepper-btn" data-step="servings" data-delta="-1" aria-label="Decrease">−</button>
+              <input type="number" name="servings" min="1" max="30" placeholder="2" />
+              <button type="button" class="stepper-btn" data-step="servings" data-delta="1" aria-label="Increase">+</button>
+            </div>
           </label>
-          <label class="field"><span>Prep (min)</span>
-            <input type="number" name="prepMinutes" min="0" max="600" placeholder="e.g. 10" />
+          <label class="field stepper-field"><span>Prep (min)</span>
+            <div class="stepper">
+              <button type="button" class="stepper-btn" data-step="prepMinutes" data-delta="-5" aria-label="Decrease">−</button>
+              <input type="number" name="prepMinutes" min="0" max="600" placeholder="10" />
+              <button type="button" class="stepper-btn" data-step="prepMinutes" data-delta="5" aria-label="Increase">+</button>
+            </div>
           </label>
-          <label class="field"><span>Cook (min)</span>
-            <input type="number" name="cookMinutes" min="0" max="600" placeholder="e.g. 20" />
+          <label class="field stepper-field"><span>Cook (min)</span>
+            <div class="stepper">
+              <button type="button" class="stepper-btn" data-step="cookMinutes" data-delta="-5" aria-label="Decrease">−</button>
+              <input type="number" name="cookMinutes" min="0" max="600" placeholder="20" />
+              <button type="button" class="stepper-btn" data-step="cookMinutes" data-delta="5" aria-label="Increase">+</button>
+            </div>
           </label>
         </div>
 
         <fieldset class="ingredient-editor">
           <legend>Ingredients</legend>
-          <p class="ingredient-hint">Search the food library or type a new food. Add a quantity and unit if it's measured — leave blank for things like "to taste".</p>
+          <p class="ingredient-hint">Search the food library or type a new food. Quantity accepts <strong>fractions too</strong> — type <code>1/4</code>, <code>1 1/2</code>, or tap the fraction chips. Press Enter to add and keep going.</p>
           <ul class="ingredient-list" id="ingredient-list">
             <li class="ingredient-empty">No ingredients yet. Add the first one below.</li>
           </ul>
@@ -156,7 +168,7 @@
                 <input type="text" id="ingredient-name" placeholder="Food (e.g. Chicken breast)" autocomplete="off" maxlength="120" />
                 <ul class="food-autocomplete" id="food-autocomplete" hidden></ul>
               </div>
-              <input type="number" id="ingredient-qty" min="0" max="9999" step="0.1" placeholder="Qty" />
+              <input type="text" id="ingredient-qty" inputmode="text" placeholder="Qty (1, 1/4, 1 1/2…)" maxlength="20" />
               <select id="ingredient-unit">
                 <option value="">unit</option>
                 <option value="g">g</option>
@@ -174,14 +186,36 @@
               </select>
               <button type="button" class="btn btn-primary small" id="ingredient-add-btn">Add</button>
             </div>
+            <div class="qty-quick-row" id="qty-quick-row" aria-label="Quick fraction chips">
+              <button type="button" class="qty-chip" data-qty="1/4">¼</button>
+              <button type="button" class="qty-chip" data-qty="1/3">⅓</button>
+              <button type="button" class="qty-chip" data-qty="1/2">½</button>
+              <button type="button" class="qty-chip" data-qty="2/3">⅔</button>
+              <button type="button" class="qty-chip" data-qty="3/4">¾</button>
+              <button type="button" class="qty-chip" data-qty="1">1</button>
+              <button type="button" class="qty-chip" data-qty="2">2</button>
+              <button type="button" class="qty-chip" data-qty="1 1/2">1 ½</button>
+            </div>
             <input type="text" id="ingredient-notes" placeholder="Optional note (e.g. diced, organic)" maxlength="200" />
             <p class="form-status" id="ingredient-status"></p>
           </div>
         </fieldset>
 
-        <label class="field"><span>Method <em>(step by step)</em></span>
-          <textarea name="body" rows="6" maxlength="8000" placeholder="1. Heat oil in a pan…&#10;2. Add onion and cook 5 mins…"></textarea>
-        </label>
+        <fieldset class="method-editor">
+          <legend>Method</legend>
+          <p class="ingredient-hint">Build it step by step. Press <strong>Enter</strong> in the box below to add a step. Drag to reorder, click ×  to remove.</p>
+          <ol class="method-step-list" id="method-step-list">
+            <li class="method-empty">No steps yet. Type your first one below.</li>
+          </ol>
+          <div class="method-step-add">
+            <input type="text" id="method-step-input" placeholder="e.g. Heat the olive oil in a pan over medium heat" maxlength="500" />
+            <button type="button" class="btn btn-primary small" id="method-step-add-btn">Add step</button>
+          </div>
+          <details class="method-paste-fallback">
+            <summary>Or paste the whole method as plain text</summary>
+            <textarea name="body" id="method-body" rows="6" maxlength="8000" placeholder="1. Heat oil in a pan…&#10;2. Add onion and cook 5 mins…"></textarea>
+          </details>
+        </fieldset>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">Publish recipe</button>
@@ -283,6 +317,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1" defer></script>
-  <script src="/recipes.js?v=1" defer></script>
+  <script src="/recipes.js?v=2" defer></script>
 </body>
 </html>

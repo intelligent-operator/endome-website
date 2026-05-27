@@ -31,7 +31,79 @@ console.info("EndoMe recipes build v1");
   let currentScope = "all";
   let currentQuery = "";
   let pendingIngredients = [];   // for the post-recipe modal
+  let pendingMethodSteps = [];   // for the step-list editor
   let lastFoodLookup = [];       // cache for autocomplete
+
+  // -- Fraction helpers --------------------------------------------------
+  // Common fraction strings (and the unicode variants) → decimal value.
+  // Lets users type "1/4", "1 1/2", "½", "1½" and get back a number.
+  const UNICODE_FRACTIONS = {
+    "¼":0.25, "½":0.5, "¾":0.75, "⅓":1/3, "⅔":2/3,
+    "⅕":0.2, "⅖":0.4, "⅗":0.6, "⅘":0.8,
+    "⅙":1/6, "⅚":5/6, "⅛":0.125, "⅜":0.375, "⅝":0.625, "⅞":0.875,
+  };
+  // Parse a string into a decimal (rounded to 4dp). Returns null if blank,
+  // or NaN if it can't be parsed at all.
+  function parseQty(raw) {
+    if (raw == null) return null;
+    const s = String(raw).trim();
+    if (!s) return null;
+    // Unicode fraction in the string: split on it and add the leading whole.
+    // Handles both "1½" and "1 ½" without parsing "1 0.5" as a single number.
+    for (const [u, v] of Object.entries(UNICODE_FRACTIONS)) {
+      if (s.includes(u)) {
+        const wholePart = s.split(u)[0].trim();
+        const whole = wholePart === "" ? 0 : Number(wholePart);
+        if (!Number.isFinite(whole)) return NaN;
+        return round4((whole < 0 ? -1 : 1) * (Math.abs(whole) + v));
+      }
+    }
+    // ASCII mixed "1 1/2"
+    const mixed = s.match(/^(-?\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+    if (mixed) {
+      const whole = +mixed[1], num = +mixed[2], den = +mixed[3];
+      if (!den) return NaN;
+      return round4((Math.sign(whole) || 1) * (Math.abs(whole) + num / den));
+    }
+    // ASCII fraction "1/4"
+    const frac = s.match(/^(-?\d+)\s*\/\s*(\d+)$/);
+    if (frac) {
+      const num = +frac[1], den = +frac[2];
+      if (!den) return NaN;
+      return round4(num / den);
+    }
+    // Decimal / integer.
+    const n = Number(s);
+    if (!Number.isFinite(n)) return NaN;
+    return round4(n);
+  }
+  function round4(n) { return Math.round(n * 10000) / 10000; }
+
+  // Decimal → display string, preferring fractions where they're close to a
+  // common one. Mixed numbers are written as "1 ½" with a thin space.
+  const FRACTION_GLYPH = {
+    "0.25":"¼", "0.5":"½", "0.75":"¾",
+    "0.3333":"⅓", "0.6667":"⅔",
+    "0.2":"⅕", "0.4":"⅖", "0.6":"⅗", "0.8":"⅘",
+    "0.1667":"⅙", "0.8333":"⅚",
+    "0.125":"⅛", "0.375":"⅜", "0.625":"⅝", "0.875":"⅞",
+  };
+  function formatQty(q) {
+    if (q == null) return "";
+    if (!Number.isFinite(q)) return "";
+    const sign = q < 0 ? "-" : "";
+    const abs = Math.abs(q);
+    const whole = Math.floor(abs);
+    const frac = round4(abs - whole);
+    if (frac < 1e-4) return sign + String(whole);
+    // Try to match a glyph fraction within tolerance.
+    const key = frac.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+    const glyph = FRACTION_GLYPH[key] || FRACTION_GLYPH[frac.toFixed(4)] ||
+      Object.entries(FRACTION_GLYPH).find(([k]) => Math.abs(+k - frac) < 0.01)?.[1];
+    if (glyph) return whole ? `${sign}${whole} ${glyph}` : `${sign}${glyph}`;
+    // Fallback: short decimal.
+    return sign + (Math.round(abs * 100) / 100).toString();
+  }
 
   const recipeModal = document.getElementById("recipe-modal");
   const detailModal = document.getElementById("recipe-detail-modal");
@@ -205,11 +277,6 @@ console.info("EndoMe recipes build v1");
     `;
   }
 
-  function formatQty(q) {
-    if (q == null) return "";
-    if (Number.isInteger(q)) return String(q);
-    return String(Math.round(q * 100) / 100);
-  }
 
   // ------------------------------------------------------------------
   // Toolbar wiring
@@ -248,10 +315,14 @@ console.info("EndoMe recipes build v1");
   function openRecipeModal() {
     document.getElementById("recipe-form").reset();
     pendingIngredients = [];
+    pendingMethodSteps = [];
     paintIngredientList();
+    paintMethodSteps();
     document.getElementById("recipe-status").textContent = "";
     recipeModal.classList.add("open");
     recipeModal.setAttribute("aria-hidden", "false");
+    // Land focus on the title for the fastest possible start.
+    setTimeout(() => document.querySelector("#recipe-form [name='title']")?.focus(), 80);
   }
   function closeRecipeModal() {
     recipeModal.classList.remove("open");
@@ -279,6 +350,99 @@ console.info("EndoMe recipes build v1");
   });
 
   // ------------------------------------------------------------------
+  // Stepper buttons for servings / prep / cook
+  // ------------------------------------------------------------------
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".stepper-btn");
+    if (!btn) return;
+    const name = btn.dataset.step;
+    const delta = +btn.dataset.delta;
+    const input = document.querySelector(`#recipe-form [name='${name}']`);
+    if (!input) return;
+    const min = input.min ? +input.min : 0;
+    const max = input.max ? +input.max : 9999;
+    const current = input.value === "" ? (name === "servings" ? 1 : 0) : (+input.value || 0);
+    const next = Math.max(min, Math.min(max, current + delta));
+    input.value = next;
+  });
+
+  // ------------------------------------------------------------------
+  // Method step editor — each Enter / "Add step" creates a new step
+  // ------------------------------------------------------------------
+  function paintMethodSteps() {
+    const list = document.getElementById("method-step-list");
+    if (!list) return;
+    if (!pendingMethodSteps.length) {
+      list.innerHTML = `<li class="method-empty">No steps yet. Type your first one below.</li>`;
+      // Also clear the textarea fallback so we don't double-publish.
+      const body = document.getElementById("method-body");
+      if (body) body.value = "";
+      return;
+    }
+    list.innerHTML = pendingMethodSteps.map((s, idx) => `
+      <li class="method-step" draggable="true" data-idx="${idx}">
+        <span class="method-step-num">${idx + 1}</span>
+        <span class="method-step-text">${escapeHtml(s)}</span>
+        <div class="method-step-actions">
+          <button type="button" class="method-step-btn" data-move-step="${idx}" data-dir="-1" aria-label="Move up">↑</button>
+          <button type="button" class="method-step-btn" data-move-step="${idx}" data-dir="1" aria-label="Move down">↓</button>
+          <button type="button" class="method-step-btn danger" data-del-step="${idx}" aria-label="Remove">×</button>
+        </div>
+      </li>`).join("");
+    // Mirror into the hidden textarea so the form submit still has it.
+    const body = document.getElementById("method-body");
+    if (body) body.value = pendingMethodSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
+
+    list.querySelectorAll("[data-del-step]").forEach((b) => {
+      b.addEventListener("click", () => {
+        pendingMethodSteps.splice(+b.dataset.delStep, 1);
+        paintMethodSteps();
+      });
+    });
+    list.querySelectorAll("[data-move-step]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const i = +b.dataset.moveStep;
+        const dir = +b.dataset.dir;
+        const j = i + dir;
+        if (j < 0 || j >= pendingMethodSteps.length) return;
+        [pendingMethodSteps[i], pendingMethodSteps[j]] = [pendingMethodSteps[j], pendingMethodSteps[i]];
+        paintMethodSteps();
+      });
+    });
+    // Drag-to-reorder (desktop). Mobile users have the up/down buttons.
+    let dragIdx = null;
+    list.querySelectorAll(".method-step").forEach((li) => {
+      li.addEventListener("dragstart", () => { dragIdx = +li.dataset.idx; li.classList.add("dragging"); });
+      li.addEventListener("dragend", () => { li.classList.remove("dragging"); dragIdx = null; });
+      li.addEventListener("dragover", (e) => { e.preventDefault(); });
+      li.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const target = +li.dataset.idx;
+        if (dragIdx == null || target === dragIdx) return;
+        const moved = pendingMethodSteps.splice(dragIdx, 1)[0];
+        pendingMethodSteps.splice(target, 0, moved);
+        paintMethodSteps();
+      });
+    });
+  }
+
+  function addMethodStep() {
+    const input = document.getElementById("method-step-input");
+    if (!input) return false;
+    const v = input.value.trim();
+    if (!v) return false;
+    pendingMethodSteps.push(v);
+    input.value = "";
+    paintMethodSteps();
+    input.focus();
+    return true;
+  }
+  document.getElementById("method-step-add-btn")?.addEventListener("click", addMethodStep);
+  document.getElementById("method-step-input")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); addMethodStep(); }
+  });
+
+  // ------------------------------------------------------------------
   // Ingredient editor
   // ------------------------------------------------------------------
   function paintIngredientList() {
@@ -287,13 +451,16 @@ console.info("EndoMe recipes build v1");
       list.innerHTML = `<li class="ingredient-empty">No ingredients yet. Add the first one below.</li>`;
       return;
     }
-    list.innerHTML = pendingIngredients.map((i, idx) => `
-      <li class="ingredient-row">
+    list.innerHTML = pendingIngredients.map((i, idx) => {
+      const cat = foodCategoryFor(i.foodId, i.foodName);
+      return `<li class="ingredient-row">
+        <span class="food-cat-dot food-cat-${escapeHtml(cat)}"></span>
         <span class="ing-qty">${i.quantity != null ? escapeHtml(formatQty(i.quantity)) : ""}${i.unit ? " " + escapeHtml(UNIT_LABEL[i.unit] || i.unit) : ""}</span>
         <span class="ing-name">${escapeHtml(i.foodName)}</span>
         ${i.notes ? `<span class="ing-note">${escapeHtml(i.notes)}</span>` : ""}
-        <button type="button" class="btn-soft small danger" data-del-ing="${idx}">Remove</button>
-      </li>`).join("");
+        <button type="button" class="ing-del" data-del-ing="${idx}" aria-label="Remove">×</button>
+      </li>`;
+    }).join("");
     list.querySelectorAll("[data-del-ing]").forEach((b) => {
       b.addEventListener("click", () => {
         pendingIngredients.splice(+b.dataset.delIng, 1);
@@ -302,29 +469,90 @@ console.info("EndoMe recipes build v1");
     });
   }
 
-  document.getElementById("ingredient-add-btn").addEventListener("click", () => {
-    const name = document.getElementById("ingredient-name").value.trim();
-    const qtyRaw = document.getElementById("ingredient-qty").value;
+  // Look up the food category for the coloured dot. Falls back to "other"
+  // when the food isn't in the library (e.g. typed inline).
+  function foodCategoryFor(id, name) {
+    if (id) {
+      const f = foods.find((x) => x.id === id);
+      if (f?.category) return f.category;
+    }
+    const lower = String(name || "").toLowerCase();
+    const f = foods.find((x) => x.name.toLowerCase() === lower);
+    return f?.category || "other";
+  }
+
+  function addPendingIngredient() {
+    const nameInput = document.getElementById("ingredient-name");
+    const qtyInput = document.getElementById("ingredient-qty");
+    const name = nameInput.value.trim();
+    const qtyRaw = qtyInput.value.trim();
     const unit = document.getElementById("ingredient-unit").value || null;
     const notes = document.getElementById("ingredient-notes").value.trim() || null;
     const status = document.getElementById("ingredient-status");
     status.textContent = ""; status.className = "form-status";
-    if (!name) { status.textContent = "Pick or type a food."; status.className = "form-status err"; return; }
+    if (!name) {
+      status.textContent = "Pick or type a food.";
+      status.className = "form-status err";
+      nameInput.focus();
+      return false;
+    }
+    let quantity = null;
+    if (qtyRaw) {
+      const parsed = parseQty(qtyRaw);
+      if (parsed == null || !Number.isFinite(parsed) || parsed < 0) {
+        status.textContent = `"${qtyRaw}" isn't a quantity I can read. Try 1, 1/4, or 1 1/2.`;
+        status.className = "form-status err";
+        qtyInput.focus();
+        return false;
+      }
+      quantity = parsed;
+    }
     const match = lastFoodLookup.find((f) => f.name.toLowerCase() === name.toLowerCase());
     pendingIngredients.push({
       foodId: match?.id || null,
       foodName: name,
-      quantity: qtyRaw === "" ? null : +qtyRaw,
+      quantity,
       unit,
       notes,
     });
     paintIngredientList();
-    document.getElementById("ingredient-name").value = "";
-    document.getElementById("ingredient-qty").value = "";
+    // Wipe + keep focus on the name field for rapid entry.
+    nameInput.value = "";
+    qtyInput.value = "";
     document.getElementById("ingredient-unit").value = "";
     document.getElementById("ingredient-notes").value = "";
     document.getElementById("food-autocomplete").hidden = true;
-    document.getElementById("ingredient-name").focus();
+    nameInput.focus();
+    return true;
+  }
+
+  document.getElementById("ingredient-add-btn").addEventListener("click", addPendingIngredient);
+
+  // Enter anywhere in the ingredient row → add it. Saves a trip to the mouse.
+  ["ingredient-name", "ingredient-qty", "ingredient-notes"].forEach((id) => {
+    document.getElementById(id).addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) {
+        // Don't hijack Enter on the name field when an autocomplete row is
+        // already focused — the autocomplete handler handles that.
+        if (id === "ingredient-name" && !document.getElementById("food-autocomplete").hidden) {
+          // If a row is highlighted, let the autocomplete pick handler run.
+          const hover = document.querySelector("#food-autocomplete li.is-hover");
+          if (hover) return;
+        }
+        e.preventDefault();
+        addPendingIngredient();
+      }
+    });
+  });
+
+  // Quick fraction chips: tap → fill the qty field. If qty already has a
+  // value, the chip replaces it so taps stay snappy.
+  document.getElementById("qty-quick-row").addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-qty]");
+    if (!chip) return;
+    const qty = document.getElementById("ingredient-qty");
+    qty.value = chip.dataset.qty;
+    qty.focus();
   });
 
   // Food autocomplete inside the ingredient editor
@@ -391,12 +619,18 @@ console.info("EndoMe recipes build v1");
     if (!pendingIngredients.length) {
       status.textContent = "Add at least one ingredient."; status.className = "form-status err"; return;
     }
+    // Auto-add a half-typed ingredient that the user forgot to click "Add" on.
+    if (document.getElementById("ingredient-name").value.trim()) addPendingIngredient();
+    // Method body: prefer the step list, fall back to the textarea.
+    const bodyText = pendingMethodSteps.length
+      ? pendingMethodSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")
+      : (form.body.value.trim() || null);
     try {
       const body = {
         title: form.title.value.trim(),
         category: form.category.value,
         summary: form.summary.value.trim() || null,
-        body: form.body.value.trim() || null,
+        body: bodyText,
         servings: form.servings.value || null,
         prepMinutes: form.prepMinutes.value || null,
         cookMinutes: form.cookMinutes.value || null,
@@ -407,13 +641,35 @@ console.info("EndoMe recipes build v1");
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      toast("Recipe posted ✨", "ok");
+      toast("Recipe published ✨", "ok");
+      celebrate();
       closeRecipeModal();
       await loadRecipes();
     } catch (err) {
       status.textContent = err.message || "Couldn't save."; status.className = "form-status err";
     }
   });
+
+  // Tiny confetti burst on publish — keeps the moment feeling fun without
+  // pulling in a library. Each particle is a single emoji that drifts and
+  // fades. Self-cleans after 1.6 seconds.
+  function celebrate() {
+    const stage = document.createElement("div");
+    stage.className = "confetti-stage";
+    document.body.appendChild(stage);
+    const glyphs = ["🍳","🥗","🍰","🥑","🍓","🥕","🌿","✨","🍯","🍋"];
+    for (let i = 0; i < 28; i++) {
+      const piece = document.createElement("span");
+      piece.className = "confetti-piece";
+      piece.textContent = glyphs[Math.floor(Math.random() * glyphs.length)];
+      piece.style.left = Math.random() * 100 + "%";
+      piece.style.animationDelay = (Math.random() * 0.25) + "s";
+      piece.style.animationDuration = (1.1 + Math.random() * 0.6) + "s";
+      piece.style.fontSize = (16 + Math.random() * 18) + "px";
+      stage.appendChild(piece);
+    }
+    setTimeout(() => stage.remove(), 1800);
+  }
 
   // ------------------------------------------------------------------
   // Reactions
