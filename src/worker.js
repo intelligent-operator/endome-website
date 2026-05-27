@@ -39,6 +39,19 @@ export default {
     // --- API routes ---------------------------------------------------------
     if (url.pathname.startsWith("/api/")) {
       try {
+        // Public image fetches sit at the very top of the API handler so
+        // they're never swallowed by the unmatched-route 404 below. They
+        // don't need auth — anyone can pull a user's avatar or a recipe
+        // photo so posts, circles and recipe cards can embed them freely.
+        const avatarMatch = url.pathname.match(/^\/api\/u\/([^/]+)\/avatar$/);
+        if (avatarMatch && request.method === "GET") {
+          return withSecurityHeaders(await serveAvatar(env, decodeURIComponent(avatarMatch[1])));
+        }
+        const recipeImgMatch = url.pathname.match(/^\/api\/r\/(\d+)\/image$/);
+        if (recipeImgMatch && request.method === "GET") {
+          return withSecurityHeaders(await serveRecipeImage(env, +recipeImgMatch[1]));
+        }
+
         if (url.pathname === "/api/subscribe" && request.method === "POST") {
           return jsonHeaders(await handleSubscribe(request, env));
         }
@@ -436,18 +449,6 @@ export default {
       if (!isAdminSession(env, session)) {
         return Response.redirect(new URL("/dashboard", request.url).toString(), 302);
       }
-    }
-
-    // --- Public avatar fetch — anyone can pull a user's portrait so posts
-    // and circles can embed the image without leaking auth context. -------
-    const avatarMatch = url.pathname.match(/^\/api\/u\/([^/]+)\/avatar$/);
-    if (avatarMatch && request.method === "GET") {
-      return withSecurityHeaders(await serveAvatar(env, decodeURIComponent(avatarMatch[1])));
-    }
-    // --- Public recipe photo fetch ------------------------------------------
-    const recipeImgMatch = url.pathname.match(/^\/api\/r\/(\d+)\/image$/);
-    if (recipeImgMatch && request.method === "GET") {
-      return withSecurityHeaders(await serveRecipeImage(env, +recipeImgMatch[1]));
     }
 
     // --- /u/<username> — serve the shared u.html page (JS reads the path). --
