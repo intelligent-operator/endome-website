@@ -14,7 +14,10 @@
   align-items:start;
 }
 @media (max-width:1080px){
-  .story-layout{grid-template-columns:1fr;padding:16px 14px 40px}
+  .story-layout{grid-template-columns:200px minmax(0,1fr);gap:18px;padding:18px 20px 32px}
+}
+@media (max-width:880px){
+  .story-layout{grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 14px 32px}
 }
 
 .story-main{display:flex;flex-direction:column;gap:32px;min-width:0}

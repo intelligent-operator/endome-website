@@ -571,6 +571,42 @@
   50%{transform:translateY(-3px) rotate(1deg)}
 }
 
+/* =====================================================================
+   Mobile nav drawer + responsive layout
+   ===================================================================== */
+
+/* Hamburger button — hidden on desktop, becomes the drawer trigger
+   on tablet and below. Injected at runtime by account-menu.js. */
+.dash-burger{
+  display:none;
+  background:#fff;border:1px solid #ffe2eb;border-radius:12px;
+  width:42px;height:42px;cursor:pointer;padding:0;
+  align-items:center;justify-content:center;
+  transition:background .12s, border-color .12s, transform .12s;
+  flex-shrink:0;
+}
+.dash-burger:hover{background:#fff5f8;border-color:#ffd6e0}
+.dash-burger:active{transform:scale(.95)}
+.dash-burger-lines{
+  display:inline-flex;flex-direction:column;gap:4px;
+  width:18px;height:14px;justify-content:space-between;
+}
+.dash-burger-lines span{
+  display:block;height:2px;width:100%;border-radius:2px;
+  background:#ff4e8a;transition:transform .2s, opacity .2s;
+}
+.dash-burger.is-open .dash-burger-lines span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+.dash-burger.is-open .dash-burger-lines span:nth-child(2){opacity:0}
+.dash-burger.is-open .dash-burger-lines span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+
+/* Dim overlay behind the drawer */
+.dash-drawer-overlay{
+  position:fixed;inset:0;background:rgba(43,25,34,.45);
+  z-index:35;animation:fadeIn .2s ease-out;
+}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+body.drawer-open{overflow:hidden}
+
 /* Responsive */
 @media (max-width:1280px){
   .dash-layout{grid-template-columns:200px 1fr 280px}
@@ -579,18 +615,56 @@
   .row-2col{grid-template-columns:1fr}
   .tracker-grid-2{grid-template-columns:1fr}
 }
-@media (max-width:980px){
-  .dash-layout{grid-template-columns:1fr;padding:14px}
-  .dash-sidebar,.dash-right{flex-direction:row;flex-wrap:wrap}
-  .side-nav,.side-card,.endopet-big,.encourage-card,.streak-card{flex:1;min-width:240px}
-  .dash-topbar-inner{grid-template-columns:auto 1fr auto;padding:12px 14px;gap:12px}
-  .dash-topnav{display:none}
-  .dash-search{display:none}
+/* iPad: drop the right sidebar inline so we get a clean 2-up of nav + main.
+   The right rail content (Hall of Heroes, top picks…) moves under main. */
+@media (max-width:1080px){
+  .dash-layout{
+    grid-template-columns:220px minmax(0,1fr);
+    gap:18px;padding:18px 20px 32px;
+  }
+  .dash-right{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;gap:14px}
+  .dash-right .side-card,.dash-right > section{flex:1;min-width:260px}
+}
+/* Tablet portrait + mobile: collapse the left nav into a slide-out drawer.
+   Single-column main keeps the page short. */
+@media (max-width:880px){
+  .dash-layout{
+    grid-template-columns:minmax(0,1fr);
+    gap:14px;padding:14px 14px 32px;
+  }
+  .dash-burger{display:inline-flex}
+  .dash-topbar-inner{padding:10px 14px;gap:10px}
+  .dash-topnav,.dash-search{display:none}
+  /* Slide-in drawer for the left nav. */
+  .dash-sidebar.dash-drawer{
+    position:fixed;top:0;left:0;bottom:0;
+    width:min(280px, 86vw);
+    background:#fff;
+    z-index:40;
+    transform:translateX(-100%);
+    transition:transform .26s cubic-bezier(.4,0,.2,1);
+    padding:20px 14px;overflow-y:auto;
+    box-shadow:4px 0 24px rgba(255,77,138,.18);
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .dash-sidebar.dash-drawer.is-open{transform:translateX(0)}
+  .dash-sidebar.dash-drawer .side-nav{box-shadow:none}
+  .dash-sidebar.dash-drawer .side-card{display:none}
+  .dash-right{flex-direction:column;gap:14px}
+  .dash-right .side-card,.dash-right > section{flex:none;min-width:0;width:100%}
+  /* Hero blocks tighten so they don't take half the screen vertically. */
+  .welcome-banner{padding:18px 18px;border-radius:18px}
+  .welcome-banner h1,.wb-copy h1{font-size:22px}
+  .welcome-banner{grid-template-columns:1fr}
+  .wb-art{display:none}
 }
 @media (max-width:640px){
   .stat-row{grid-template-columns:1fr}
-  .welcome-banner{grid-template-columns:1fr}
-  .wb-art{display:none}
+  .dash-topbar-inner{gap:8px;padding:8px 12px}
+  .logo-text{display:none}
+  .profile-name{display:none}
+  .account-chevron{display:none}
+  .account-toggle{padding:4px 8px}
 }
 
 /* ============ Contextual banner ============ */

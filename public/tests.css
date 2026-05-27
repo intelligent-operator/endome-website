@@ -6,8 +6,14 @@
   grid-template-columns:230px minmax(0,1fr);
   gap:24px;max-width:1600px;padding:24px 32px 48px;align-items:start;
 }
+/* iPad landscape and below: tighter nav column. */
 @media (max-width:1080px){
-  .tests-layout{grid-template-columns:1fr;padding:16px 14px 40px}
+  .tests-layout{grid-template-columns:200px minmax(0,1fr);gap:18px;padding:18px 20px 32px}
+}
+/* iPad portrait + mobile: nav collapses to drawer (see dashboard.css) so the
+   layout becomes single-column main. */
+@media (max-width:880px){
+  .tests-layout{grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 14px 32px}
 }
 
 .tests-main{display:flex;flex-direction:column;gap:28px;min-width:0}

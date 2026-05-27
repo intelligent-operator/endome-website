@@ -7,7 +7,10 @@
   gap:24px;max-width:1600px;padding:24px 32px 48px;align-items:start;
 }
 @media (max-width:1080px){
-  .pet-layout{grid-template-columns:1fr;padding:16px 14px 40px}
+  .pet-layout{grid-template-columns:200px minmax(0,1fr);gap:18px;padding:18px 20px 32px}
+}
+@media (max-width:880px){
+  .pet-layout{grid-template-columns:minmax(0,1fr);gap:14px;padding:14px 14px 32px}
 }
 .pet-main{display:flex;flex-direction:column;gap:18px;min-width:0}
 
