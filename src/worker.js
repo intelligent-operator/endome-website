@@ -148,6 +148,24 @@ export default {
             if (action === "logs" && request.method === "GET")  return jsonHeaders(await getMedicationLogs(env, user, id));
           }
 
+          // --- Appointments (calendar + reminders) -----------------------
+          if (url.pathname === "/api/me/appointments" && request.method === "GET") {
+            return jsonHeaders(await listAppointments(request, env, user));
+          }
+          if (url.pathname === "/api/me/appointments" && request.method === "POST") {
+            return jsonHeaders(await createAppointment(request, env, user));
+          }
+          if (url.pathname === "/api/me/appointments/upcoming" && request.method === "GET") {
+            return jsonHeaders(await listUpcomingAppointments(env, user));
+          }
+          const apptMatch = url.pathname.match(/^\/api\/me\/appointments\/(\d+)$/);
+          if (apptMatch) {
+            const id = +apptMatch[1];
+            if (request.method === "GET")    return jsonHeaders(await getAppointment(env, user, id));
+            if (request.method === "PUT")    return jsonHeaders(await updateAppointment(request, env, user, id));
+            if (request.method === "DELETE") return jsonHeaders(await deleteAppointment(env, user, id));
+          }
+
           // --- Recipes (community cookbook) ------------------------------
           if (url.pathname === "/api/me/recipes" && request.method === "GET") {
             return jsonHeaders(await listRecipes(request, env, user));
@@ -373,6 +391,7 @@ export default {
       url.pathname === "/security"    || url.pathname.startsWith("/security/") ||
       url.pathname === "/research"    || url.pathname.startsWith("/research/") ||
       url.pathname === "/recipes"     || url.pathname.startsWith("/recipes/") ||
+      url.pathname === "/appointments" || url.pathname.startsWith("/appointments/") ||
       url.pathname === "/explore"     || url.pathname.startsWith("/explore/")
     ) {
       const session = await readSession(request, env);
@@ -1285,6 +1304,7 @@ async function bootstrapSchema(env) {
       ensurePetPoopColumn(env),
       ensureDonationsSchema(env),
       ensureRecipeSchema(env),
+      ensureAppointmentSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -1309,6 +1329,7 @@ async function adminBootstrapSchema(env) {
   await run("pet_columns", ensurePetPoopColumn);
   await run("donations",  ensureDonationsSchema);
   await run("recipes",    ensureRecipeSchema);
+  await run("appointments", ensureAppointmentSchema);
   return json({ ok: true, results });
 }
 
@@ -1418,6 +1439,7 @@ async function getMeToday(request, env, user) {
     notifications: [
       ...(notifs.results || []),
       ...(await computeMedReminders(env, user).catch(() => [])),
+      ...(await computeAppointmentReminders(env, user).catch(() => [])),
     ],
   });
 }
@@ -1783,8 +1805,9 @@ async function getNotifications(env, user) {
       "ORDER BY created_at DESC LIMIT 50"
     )
     .bind(user.id).all();
-  const meds = await computeMedReminders(env, user).catch(() => []);
-  return json({ notifications: [...(res.results || []), ...meds] });
+  const meds  = await computeMedReminders(env, user).catch(() => []);
+  const appts = await computeAppointmentReminders(env, user).catch(() => []);
+  return json({ notifications: [...(res.results || []), ...meds, ...appts] });
 }
 
 async function dismissNotification(env, user, id) {
@@ -5996,4 +6019,234 @@ async function acpRemoveMember(env, circleId, userId) {
     "DELETE FROM circle_members WHERE circle_id = ? AND user_id = ?"
   ).bind(circleId, userId).run();
   return json({ ok: true });
+}
+
+// =============================================================================
+// APPOINTMENTS — medical calendar entries with per-appointment reminder
+// preferences. Reminders surface in the in-app notification feed when the
+// configured lead time hits; email is stored as a preference for the
+// future SMTP worker (no SMTP wired yet).
+// =============================================================================
+const APPT_KINDS = new Set([
+  "general", "gp", "specialist", "surgery", "test", "therapy", "imaging",
+  "physio", "scan", "follow_up", "other",
+]);
+const APPT_REMIND_PRESETS = new Set([
+  0, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080,
+]);
+
+let _apptSchemaChecked = false;
+async function ensureAppointmentSchema(env) {
+  if (_apptSchemaChecked) return;
+  _apptSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS appointments (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  title TEXT NOT NULL," +
+    "  kind TEXT," +
+    "  doctor TEXT," +
+    "  location TEXT," +
+    "  notes TEXT," +
+    "  starts_at INTEGER NOT NULL," +
+    "  ends_at INTEGER," +
+    "  all_day INTEGER NOT NULL DEFAULT 0," +
+    "  color TEXT," +
+    "  remind_in_app INTEGER NOT NULL DEFAULT 1," +
+    "  remind_email INTEGER NOT NULL DEFAULT 0," +
+    "  remind_minutes_before INTEGER NOT NULL DEFAULT 60," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_appts_user_start ON appointments(user_id, starts_at)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+function parseApptFields(body) {
+  const out = {};
+  if ("title" in body)    out.title = sanitizeText(body.title, 200);
+  if ("kind" in body)     out.kind = APPT_KINDS.has(body.kind) ? body.kind : "general";
+  if ("doctor" in body)   out.doctor = sanitizeText(body.doctor, 120) || null;
+  if ("location" in body) out.location = sanitizeText(body.location, 240) || null;
+  if ("notes" in body)    out.notes = sanitizeText(body.notes, 2000) || null;
+  if ("startsAt" in body) {
+    const n = Math.floor(+body.startsAt || 0);
+    if (n > 0 && n < 4102444800) out.starts_at = n;
+  }
+  if ("endsAt" in body) {
+    if (body.endsAt == null || body.endsAt === "") out.ends_at = null;
+    else {
+      const n = Math.floor(+body.endsAt || 0);
+      if (n > 0 && n < 4102444800) out.ends_at = n;
+    }
+  }
+  if ("allDay" in body)   out.all_day = body.allDay ? 1 : 0;
+  if ("color" in body && typeof body.color === "string")
+    out.color = body.color.slice(0, 16) || null;
+  if ("remindInApp" in body) out.remind_in_app = body.remindInApp ? 1 : 0;
+  if ("remindEmail" in body) out.remind_email = body.remindEmail ? 1 : 0;
+  if ("remindMinutesBefore" in body) {
+    const m = Math.max(0, Math.min(20160, +body.remindMinutesBefore || 0));
+    out.remind_minutes_before = APPT_REMIND_PRESETS.has(m) ? m : m;
+  }
+  return out;
+}
+
+function apptRow(r) {
+  return {
+    id: r.id,
+    title: r.title,
+    kind: r.kind || "general",
+    doctor: r.doctor || null,
+    location: r.location || null,
+    notes: r.notes || null,
+    startsAt: r.starts_at,
+    endsAt: r.ends_at || null,
+    allDay: !!r.all_day,
+    color: r.color || null,
+    remindInApp: !!r.remind_in_app,
+    remindEmail: !!r.remind_email,
+    remindMinutesBefore: r.remind_minutes_before || 0,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+async function listAppointments(request, env, user) {
+  await ensureAppointmentSchema(env);
+  const url = new URL(request.url);
+  const from = Math.floor(+url.searchParams.get("from") || 0);
+  const to   = Math.floor(+url.searchParams.get("to") || 0);
+  const where = ["user_id = ?"];
+  const binds = [user.id];
+  if (from > 0) { where.push("starts_at >= ?"); binds.push(from); }
+  if (to > 0)   { where.push("starts_at <= ?"); binds.push(to); }
+  const rows = await env.DB.prepare(
+    `SELECT * FROM appointments WHERE ${where.join(" AND ")} ORDER BY starts_at ASC LIMIT 500`
+  ).bind(...binds).all().catch(() => ({ results: [] }));
+  return json({ appointments: (rows.results || []).map(apptRow) });
+}
+
+async function listUpcomingAppointments(env, user) {
+  await ensureAppointmentSchema(env);
+  const now = nowSec();
+  const horizon = now + 14 * 86400; // 2 weeks ahead
+  const rows = await env.DB.prepare(
+    "SELECT * FROM appointments WHERE user_id = ? AND starts_at BETWEEN ? AND ? " +
+    "ORDER BY starts_at ASC LIMIT 50"
+  ).bind(user.id, now - 3600, horizon).all().catch(() => ({ results: [] }));
+  return json({ appointments: (rows.results || []).map(apptRow) });
+}
+
+async function getAppointment(env, user, id) {
+  await ensureAppointmentSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT * FROM appointments WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!r) return json({ error: "Appointment not found" }, 404);
+  return json({ appointment: apptRow(r) });
+}
+
+async function createAppointment(request, env, user) {
+  await ensureAppointmentSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const fields = parseApptFields(body);
+  if (!fields.title) return json({ error: "Title is required." }, 400);
+  if (!fields.starts_at) return json({ error: "Start time is required." }, 400);
+  // Defaults so simple POSTs work without specifying every field.
+  if (fields.remind_in_app == null) fields.remind_in_app = 1;
+  if (fields.remind_email == null)  fields.remind_email = 0;
+  if (fields.remind_minutes_before == null) fields.remind_minutes_before = 60;
+  if (fields.all_day == null) fields.all_day = 0;
+  if (!fields.kind) fields.kind = "general";
+
+  const now = nowSec();
+  const res = await env.DB.prepare(
+    "INSERT INTO appointments (user_id, title, kind, doctor, location, notes, " +
+    "  starts_at, ends_at, all_day, color, remind_in_app, remind_email, " +
+    "  remind_minutes_before, created_at, updated_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(
+    user.id, fields.title, fields.kind, fields.doctor || null, fields.location || null,
+    fields.notes || null, fields.starts_at, fields.ends_at || null, fields.all_day,
+    fields.color || null, fields.remind_in_app, fields.remind_email,
+    fields.remind_minutes_before, now, now
+  ).run();
+  return json({ ok: true, id: res.meta?.last_row_id });
+}
+
+async function updateAppointment(request, env, user, id) {
+  await ensureAppointmentSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const owned = await env.DB.prepare(
+    "SELECT id FROM appointments WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Appointment not found" }, 404);
+
+  const fields = parseApptFields(body);
+  const sets = [], binds = [];
+  for (const [k, v] of Object.entries(fields)) {
+    sets.push(`${k} = ?`);
+    binds.push(v);
+  }
+  if (!sets.length) return json({ error: "Nothing to update" }, 400);
+  sets.push("updated_at = ?");
+  binds.push(nowSec(), id, user.id);
+  await env.DB.prepare(
+    `UPDATE appointments SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`
+  ).bind(...binds).run();
+  return json({ ok: true });
+}
+
+async function deleteAppointment(env, user, id) {
+  await ensureAppointmentSchema(env);
+  await env.DB.prepare(
+    "DELETE FROM appointments WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).run();
+  return json({ ok: true });
+}
+
+// Virtual notifications: any upcoming appointment whose reminder window is
+// currently open (now is between starts_at - leadMinutes and starts_at + 1h)
+// shows up in the bell. Mirror of the medication reminder pattern so the same
+// dashboard surface picks them up.
+async function computeAppointmentReminders(env, user) {
+  await ensureAppointmentSchema(env);
+  const now = nowSec();
+  const rows = await env.DB.prepare(
+    "SELECT id, title, kind, location, starts_at, remind_in_app, remind_minutes_before " +
+    "FROM appointments WHERE user_id = ? AND remind_in_app = 1 AND starts_at BETWEEN ? AND ? " +
+    "ORDER BY starts_at ASC LIMIT 30"
+  ).bind(user.id, now - 3600, now + 14 * 86400).all().catch(() => ({ results: [] }));
+
+  const out = [];
+  for (const r of (rows.results || [])) {
+    const lead = (r.remind_minutes_before || 0) * 60;
+    const windowOpens = r.starts_at - lead;
+    const windowCloses = r.starts_at + 3600;
+    if (now < windowOpens) continue;
+    if (now > windowCloses) continue;
+    const minsAway = Math.max(0, Math.round((r.starts_at - now) / 60));
+    out.push({
+      id: `appt:${r.id}`,
+      type: "appointment_due",
+      title: `📅 ${r.title}`,
+      body: minsAway === 0
+        ? (r.location ? `Starting now · ${r.location}` : "Starting now")
+        : `In ${humanMins(minsAway)}${r.location ? " · " + r.location : ""}`,
+      action_url: `/appointments?id=${r.id}`,
+      created_at: windowOpens,
+      read_at: null,
+    });
+  }
+  return out;
+}
+
+function humanMins(m) {
+  if (m < 60) return `${m} min`;
+  if (m < 1440) return `${Math.round(m / 60)}h`;
+  return `${Math.round(m / 1440)}d`;
 }

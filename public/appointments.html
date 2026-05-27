@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <title>Appointments – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/dashboard.css?v=8" />
+  <link rel="stylesheet" href="/appointments.css?v=1" />
+  <link rel="stylesheet" href="/account-menu.css?v=1" />
+</head>
+<body class="dash-body">
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-content">
+      <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
+      <div class="page-loader-bar"></div>
+      <p class="page-loader-text">Loading your calendar…</p>
+    </div>
+  </div>
+
+  <header class="dash-topbar">
+    <div class="dash-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <div class="dash-spacer"></div>
+      <div class="account-menu">
+        <button class="account-toggle" id="account-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+          <div class="avatar"><svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/><circle cx="20" cy="16" r="7" fill="#8a4a2a"/><path d="M6 36c2-8 8-12 14-12s12 4 14 12" fill="#f5c69b"/><circle cx="20" cy="16" r="6" fill="#f5c69b"/></svg></div>
+          <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
+          <svg class="account-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M6 9l6 6 6-6" stroke="#3a2330" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="account-dropdown" id="account-dropdown" hidden role="menu">
+          <a href="/profile" role="menuitem"><span class="acm-ico">👤</span> Profile</a>
+          <a href="/security" role="menuitem"><span class="acm-ico">🔒</span> Security &amp; password</a>
+          <a href="/documents" role="menuitem"><span class="acm-ico">📁</span> My documents</a>
+          <a href="/meds" role="menuitem"><span class="acm-ico">💊</span> My medications</a>
+          <div class="account-divider"></div>
+          <a href="/api/logout" role="menuitem"><span class="acm-ico">↪</span> Sign out</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-layout">
+    <aside class="dash-sidebar">
+      <nav class="side-nav">
+        <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
+        <a href="/story"><span class="ico">📖</span> Your Story</a>
+        <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/meds"><span class="ico">💊</span> Medications</a>
+        <a class="active" href="/appointments"><span class="ico">📅</span> Appointments</a>
+        <a href="/documents"><span class="ico">📁</span> Documents</a>
+        <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
+        <a href="/community"><span class="ico">💬</span> Community</a>
+        <a href="/recipes"><span class="ico">🍳</span> Recipes</a>
+        <a href="/explore"><span class="ico">🌌</span> Research</a>
+        <a href="/research"><span class="ico">🎗</span> Donations</a>
+      </nav>
+    </aside>
+
+    <main class="dash-main community-main">
+      <header class="community-hero soft">
+        <div>
+          <p class="hero-eyebrow">Appointments</p>
+          <h1>Your medical calendar.</h1>
+          <p class="hero-lead">Add every GP visit, specialist appointment, test or scan. Pick how far ahead you want to be reminded — in the app, by email, or both. Nothing slips through.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-add-appt">+ Add appointment</button>
+      </header>
+
+      <!-- Calendar -->
+      <section class="community-section">
+        <div class="cal-card">
+          <header class="cal-head">
+            <div class="cal-nav">
+              <button type="button" class="cal-nav-btn" id="cal-prev" aria-label="Previous month">‹</button>
+              <button type="button" class="cal-today" id="cal-today">Today</button>
+              <button type="button" class="cal-nav-btn" id="cal-next" aria-label="Next month">›</button>
+            </div>
+            <h2 class="cal-title" id="cal-title">—</h2>
+            <div class="cal-legend" id="cal-legend"></div>
+          </header>
+          <div class="cal-grid-wrap">
+            <div class="cal-dow" id="cal-dow"></div>
+            <div class="cal-grid" id="cal-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Upcoming list -->
+      <section class="community-section">
+        <div class="section-head">
+          <h2>Upcoming · next 2 weeks</h2>
+          <span class="section-hint">Click any appointment to edit or change reminders.</span>
+        </div>
+        <ul class="upcoming-list" id="upcoming-list">
+          <li class="empty-state">Loading…</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <!-- Add / edit appointment modal -->
+  <div class="modal" id="appt-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-appt></div>
+    <div class="modal-card modal-xl appt-modal-card">
+      <button class="modal-close" type="button" data-close-appt aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">📅</span>
+        <h3 id="appt-modal-title">New appointment</h3>
+        <p>Get the details right once, then leave it to your reminders.</p>
+      </header>
+      <form id="appt-form" novalidate>
+        <input type="hidden" name="id" />
+
+        <label class="field"><span>Title</span>
+          <input type="text" name="title" required maxlength="200" placeholder="e.g. Dr Patel — gynae follow-up" />
+        </label>
+
+        <div class="field-grid-2">
+          <label class="field"><span>Type</span>
+            <select name="kind" id="appt-kind"></select>
+          </label>
+          <label class="field"><span>Doctor / clinician <em>(optional)</em></span>
+            <input type="text" name="doctor" maxlength="120" placeholder="e.g. Dr Sarah Patel" />
+          </label>
+        </div>
+
+        <div class="field-grid-2">
+          <label class="field"><span>Date</span>
+            <input type="date" name="date" required />
+          </label>
+          <label class="field"><span>Time</span>
+            <input type="time" name="time" id="appt-time" />
+          </label>
+        </div>
+
+        <label class="ios-row">
+          <span class="ios-row-text">
+            <strong>All-day event</strong>
+            <em>Skip the time — useful for things like "fast from midnight" or "post-op rest day"</em>
+          </span>
+          <span class="ios-switch">
+            <input type="checkbox" name="allDay" id="appt-all-day" />
+            <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
+          </span>
+        </label>
+
+        <label class="field"><span>Location <em>(optional)</em></span>
+          <input type="text" name="location" maxlength="240" placeholder="Clinic address, hospital, room number…" />
+        </label>
+
+        <label class="field"><span>Notes <em>(optional)</em></span>
+          <textarea name="notes" rows="3" maxlength="2000" placeholder="Questions to ask, what to bring, prep instructions…"></textarea>
+        </label>
+
+        <fieldset class="reminder-card">
+          <legend>Reminders</legend>
+
+          <div class="ios-row">
+            <span class="ios-row-text">
+              <strong>🔔 Remind me in the app</strong>
+              <em>Shows up in your notifications bell when the lead time hits</em>
+            </span>
+            <span class="ios-switch">
+              <input type="checkbox" name="remindInApp" id="remind-in-app" checked />
+              <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
+            </span>
+          </div>
+
+          <div class="ios-row">
+            <span class="ios-row-text">
+              <strong>✉️ Email me too</strong>
+              <em>Sends to your account email. Email reminders are queued — actual sending is being wired up.</em>
+            </span>
+            <span class="ios-switch">
+              <input type="checkbox" name="remindEmail" id="remind-email" />
+              <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
+            </span>
+          </div>
+
+          <div class="lead-row" id="lead-row">
+            <span class="lead-row-label">Remind me</span>
+            <div class="lead-chips" id="lead-chips" role="group" aria-label="Reminder lead time">
+              <button type="button" class="lead-chip" data-mins="0">At the time</button>
+              <button type="button" class="lead-chip" data-mins="15">15 min</button>
+              <button type="button" class="lead-chip" data-mins="30">30 min</button>
+              <button type="button" class="lead-chip on" data-mins="60">1 hour</button>
+              <button type="button" class="lead-chip" data-mins="180">3 hours</button>
+              <button type="button" class="lead-chip" data-mins="1440">1 day</button>
+              <button type="button" class="lead-chip" data-mins="2880">2 days</button>
+              <button type="button" class="lead-chip" data-mins="10080">1 week</button>
+            </div>
+            <input type="hidden" name="remindMinutesBefore" id="remind-mins" value="60" />
+          </div>
+        </fieldset>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save appointment</button>
+          <button type="button" class="btn-soft" id="btn-delete-appt" hidden>Delete</button>
+          <button type="button" class="btn-soft" data-close-appt>Cancel</button>
+          <p class="form-status" id="appt-status" role="status"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  <script src="/account-menu.js?v=2" defer></script>
+  <script src="/appointments.js?v=1" defer></script>
+</body>
+</html>
