@@ -239,8 +239,8 @@ console.info("EndoMe recipes build v1");
         <footer class="recipe-card-foot">
           <span class="recipe-author">${authorBadge(r)} by ${escapeHtml(r.author || "Member")}</span>
           <div class="recipe-react">
-            <button class="react-chip love ${r.myReaction === "love" ? "on" : ""}" data-react="love" data-id="${r.id}" aria-label="Love">❤ <span>${r.loves}</span></button>
-            <button class="react-chip down ${r.myReaction === "down" ? "on" : ""}" data-react="down" data-id="${r.id}" aria-label="Thumbs down">👎 <span>${r.downs}</span></button>
+            <button class="react-chip love ${r.myReaction === "love" ? "on" : ""}" data-react="love" data-id="${r.id}" aria-label="Love" data-tip="${r.loves} ${r.loves === 1 ? "EndoMe cook loves" : "EndoMe cooks love"} this — tap to add yours">❤ <span>${r.loves}</span></button>
+            <button class="react-chip down ${r.myReaction === "down" ? "on" : ""}" data-react="down" data-id="${r.id}" aria-label="Thumbs down" data-tip="${r.downs === 0 ? "No one's flagged this yet — tap to share feedback (comment required)" : r.downs + " " + (r.downs === 1 ? "person" : "people") + " flagged this (see comments inside)"}">👎 <span>${r.downs}</span></button>
           </div>
         </footer>
       </div>
@@ -310,8 +310,8 @@ console.info("EndoMe recipes build v1");
       <section class="recipe-detail-section recipe-detail-react">
         <h3>What the community says</h3>
         <div class="recipe-react large">
-          <button class="react-chip love ${r.myReaction === "love" ? "on" : ""}" data-detail-react="love" data-id="${r.id}">❤ Love it <span>${r.loves}</span></button>
-          <button class="react-chip down ${r.myReaction === "down" ? "on" : ""}" data-detail-react="down" data-id="${r.id}">👎 Didn't work <span>${r.downs}</span></button>
+          <button class="react-chip love ${r.myReaction === "love" ? "on" : ""}" data-detail-react="love" data-id="${r.id}" data-tip="${r.loves} ${r.loves === 1 ? "EndoMe cook loves" : "EndoMe cooks love"} this">❤ Love it <span>${r.loves}</span></button>
+          <button class="react-chip down ${r.myReaction === "down" ? "on" : ""}" data-detail-react="down" data-id="${r.id}" data-tip="${r.downs === 0 ? "Be honest — leave constructive feedback if it didn't work for you" : r.downs + " " + (r.downs === 1 ? "person" : "people") + " flagged this"}">👎 Didn't work <span>${r.downs}</span></button>
         </div>
         ${r.downComments && r.downComments.length ? `
           <h4 class="down-comments-head">Constructive feedback</h4>

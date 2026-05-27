@@ -1050,3 +1050,41 @@ body.modal-open{overflow:hidden}
 /* Old mini-roadmap styles no longer used — remove if present. */
 .research-mini-roadmap{display:none}
 .research-cta{display:none}
+
+/* =====================================================================
+   Tiny hover tooltip — any element with [data-tip="..."] shows the
+   text above it on hover. Pure CSS, no JS, accessible (the text also
+   becomes the title attribute on focus via the same pattern). Used
+   across stats chips, reaction chips, info icons.
+   ===================================================================== */
+[data-tip]{position:relative}
+[data-tip]::after,
+[data-tip]::before{
+  position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
+  opacity:0;pointer-events:none;
+  transition:opacity .12s ease, transform .12s ease;
+  z-index:50;
+}
+[data-tip]::after{
+  content:attr(data-tip);
+  background:#2b1922;color:#fff;
+  padding:7px 10px;border-radius:8px;
+  font-size:11px;font-weight:600;line-height:1.35;
+  white-space:normal;max-width:220px;width:max-content;text-align:center;
+  box-shadow:0 6px 14px rgba(58,29,43,.28);
+  font-family:'Poppins',system-ui,sans-serif;letter-spacing:0;
+}
+[data-tip]::before{
+  content:"";
+  border:6px solid transparent;border-top-color:#2b1922;
+  bottom:calc(100% + 2px);
+}
+[data-tip]:hover::after,
+[data-tip]:hover::before,
+[data-tip]:focus-visible::after,
+[data-tip]:focus-visible::before{opacity:1;transform:translateX(-50%) translateY(-2px)}
+/* Allow callers to flip the tip below the element when there's no
+   room above (e.g. the very top of the page). */
+[data-tip-pos="below"]::after,
+[data-tip-pos="below"]::before{bottom:auto;top:calc(100% + 8px)}
+[data-tip-pos="below"]::before{border-top-color:transparent;border-bottom-color:#2b1922;top:calc(100% + 2px)}

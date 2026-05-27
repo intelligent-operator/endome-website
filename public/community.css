@@ -239,9 +239,9 @@
 
 /* ---------- Section ---------- */
 .community-section{display:flex;flex-direction:column;gap:14px}
-.section-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;padding:0 4px}
-.section-head h2{margin:0;font-size:20px;color:#2b1922}
-.section-hint{font-size:12px;color:#7a5f6c}
+.section-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;padding:0 4px;margin-bottom:14px}
+.section-head h2{margin:0 0 4px;font-size:20px;color:#2b1922;letter-spacing:-.2px}
+.section-hint{font-size:12px;color:#7a5f6c;line-height:1.5}
 .btn-create{
   background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
   border:none;border-radius:999px;padding:9px 18px;font-size:13px;font-weight:700;

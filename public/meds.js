@@ -104,10 +104,10 @@ console.info("EndoMe meds build v3");
       ${schedSummary(m.schedules)}
       ${m.insight ? `<div class="med-insight"><span class="med-insight-tag">ℹ️ Why this</span><p>${escapeHtml(m.insight)}</p>${m.link ? `<a href="${escapeHtml(m.link)}" target="_blank" rel="noopener">More info →</a>` : ""}</div>` : (m.link ? `<a class="med-link" href="${escapeHtml(m.link)}" target="_blank" rel="noopener">Reference →</a>` : "")}
       <div class="med-community" data-name="${escapeHtml(m.name)}">
-        <span class="med-community-stat">👥 ${c.users} ${c.users === 1 ? "person" : "people"} taking this</span>
+        <span class="med-community-stat" data-tip="${c.users} ${c.users === 1 ? "person is" : "people are"} currently tracking this med on EndoMe">👥 ${c.users} ${c.users === 1 ? "person" : "people"} taking this</span>
         <div class="med-react">
-          <button class="react-chip love ${mine === "love" ? "on" : ""}" data-react="love" data-name="${escapeHtml(m.name)}" aria-label="Love this medication">❤ <span>${c.loves}</span></button>
-          <button class="react-chip down ${mine === "down" ? "on" : ""}" data-react="down" data-name="${escapeHtml(m.name)}" aria-label="Thumbs down">👎 <span>${c.downs}</span></button>
+          <button class="react-chip love ${mine === "love" ? "on" : ""}" data-react="love" data-name="${escapeHtml(m.name)}" aria-label="Love this medication" data-tip="${c.loves} ${c.loves === 1 ? "EndoMe user loves" : "EndoMe users love"} this — tap to add yours">❤ <span>${c.loves}</span></button>
+          <button class="react-chip down ${mine === "down" ? "on" : ""}" data-react="down" data-name="${escapeHtml(m.name)}" aria-label="Thumbs down" data-tip="${c.downs === 0 ? "No one's flagged this — tap if it didn't work for you (comment required)" : c.downs + " " + (c.downs === 1 ? "person" : "people") + " flagged this as unhelpful"}">👎 <span>${c.downs}</span></button>
         </div>
       </div>
       ${downCommentsHtml(c.downComments)}
@@ -435,12 +435,17 @@ console.info("EndoMe meds build v3");
     const el = document.getElementById(elId);
     if (!el) return;
     if (!entry) return; // keep the empty-state copy
+    const lovesTip = `${entry.loves} ${entry.loves === 1 ? "person" : "people"} on EndoMe love this`;
+    const downsTip = entry.downs === 0
+      ? "No one's flagged this as unhelpful yet"
+      : `${entry.downs} ${entry.downs === 1 ? "person" : "people"} flagged this as unhelpful for them`;
+    const usersTip = `${entry.users} ${entry.users === 1 ? "person is" : "people are"} currently taking this`;
     el.innerHTML = `
       <div class="top-pick-name">${KIND_ICO[entry.kind] || "💊"} <strong>${escapeHtml(entry.name)}</strong></div>
       <div class="top-pick-stats">
-        <span class="tp-stat">❤ ${entry.loves}</span>
-        <span class="tp-stat">👎 ${entry.downs}</span>
-        <span class="tp-stat">👥 ${entry.users}</span>
+        <span class="tp-stat tp-stat-love" data-tip="${escapeHtml(lovesTip)}">❤ ${entry.loves}</span>
+        <span class="tp-stat tp-stat-down" data-tip="${escapeHtml(downsTip)}">👎 ${entry.downs}</span>
+        <span class="tp-stat tp-stat-users" data-tip="${escapeHtml(usersTip)}">👥 ${entry.users}</span>
       </div>
       <p class="top-pick-hint">Score based on community votes + how many people are taking it.</p>`;
   }
@@ -882,11 +887,14 @@ console.info("EndoMe meds build v3");
   }
 
   function communityChipsHtml(name, stats, mine) {
+    const u = stats.users || 0;
+    const l = stats.loves || 0;
+    const d = stats.downs || 0;
     return `
-      <span class="med-community-stat">👥 ${stats.users || 0} taking this</span>
+      <span class="med-community-stat" data-tip="${u} ${u === 1 ? "person is" : "people are"} currently tracking this on EndoMe">👥 ${u} taking this</span>
       <div class="med-react">
-        <button class="react-chip love ${mine === "love" ? "on" : ""}" data-greact="love" data-name="${escapeHtml(name)}" aria-label="Love this">❤ <span>${stats.loves || 0}</span></button>
-        <button class="react-chip down ${mine === "down" ? "on" : ""}" data-greact="down" data-name="${escapeHtml(name)}" aria-label="Thumbs down">👎 <span>${stats.downs || 0}</span></button>
+        <button class="react-chip love ${mine === "love" ? "on" : ""}" data-greact="love" data-name="${escapeHtml(name)}" aria-label="Love this" data-tip="${l} ${l === 1 ? "EndoMe user loves" : "EndoMe users love"} this — tap to add yours">❤ <span>${l}</span></button>
+        <button class="react-chip down ${mine === "down" ? "on" : ""}" data-greact="down" data-name="${escapeHtml(name)}" aria-label="Thumbs down" data-tip="${d === 0 ? "No one's flagged this yet — tap if it didn't work for you (comment required)" : d + " " + (d === 1 ? "person" : "people") + " flagged this as unhelpful"}">👎 <span>${d}</span></button>
       </div>
       ${downCommentsHtml(stats.downComments)}`;
   }

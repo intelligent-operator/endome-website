@@ -211,8 +211,15 @@
 .top-pick-stats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .tp-stat{
   background:#fff5f8;color:#7a5f6c;border:1px solid #ffe2eb;
-  padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;
+  padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;
+  cursor:help;display:inline-flex;align-items:center;gap:4px;
+  transition:background .12s, color .12s, border-color .12s, transform .12s;
 }
+.tp-stat:hover{transform:translateY(-1px)}
+.tp-stat.tp-stat-love:hover{background:#ffeaf2;color:#ff4e8a;border-color:#ff4e8a}
+.tp-stat.tp-stat-down:hover{background:#f5e9ef;color:#9a4856;border-color:#e3b8c4}
+.tp-stat.tp-stat-users:hover{background:#fff5f8;color:#ff4e8a;border-color:#ffd6e0}
+.med-community-stat[data-tip]{cursor:help}
 .top-pick-hint{margin:0;font-size:11px;color:#9a7889;line-height:1.4}
 
 /* =====================================================================
