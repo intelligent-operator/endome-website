@@ -438,6 +438,7 @@ export default {
       url.pathname === "/research"    || url.pathname.startsWith("/research/") ||
       url.pathname === "/recipes"     || url.pathname.startsWith("/recipes/") ||
       url.pathname === "/appointments" || url.pathname.startsWith("/appointments/") ||
+      url.pathname === "/results"     || url.pathname.startsWith("/results/") ||
       url.pathname === "/explore"     || url.pathname.startsWith("/explore/")
     ) {
       const session = await readSession(request, env);

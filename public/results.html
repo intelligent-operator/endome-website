@@ -4,24 +4,25 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
-  <title>Research – EndoMe</title>
+  <title>Results – EndoMe</title>
   <meta name="robots" content="noindex,nofollow" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
   <meta name="theme-color" content="#ff4e8a" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1779884497" />
   <link rel="stylesheet" href="/dashboard.css?v=1779884497" />
+  <link rel="stylesheet" href="/tests.css?v=1779884497" />
   <link rel="stylesheet" href="/account-menu.css?v=1779884497" />
-  <link rel="stylesheet" href="/explore.css?v=1779884497" />
 </head>
 <body class="dash-body">
   <div id="page-loader" class="page-loader">
     <div class="page-loader-content">
       <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
       <div class="page-loader-bar"></div>
-      <p class="page-loader-text">Loading the research map…</p>
+      <p class="page-loader-text">Loading your results…</p>
     </div>
   </div>
 
@@ -50,20 +51,20 @@
     </div>
   </header>
 
-  <div class="dash-layout community-layout">
+  <div class="dash-layout">
     <aside class="dash-sidebar">
       <nav class="side-nav">
         <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
         <a href="/story"><span class="ico">📖</span> Your Story</a>
         <a href="/tests"><span class="ico">🧪</span> Tests</a>
-        <a href="/results"><span class="ico">📊</span> Results</a>
+        <a class="active" href="/results"><span class="ico">📊</span> Results</a>
         <a href="/meds"><span class="ico">💊</span> Medications</a>
         <a href="/appointments"><span class="ico">📅</span> Appointments</a>
         <a href="/documents"><span class="ico">📁</span> Documents</a>
         <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
         <a href="/community"><span class="ico">💬</span> Community</a>
         <a href="/recipes"><span class="ico">🍳</span> Recipes</a>
-        <a class="active" href="/explore"><span class="ico">🌌</span> Research</a>
+        <a href="/explore"><span class="ico">🌌</span> Research</a>
         <a href="/research"><span class="ico">🎗</span> Donations</a>
       </nav>
     </aside>
@@ -71,80 +72,50 @@
     <main class="dash-main community-main">
       <header class="community-hero soft">
         <div>
-          <p class="hero-eyebrow">Research map</p>
-          <h1>The disease, broken open.</h1>
-          <p class="hero-lead">Endometriosis is the centre. Every line out is a sub-problem we can actually work on. Click a node to see the work that's happening and join in.</p>
+          <p class="hero-eyebrow">Results</p>
+          <h1>Your assessed test results.</h1>
+          <p class="hero-lead">Every panel we've processed, with the values mapped against reference ranges, the EndoMe community average, and your previous reading so trends are obvious.</p>
         </div>
       </header>
 
-      <section class="community-section">
-        <div class="explore-wrap">
-          <!-- Constellation canvas -->
-          <div class="explore-canvas-wrap" id="explore-canvas-wrap">
-            <svg id="explore-svg" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet" aria-label="Research constellation">
-              <defs>
-                <radialGradient id="node-glow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="#fff" stop-opacity=".7"/>
-                  <stop offset="60%" stop-color="#fff" stop-opacity="0"/>
-                </radialGradient>
-              </defs>
-              <g id="explore-edges"></g>
-              <g id="explore-nodes"></g>
-            </svg>
-            <div class="explore-help">
-              <span class="legend-dot legend-root"></span> Root problem
-              <span class="legend-sep">·</span>
-              <span class="legend-dot legend-l1"></span> Sub-problem
-              <span class="legend-sep">·</span>
-              <span class="legend-dot legend-l2"></span> Drill-down
-              <span class="legend-sep">·</span>
-              <span class="legend-dot legend-l3"></span> Specific
-            </div>
-          </div>
-
-          <!-- Detail panel -->
-          <aside class="explore-panel" id="explore-panel">
-            <div class="explore-panel-empty" id="explore-panel-empty">
-              <span class="explore-panel-emoji">✨</span>
-              <strong>Click any node.</strong>
-              <p>You'll see what the problem actually is, how far along we are on it, and who's already working on it.</p>
-            </div>
-            <div class="explore-panel-content" id="explore-panel-content" hidden>
-              <p class="ep-breadcrumb" id="ep-breadcrumb"></p>
-              <h2 id="ep-title"></h2>
-              <p id="ep-desc"></p>
-
-              <div class="ep-progress">
-                <div class="ep-progress-head">
-                  <span>Progress</span>
-                  <strong id="ep-progress-pct">0%</strong>
-                </div>
-                <div class="ep-progress-bar"><div class="ep-progress-bar-fill" id="ep-progress-bar-fill" style="width:0%"></div></div>
-                <p class="ep-progress-meta" id="ep-progress-meta"></p>
-              </div>
-
-              <div class="ep-contributors">
-                <div class="section-head">
-                  <h3>Working on this <span class="ep-contrib-count" id="ep-contrib-count"></span></h3>
-                </div>
-                <ul class="ep-contributors-list" id="ep-contributors-list"></ul>
-              </div>
-
-              <div class="ep-children" id="ep-children-wrap" hidden>
-                <h3>Drill into</h3>
-                <ul class="ep-children-list" id="ep-children-list"></ul>
-              </div>
-
-              <button class="ep-join" id="ep-join">💪 I want to work on this</button>
-            </div>
-          </aside>
+      <section class="results-layout">
+        <div class="results-list-wrap">
+          <header class="section-head">
+            <h2>Your reports</h2>
+            <span class="section-hint">Tap any result to drill into the full report — values, ranges, where you sit vs the community, and the trend against your previous panel.</span>
+          </header>
+          <ul class="results-list" id="results-list">
+            <li class="empty-state">Loading…</li>
+          </ul>
         </div>
+
+        <aside class="results-side">
+          <section class="side-card">
+            <div class="section-head"><h2>🧪 Order another test</h2></div>
+            <p class="side-sub">Build the full picture by adding the panels you haven't taken yet.</p>
+            <ul class="results-order-list" id="results-order-list"></ul>
+          </section>
+          <section class="side-card results-help">
+            <div class="section-head"><h2>📞 Need a hand?</h2></div>
+            <p class="side-sub">Our team can talk you through your results 1:1 before your next clinician visit.</p>
+            <a class="btn btn-soft small" href="/community">Ask the community</a>
+          </section>
+        </aside>
       </section>
     </main>
   </div>
 
+  <!-- Result detail modal -->
+  <div class="modal" id="result-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-result></div>
+    <div class="modal-card modal-xl result-modal-card">
+      <button class="modal-close" type="button" data-close-result aria-label="Close">×</button>
+      <div id="result-modal-body">Loading…</div>
+    </div>
+  </div>
+
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779884497" defer></script>
-  <script src="/explore.js?v=1779884497" defer></script>
+  <script src="/results.js?v=1779884497" defer></script>
 </body>
 </html>

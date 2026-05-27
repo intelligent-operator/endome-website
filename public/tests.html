@@ -11,10 +11,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=1779883849" />
-  <link rel="stylesheet" href="/dashboard.css?v=1779883849" />
-  <link rel="stylesheet" href="/tests.css?v=1779883849" />
-  <link rel="stylesheet" href="/account-menu.css?v=1779883849" />
+  <link rel="stylesheet" href="/styles.css?v=1779884497" />
+  <link rel="stylesheet" href="/dashboard.css?v=1779884497" />
+  <link rel="stylesheet" href="/tests.css?v=1779884497" />
+  <link rel="stylesheet" href="/account-menu.css?v=1779884497" />
 </head>
 <body class="dash-body">
   <div id="page-loader" class="page-loader">
@@ -60,6 +60,7 @@
         <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
         <a href="/story"><span class="ico">📖</span> Your Story</a>
         <a class="active" href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/results"><span class="ico">📊</span> Results</a>
         <a href="/meds"><span class="ico">💊</span> Medications</a>
         <a href="/appointments"><span class="ico">📅</span> Appointments</a>
         <a href="/documents"><span class="ico">📁</span> Documents</a>
@@ -98,18 +99,6 @@
         </aside>
       </section>
 
-      <!-- Sub-nav: Order tests / My results -->
-      <nav class="page-subnav" role="tablist" aria-label="Tests view">
-        <button type="button" class="subnav-tab on" role="tab" aria-selected="true" data-tab-target="order">
-          <span class="subnav-emoji">🧪</span> Order tests
-        </button>
-        <button type="button" class="subnav-tab" role="tab" aria-selected="false" data-tab-target="results">
-          <span class="subnav-emoji">📊</span> My results
-        </button>
-      </nav>
-
-      <!-- ===== Order tests tab ===== -->
-      <div data-tab="order">
       <div class="tests-grid">
 
         <!-- EndoMe DNA -->
@@ -217,52 +206,14 @@
       </div>
 
       <section class="tests-footnote">
-        <p>EndoMe tests support — they don't replace — a conversation with your clinician. Take what's useful, leave what isn't.</p>
+        <p>EndoMe tests support — they don't replace — a conversation with your clinician. Take what's useful, leave what isn't. Your assessed results live on the <a href="/results" style="color:#ff4e8a;font-weight:700">Results</a> page in your sidebar.</p>
       </section>
-      </div><!-- /data-tab=order -->
-
-      <!-- ===== My results tab ===== -->
-      <div data-tab="results" hidden>
-        <section class="results-layout">
-          <div class="results-list-wrap">
-            <header class="section-head">
-              <h2>Your assessed results</h2>
-              <span class="section-hint">Tap any result to drill into the full report — values, ranges, where you sit vs the community, and the trend against your previous panel.</span>
-            </header>
-            <ul class="results-list" id="results-list">
-              <li class="empty-state">Loading…</li>
-            </ul>
-          </div>
-
-          <aside class="results-side">
-            <section class="side-card">
-              <div class="section-head"><h2>🧪 Order another test</h2></div>
-              <p class="side-sub">Build the full picture by adding the panels you haven't taken yet.</p>
-              <ul class="results-order-list" id="results-order-list"></ul>
-            </section>
-            <section class="side-card results-help">
-              <div class="section-head"><h2>📞 Need a hand?</h2></div>
-              <p class="side-sub">Our team can talk you through your results 1:1 before your next clinician visit.</p>
-              <a class="btn btn-soft small" href="/community">Ask the community</a>
-            </section>
-          </aside>
-        </section>
-      </div><!-- /data-tab=results -->
     </main>
-  </div>
-
-  <!-- Result detail modal -->
-  <div class="modal" id="result-modal" aria-hidden="true" role="dialog">
-    <div class="modal-backdrop" data-close-result></div>
-    <div class="modal-card modal-xl result-modal-card">
-      <button class="modal-close" type="button" data-close-result aria-label="Close">×</button>
-      <div id="result-modal-body">Loading…</div>
-    </div>
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/account-menu.js?v=1779883849" defer></script>
-  <script src="/tests.js?v=1779883849" defer></script>
+  <script src="/account-menu.js?v=1779884497" defer></script>
+  <script src="/tests.js?v=1779884497" defer></script>
 </body>
 </html>
