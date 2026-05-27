@@ -223,8 +223,40 @@
 }
 .timetable td.is-today{background:#ffeaf2;border-color:#ffd6e0}
 .slot-empty{
-  font-size:11px;color:#b69aaa;text-align:center;
-  padding:18px 6px;font-style:italic;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  width:100%;min-height:60px;padding:14px 6px;
+  background:transparent;border:1px dashed #ffd6e0;border-radius:10px;
+  color:#b69aaa;font-size:11px;font-family:inherit;cursor:pointer;
+  transition:background .12s, border-color .12s, color .12s, transform .12s;
+}
+.slot-empty:hover{background:#fff5f8;border-color:#ff4e8a;color:#ff4e8a;transform:translateY(-1px)}
+.slot-empty-plus{font-size:18px;font-weight:700;line-height:1}
+.slot-empty-label{font-weight:600}
+.slot-add-more{
+  width:100%;margin-top:4px;
+  background:transparent;border:1px dashed #ffd6e0;border-radius:8px;
+  padding:5px 8px;font-family:inherit;font-size:11px;font-weight:600;
+  color:#b69aaa;cursor:pointer;transition:background .12s, color .12s, border-color .12s;
+}
+.slot-add-more:hover{background:#fff5f8;border-color:#ff4e8a;color:#ff4e8a}
+
+/* Quick-schedule chooser */
+.quick-sched-list{list-style:none;padding:0;margin:14px 0 0;display:flex;flex-direction:column;gap:8px}
+.quick-sched-pick{
+  width:100%;display:flex;align-items:center;gap:12px;
+  background:#fff5f8;border:1px solid #ffe2eb;border-radius:12px;
+  padding:12px 14px;font-family:inherit;cursor:pointer;text-align:left;
+  transition:transform .12s, box-shadow .12s, border-color .12s, background .12s;
+}
+.quick-sched-pick:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(255,77,138,.10);border-color:#ffd6e0;background:#fff}
+.quick-sched-ico{font-size:22px;flex-shrink:0}
+.quick-sched-name{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.quick-sched-name strong{font-size:14px;color:#2b1922}
+.quick-sched-name span{font-size:12px;color:#7a5f6c}
+.quick-sched-new{background:#fff;border-style:dashed}
+.quick-sched-divider{
+  text-align:center;font-size:11px;color:#a08596;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;padding:6px 0;
 }
 .slot{
   display:flex;flex-direction:column;gap:2px;

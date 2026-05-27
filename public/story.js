@@ -3,7 +3,12 @@
   const ringProgress = document.getElementById("ring-progress");
   const ringPercent  = document.getElementById("ring-percent");
   const ringFraction = document.getElementById("ring-fraction");
+  const infoModal    = document.getElementById("story-info-modal");
   const RING_CIRC    = 2 * Math.PI * 76;
+  // Keeps the most recent step list so we can rebuild the info modal without
+  // making another network round-trip on every card click.
+  let lastSteps = [];
+  let lastStepNum = new Map();
 
   // Display name in the topbar — consistent across pages.
   fetch("/api/me/today", { credentials: "same-origin" })
@@ -54,6 +59,8 @@
 
     let stepNum = 0;
     let html = "";
+    lastSteps = steps;
+    lastStepNum = new Map();
     for (const phaseName of order) {
       const group = grouped.get(phaseName);
       const phaseDone = group.filter((s) => s.completed).length;
@@ -69,11 +76,62 @@
             <span class="phase-pill ${phaseDone === group.length ? "complete" : ""}">${phaseDone}/${group.length}</span>
           </header>
           <div class="step-grid">
-            ${group.map((s) => stepCard(s, ++stepNum)).join("")}
+            ${group.map((s) => { lastStepNum.set(s.id, ++stepNum); return stepCard(s, stepNum); }).join("")}
           </div>
         </section>`;
     }
     phasesEl.innerHTML = html;
+  }
+
+  // ---- Step info modal -------------------------------------------------
+  function openInfoModal(stepId) {
+    const s = lastSteps.find((x) => x.id === stepId);
+    if (!s || !infoModal) return;
+    const num = lastStepNum.get(stepId) || 0;
+    document.getElementById("story-info-emoji").textContent = s.icon || "📖";
+    document.getElementById("story-info-eyebrow").textContent = `${s.phase || ""} · Step ${String(num).padStart(2,"0")}`;
+    document.getElementById("story-info-title").textContent = s.title || "";
+    document.getElementById("story-info-desc").textContent = s.desc || "";
+    document.getElementById("story-info-why-head").textContent = s.why || "Why this matters";
+    document.getElementById("story-info-details").textContent = s.details || "We'll add more context for this step soon.";
+
+    const stats = document.getElementById("story-info-stats");
+    const status = s.completed ? "Completed" : (s.locked ? "Locked" : (s.type === "auto" ? "Tracking" : "To do"));
+    const statusClass = s.completed ? "is-done" : s.locked ? "is-locked" : "is-todo";
+    const dateLine = s.completed && s.completedAt
+      ? new Date(s.completedAt * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+      : null;
+    stats.innerHTML = `
+      <span class="story-info-pill ${statusClass}">${escapeHtml(status)}</span>
+      ${dateLine ? `<span class="story-info-pill is-meta">📅 ${escapeHtml(dateLine)}</span>` : ""}
+      <span class="story-info-pill is-meta">${escapeHtml(s.phase || "")}</span>`;
+
+    const actions = document.getElementById("story-info-actions");
+    if (s.completed) {
+      actions.innerHTML = `<button class="btn-soft" type="button" data-close-story-info>Close</button>`;
+    } else if (s.locked) {
+      actions.innerHTML = `<p class="story-info-locked">🔒 Complete the previous step to unlock this one.</p>
+        <button class="btn-soft" type="button" data-close-story-info>Close</button>`;
+    } else if (s.type === "action") {
+      actions.innerHTML = `<button class="btn btn-primary" type="button" data-action="${escapeHtml(s.id)}" data-endpoint="${escapeHtml(s.actionEndpoint || "")}">${escapeHtml(s.actionLabel || "Start")} →</button>
+        <button class="btn-soft" type="button" data-close-story-info>Maybe later</button>`;
+    } else if (s.type === "auto") {
+      actions.innerHTML = `<p class="story-info-auto">${escapeHtml(s.autoLabel || "We'll mark this for you as you log day to day.")}</p>
+        <button class="btn-soft" type="button" data-close-story-info>Close</button>`;
+    } else {
+      actions.innerHTML = `<button class="btn btn-primary" type="button" data-check="${escapeHtml(s.id)}">✓ Mark complete</button>
+        <button class="btn-soft" type="button" data-close-story-info>Close</button>`;
+    }
+
+    infoModal.classList.add("open");
+    infoModal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+  }
+  function closeInfoModal() {
+    if (!infoModal) return;
+    infoModal.classList.remove("open");
+    infoModal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("modal-open");
   }
 
   function stepCard(s, n) {
@@ -110,19 +168,33 @@
       return `<div class="step-locked-state">🔒 Order your DNA test first</div>`;
     }
     if (s.type === "action") {
-      return `<button class="step-action" data-action="${escapeHtml(s.id)}" data-endpoint="${escapeHtml(s.actionEndpoint || "")}">${escapeHtml(s.actionLabel || "Start")} →</button>`;
+      return `<button class="step-action" data-action="${escapeHtml(s.id)}" data-endpoint="${escapeHtml(s.actionEndpoint || "")}" data-info-skip>${escapeHtml(s.actionLabel || "Start")} →</button>`;
     }
     if (s.type === "auto") {
       return `<div class="step-auto-state">${escapeHtml(s.autoLabel || "Tracks automatically")}</div>`;
     }
     // manual
-    return `<button class="step-check" data-check="${escapeHtml(s.id)}" aria-label="Mark complete"></button>`;
+    return `<button class="step-check" data-check="${escapeHtml(s.id)}" data-info-skip aria-label="Mark complete"></button>`;
   }
 
   document.addEventListener("click", async (e) => {
+    // Close-info clicks first so they win over anything below.
+    if (e.target.closest("[data-close-story-info]")) {
+      e.preventDefault();
+      closeInfoModal();
+      return;
+    }
+
     const action  = e.target.closest("[data-action]");
     const check   = e.target.closest("[data-check]");
     const uncheck = e.target.closest("[data-uncheck]");
+
+    // Card body click (anywhere not on an explicit control) → open info modal.
+    const card = e.target.closest(".step[data-step-id]");
+    if (card && !action && !check && !uncheck && !e.target.closest("[data-info-skip]")) {
+      openInfoModal(card.dataset.stepId);
+      return;
+    }
 
     if (action) {
       e.preventDefault();
@@ -142,6 +214,7 @@
         } else {
           toast("Saved");
         }
+        closeInfoModal();
         await load();
       } catch {
         toast("Network error", "err");
@@ -164,6 +237,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { toast(data.error || "Couldn't update", "err"); return; }
         render(data);
+        closeInfoModal();
         toast(check ? "Marked complete ✨" : "Unmarked");
       } catch {
         toast("Network error", "err");

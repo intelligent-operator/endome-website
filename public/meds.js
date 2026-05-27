@@ -183,9 +183,13 @@ console.info("EndoMe meds build v3");
     html += "</tr></thead><tbody><tr>";
     for (const i of DAY_ORDER) {
       const isToday = i === today;
-      html += `<td class="${isToday ? "is-today" : ""}">`;
+      const dayBit = 1 << i;
+      html += `<td class="${isToday ? "is-today" : ""}" data-daybit="${dayBit}">`;
       if (!days[i].length) {
-        html += `<div class="slot-empty">Nothing scheduled</div>`;
+        html += `<button type="button" class="slot-empty slot-empty-add" data-add-day="${dayBit}">
+          <span class="slot-empty-plus" aria-hidden="true">+</span>
+          <span class="slot-empty-label">Add a dose</span>
+        </button>`;
       } else {
         html += days[i].map((s) => {
           const isPast = isToday && slotIsPastNow(s.timeOfDay);
@@ -198,6 +202,7 @@ console.info("EndoMe meds build v3");
             ${s.dose ? `<span class="slot-dose">${escapeHtml(s.dose)}</span>` : ""}
           </div>`;
         }).join("");
+        html += `<button type="button" class="slot-add-more" data-add-day="${dayBit}" aria-label="Add another dose to this day">+ Add</button>`;
       }
       html += `</td>`;
     }
@@ -208,6 +213,79 @@ console.info("EndoMe meds build v3");
     tableEl.querySelectorAll(".slot").forEach((sl) => {
       sl.addEventListener("click", () => onSlotClick(sl));
     });
+    // Empty-slot clicks open the add-medication modal with this day preselected
+    tableEl.querySelectorAll("[data-add-day]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        const bit = +btn.dataset.addDay || 0;
+        startQuickScheduleAdd(bit);
+      });
+    });
+  }
+
+  // Called when an empty timetable cell is tapped. Pops the add-medication
+  // modal pre-tuned for "I want to schedule this". If the user already has
+  // medications, we drop them into a small chooser first so they can either
+  // (a) attach a schedule to an existing med, or (b) add a brand-new med.
+  function startQuickScheduleAdd(dayBit) {
+    if (meds.length > 0) {
+      openQuickScheduleChooser(dayBit);
+    } else {
+      openMedModal(null);
+      // Pre-seed the day chip selection so once they finish step 1 (save the
+      // med) the schedule editor already knows what day they had in mind.
+      pendingDays = dayBit;
+      paintScheduleEditor();
+    }
+  }
+
+  function openQuickScheduleChooser(dayBit) {
+    const chooser = document.getElementById("quick-sched-modal");
+    const list = document.getElementById("quick-sched-list");
+    if (!chooser || !list) return;
+    list.innerHTML = meds.map((m) => `
+      <li>
+        <button type="button" class="quick-sched-pick" data-med="${m.id}">
+          <span class="quick-sched-ico">${KIND_ICO[m.kind] || "💊"}</span>
+          <span class="quick-sched-name">
+            <strong>${escapeHtml(m.name)}</strong>
+            <span>${escapeHtml(m.dose || FREQ_LABEL[m.frequency] || "")}</span>
+          </span>
+        </button>
+      </li>`).join("") + `
+      <li class="quick-sched-divider">or</li>
+      <li>
+        <button type="button" class="quick-sched-pick quick-sched-new" data-med="new">
+          <span class="quick-sched-ico">＋</span>
+          <span class="quick-sched-name">
+            <strong>Add a new medication</strong>
+            <span>You can schedule it on the next step.</span>
+          </span>
+        </button>
+      </li>`;
+    list.querySelectorAll("[data-med]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        chooser.classList.remove("open");
+        chooser.setAttribute("aria-hidden", "true");
+        const v = btn.dataset.med;
+        if (v === "new") {
+          openMedModal(null);
+          pendingDays = dayBit;
+          paintScheduleEditor();
+        } else {
+          const m = meds.find((x) => x.id === +v);
+          if (m) {
+            openMedModal(m);
+            pendingDays = dayBit;
+            paintScheduleEditor();
+            // Focus the time picker so the user can finish in one step.
+            setTimeout(() => document.getElementById("sched-time")?.focus(), 80);
+          }
+        }
+      });
+    });
+    chooser.classList.add("open");
+    chooser.setAttribute("aria-hidden", "false");
   }
 
   function slotIsPastNow(timeOfDay) {
@@ -413,6 +491,13 @@ console.info("EndoMe meds build v3");
       e.preventDefault();
       closeMedModal();
       logModal.classList.remove("open");
+      return;
+    }
+    if (e.target.closest("[data-close-quick-sched]")) {
+      e.preventDefault();
+      const m = document.getElementById("quick-sched-modal");
+      m.classList.remove("open");
+      m.setAttribute("aria-hidden", "true");
       return;
     }
     const log = e.target.closest("[data-log]");

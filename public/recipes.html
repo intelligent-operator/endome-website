@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <title>Recipes – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/dashboard.css?v=5" />
+  <link rel="stylesheet" href="/recipes.css?v=1" />
+  <link rel="stylesheet" href="/account-menu.css?v=1" />
+</head>
+<body class="dash-body">
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-content">
+      <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
+      <div class="page-loader-bar"></div>
+      <p class="page-loader-text">Loading the cookbook…</p>
+    </div>
+  </div>
+
+  <header class="dash-topbar">
+    <div class="dash-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <div class="dash-spacer"></div>
+      <div class="account-menu">
+        <button class="account-toggle" id="account-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+          <div class="avatar"><svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/><circle cx="20" cy="16" r="7" fill="#8a4a2a"/><path d="M6 36c2-8 8-12 14-12s12 4 14 12" fill="#f5c69b"/><circle cx="20" cy="16" r="6" fill="#f5c69b"/></svg></div>
+          <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
+          <svg class="account-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M6 9l6 6 6-6" stroke="#3a2330" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="account-dropdown" id="account-dropdown" hidden role="menu">
+          <a href="/profile" role="menuitem"><span class="acm-ico">👤</span> Profile</a>
+          <a href="/security" role="menuitem"><span class="acm-ico">🔒</span> Security &amp; password</a>
+          <a href="/documents" role="menuitem"><span class="acm-ico">📁</span> My documents</a>
+          <a href="/meds" role="menuitem"><span class="acm-ico">💊</span> My medications</a>
+          <div class="account-divider"></div>
+          <a href="/api/logout" role="menuitem"><span class="acm-ico">↪</span> Sign out</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-layout">
+    <aside class="dash-sidebar">
+      <nav class="side-nav">
+        <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
+        <a href="/story"><span class="ico">📖</span> Your Story</a>
+        <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/meds"><span class="ico">💊</span> Medications</a>
+        <a href="/documents"><span class="ico">📁</span> Documents</a>
+        <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
+        <a href="/community"><span class="ico">💬</span> Community</a>
+        <a class="active" href="/recipes"><span class="ico">🍳</span> Recipes</a>
+        <a href="/explore"><span class="ico">🌌</span> Research</a>
+        <a href="/research"><span class="ico">🎗</span> Donations</a>
+      </nav>
+    </aside>
+
+    <main class="dash-main community-main">
+      <header class="community-hero soft">
+        <div>
+          <p class="hero-eyebrow">Recipes</p>
+          <h1>Cook together. Eat better. Feel better.</h1>
+          <p class="hero-lead">Recipes shared by the community for the community. Filter by mealtime, search by ingredient, love what works and call out what doesn't. Every food you add here also feeds into your tracker when it lands.</p>
+        </div>
+        <button class="btn btn-primary" id="btn-add-recipe">+ Post a recipe</button>
+      </header>
+
+      <section class="community-section recipes-toolbar-section">
+        <div class="recipes-toolbar">
+          <input type="search" id="recipes-search" placeholder="Search recipes by title, ingredient or note…" />
+          <div class="recipes-categories" id="recipes-categories" role="group" aria-label="Recipe categories"></div>
+          <div class="recipes-scope">
+            <button type="button" class="scope-chip on" data-scope="all">All recipes</button>
+            <button type="button" class="scope-chip" data-scope="mine">Mine</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="community-section">
+        <ul class="recipes-grid" id="recipes-grid">
+          <li class="empty-state">Loading…</li>
+        </ul>
+      </section>
+
+      <section class="community-section">
+        <div class="section-head">
+          <h2>🥬 Food library</h2>
+          <span class="section-hint">Every ingredient anyone has added. Used by the recipe builder and (soon) the food tracker.</span>
+        </div>
+        <div class="food-library-toolbar">
+          <input type="search" id="food-library-search" placeholder="Search foods (chicken, oats, magnesium…)" />
+          <button type="button" class="btn-soft small" id="btn-add-food">+ Add a food</button>
+        </div>
+        <ul class="food-library-grid" id="food-library-grid">
+          <li class="empty-state">Loading…</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <!-- Post / edit recipe modal -->
+  <div class="modal" id="recipe-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-recipe></div>
+    <div class="modal-card modal-xl recipe-modal-card">
+      <button class="modal-close" type="button" data-close-recipe aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🍳</span>
+        <h3>Post a recipe</h3>
+        <p>Share what works for you. Be specific about ingredients and quantities so others can recreate it (and the food tracker can pick it up).</p>
+      </header>
+      <form id="recipe-form" novalidate>
+        <div class="field-grid-2">
+          <label class="field"><span>Title</span>
+            <input type="text" name="title" required maxlength="140" placeholder="e.g. Anti-inflammatory turmeric porridge" />
+          </label>
+          <label class="field"><span>Category</span>
+            <select name="category" id="recipe-category"></select>
+          </label>
+        </div>
+        <label class="field"><span>One-line summary <em>(optional)</em></span>
+          <input type="text" name="summary" maxlength="200" placeholder="A short pitch — what makes it worth trying" />
+        </label>
+        <div class="field-grid-3">
+          <label class="field"><span>Servings</span>
+            <input type="number" name="servings" min="1" max="30" placeholder="e.g. 2" />
+          </label>
+          <label class="field"><span>Prep (min)</span>
+            <input type="number" name="prepMinutes" min="0" max="600" placeholder="e.g. 10" />
+          </label>
+          <label class="field"><span>Cook (min)</span>
+            <input type="number" name="cookMinutes" min="0" max="600" placeholder="e.g. 20" />
+          </label>
+        </div>
+
+        <fieldset class="ingredient-editor">
+          <legend>Ingredients</legend>
+          <p class="ingredient-hint">Search the food library or type a new food. Add a quantity and unit if it's measured — leave blank for things like "to taste".</p>
+          <ul class="ingredient-list" id="ingredient-list">
+            <li class="ingredient-empty">No ingredients yet. Add the first one below.</li>
+          </ul>
+          <div class="ingredient-add">
+            <div class="ingredient-add-row">
+              <div class="food-autocomplete-wrap">
+                <input type="text" id="ingredient-name" placeholder="Food (e.g. Chicken breast)" autocomplete="off" maxlength="120" />
+                <ul class="food-autocomplete" id="food-autocomplete" hidden></ul>
+              </div>
+              <input type="number" id="ingredient-qty" min="0" max="9999" step="0.1" placeholder="Qty" />
+              <select id="ingredient-unit">
+                <option value="">unit</option>
+                <option value="g">g</option>
+                <option value="kg">kg</option>
+                <option value="ml">ml</option>
+                <option value="l">l</option>
+                <option value="tsp">tsp</option>
+                <option value="tbsp">tbsp</option>
+                <option value="cup">cup</option>
+                <option value="piece">piece</option>
+                <option value="slice">slice</option>
+                <option value="clove">clove</option>
+                <option value="pinch">pinch</option>
+                <option value="to_taste">to taste</option>
+              </select>
+              <button type="button" class="btn btn-primary small" id="ingredient-add-btn">Add</button>
+            </div>
+            <input type="text" id="ingredient-notes" placeholder="Optional note (e.g. diced, organic)" maxlength="200" />
+            <p class="form-status" id="ingredient-status"></p>
+          </div>
+        </fieldset>
+
+        <label class="field"><span>Method <em>(step by step)</em></span>
+          <textarea name="body" rows="6" maxlength="8000" placeholder="1. Heat oil in a pan…&#10;2. Add onion and cook 5 mins…"></textarea>
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Publish recipe</button>
+          <button type="button" class="btn-soft" data-close-recipe>Cancel</button>
+          <p class="form-status" id="recipe-status" role="status"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Recipe detail modal -->
+  <div class="modal" id="recipe-detail-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-recipe></div>
+    <div class="modal-card modal-xl recipe-detail-card" id="recipe-detail-card">
+      <button class="modal-close" type="button" data-close-recipe aria-label="Close">×</button>
+      <div id="recipe-detail-body">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Thumbs-down comment modal: forces a useful comment before saving -->
+  <div class="modal" id="down-comment-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-down></div>
+    <div class="modal-card down-comment-card">
+      <button class="modal-close" type="button" data-close-down aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">👎</span>
+        <h3>What didn't work?</h3>
+        <p>Thumbs-down comments go to the moderation queue. Be useful — what would you change, what went wrong, what's misleading? Drive-by negativity gets rejected.</p>
+      </header>
+      <form id="down-comment-form" novalidate>
+        <input type="hidden" name="recipeId" />
+        <label class="field"><span>Your feedback</span>
+          <textarea name="comment" rows="4" minlength="10" maxlength="800" required placeholder="e.g. The timing is way off — at 20 mins the chicken was raw inside. 35 mins fixed it."></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Submit feedback</button>
+          <button type="button" class="btn-soft" data-close-down>Cancel</button>
+          <p class="form-status" id="down-comment-status"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add food modal -->
+  <div class="modal" id="food-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-food></div>
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-close-food aria-label="Close">×</button>
+      <h3>Add a food</h3>
+      <p class="modal-sub">Once it's here it shows up in the recipe builder and the food tracker.</p>
+      <form id="food-form" novalidate>
+        <label class="field"><span>Name</span>
+          <input type="text" name="name" required maxlength="100" placeholder="e.g. Black sesame seeds" />
+        </label>
+        <div class="field-grid-2">
+          <label class="field"><span>Category</span>
+            <select name="category">
+              <option value="protein">Protein</option>
+              <option value="vegetable">Vegetable</option>
+              <option value="fruit">Fruit</option>
+              <option value="grain">Grain</option>
+              <option value="legume">Legume</option>
+              <option value="dairy">Dairy</option>
+              <option value="fat">Fat / oil</option>
+              <option value="nut_seed">Nut / seed</option>
+              <option value="sweetener">Sweetener</option>
+              <option value="herb">Herb</option>
+              <option value="spice">Spice</option>
+              <option value="fluid">Fluid</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label class="field"><span>Default unit</span>
+            <select name="defaultUnit">
+              <option value="g">g</option>
+              <option value="kg">kg</option>
+              <option value="ml">ml</option>
+              <option value="cup">cup</option>
+              <option value="tbsp">tbsp</option>
+              <option value="tsp">tsp</option>
+              <option value="piece">piece</option>
+              <option value="slice">slice</option>
+              <option value="clove">clove</option>
+              <option value="pinch">pinch</option>
+            </select>
+          </label>
+        </div>
+        <label class="field"><span>Notes <em>(optional)</em></span>
+          <textarea name="notes" rows="2" maxlength="200" placeholder="Anything worth knowing about it."></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save food</button>
+          <button type="button" class="btn-soft" data-close-food>Cancel</button>
+          <p class="form-status" id="food-status"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  <script src="/account-menu.js?v=1" defer></script>
+  <script src="/recipes.js?v=1" defer></script>
+</body>
+</html>

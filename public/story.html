@@ -13,7 +13,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css" />
-  <link rel="stylesheet" href="/story.css?v=2" />
+  <link rel="stylesheet" href="/story.css?v=3" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -64,6 +64,7 @@
         <a href="/documents"><span class="ico">📁</span> Documents</a>
         <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
         <a href="/community"><span class="ico">💬</span> Community</a>
+        <a href="/recipes"><span class="ico">🍳</span> Recipes</a>
         <a href="/explore"><span class="ico">🌌</span> Research</a>
         <a href="/research"><span class="ico">🎗</span> Donations</a>
       </nav>
@@ -100,9 +101,29 @@
     </main>
   </div>
 
+  <!-- Step info modal: tap any step card to read why this matters. -->
+  <div class="modal story-info-modal" id="story-info-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-story-info></div>
+    <div class="modal-card modal-xl story-info-card">
+      <button class="modal-close" type="button" data-close-story-info aria-label="Close">×</button>
+      <header class="story-info-head">
+        <span class="story-info-emoji" id="story-info-emoji">📖</span>
+        <div>
+          <p class="story-info-eyebrow" id="story-info-eyebrow"></p>
+          <h2 id="story-info-title"></h2>
+        </div>
+      </header>
+      <div class="story-info-stats" id="story-info-stats"></div>
+      <p class="story-info-desc" id="story-info-desc"></p>
+      <h3 class="story-info-why-head" id="story-info-why-head">Why this matters</h3>
+      <p class="story-info-details" id="story-info-details"></p>
+      <div class="story-info-actions" id="story-info-actions"></div>
+    </div>
+  </div>
+
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
   <script src="/account-menu.js?v=1" defer></script>
-  <script src="/story.js" defer></script>
+  <script src="/story.js?v=2" defer></script>
 </body>
 </html>

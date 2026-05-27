@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=5" />
-  <link rel="stylesheet" href="/meds.css?v=4" />
+  <link rel="stylesheet" href="/meds.css?v=5" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -63,6 +63,7 @@
         <a href="/documents"><span class="ico">📁</span> Documents</a>
         <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
         <a href="/community"><span class="ico">💬</span> Community</a>
+        <a href="/recipes"><span class="ico">🍳</span> Recipes</a>
         <a href="/explore"><span class="ico">🌌</span> Research</a>
         <a href="/research"><span class="ico">🎗</span> Donations</a>
       </nav>
@@ -239,6 +240,17 @@
           </form>
         </div>
       </div>
+      <!-- Quick-schedule chooser: pops when the user taps an empty slot
+           in the weekly timetable and already has medications. -->
+      <div class="modal" id="quick-sched-modal" aria-hidden="true" role="dialog">
+        <div class="modal-backdrop" data-close-quick-sched></div>
+        <div class="modal-card">
+          <button class="modal-close" type="button" data-close-quick-sched aria-label="Close">×</button>
+          <h3>Schedule a dose</h3>
+          <p class="modal-sub">Pick the medication you want to add to this slot. We'll keep the day you tapped pre-selected.</p>
+          <ul class="quick-sched-list" id="quick-sched-list"></ul>
+        </div>
+      </div>
     </main>
 
     <!-- ===== RIGHT SIDEBAR — community top picks ===== -->
@@ -268,6 +280,6 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1" defer></script>
   <script src="/med-catalog.js?v=2" defer></script>
-  <script src="/meds.js?v=4" defer></script>
+  <script src="/meds.js?v=5" defer></script>
 </body>
 </html>

@@ -148,6 +148,31 @@ export default {
             if (action === "logs" && request.method === "GET")  return jsonHeaders(await getMedicationLogs(env, user, id));
           }
 
+          // --- Recipes (community cookbook) ------------------------------
+          if (url.pathname === "/api/me/recipes" && request.method === "GET") {
+            return jsonHeaders(await listRecipes(request, env, user));
+          }
+          if (url.pathname === "/api/me/recipes" && request.method === "POST") {
+            return jsonHeaders(await createRecipe(request, env, user));
+          }
+          if (url.pathname === "/api/me/recipe-foods" && request.method === "GET") {
+            return jsonHeaders(await listRecipeFoods(request, env, user));
+          }
+          if (url.pathname === "/api/me/recipe-foods" && request.method === "POST") {
+            return jsonHeaders(await createRecipeFood(request, env, user));
+          }
+          if (url.pathname === "/api/me/recipe-categories" && request.method === "GET") {
+            return jsonHeaders(getRecipeCategories());
+          }
+          const recipeMatch = url.pathname.match(/^\/api\/me\/recipes\/(\d+)(?:\/(\w+))?$/);
+          if (recipeMatch) {
+            const id = +recipeMatch[1];
+            const action = recipeMatch[2];
+            if (!action     && request.method === "GET")    return jsonHeaders(await getRecipe(env, user, id));
+            if (!action     && request.method === "DELETE") return jsonHeaders(await deleteRecipe(env, user, id));
+            if (action === "react" && request.method === "POST") return jsonHeaders(await postRecipeReaction(request, env, user, id));
+          }
+
           // --- Documents (private file storage in R2) ---------------------
           if (url.pathname === "/api/me/documents" && request.method === "GET") {
             return jsonHeaders(await listDocuments(env, user));
@@ -347,6 +372,7 @@ export default {
       url.pathname === "/documents"   || url.pathname.startsWith("/documents/") ||
       url.pathname === "/security"    || url.pathname.startsWith("/security/") ||
       url.pathname === "/research"    || url.pathname.startsWith("/research/") ||
+      url.pathname === "/recipes"     || url.pathname.startsWith("/recipes/") ||
       url.pathname === "/explore"     || url.pathname.startsWith("/explore/")
     ) {
       const session = await readSession(request, env);
@@ -1258,6 +1284,7 @@ async function bootstrapSchema(env) {
       ensureDocSchema(env),
       ensurePetPoopColumn(env),
       ensureDonationsSchema(env),
+      ensureRecipeSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -1281,6 +1308,7 @@ async function adminBootstrapSchema(env) {
   await run("documents",  ensureDocSchema);
   await run("pet_columns", ensurePetPoopColumn);
   await run("donations",  ensureDonationsSchema);
+  await run("recipes",    ensureRecipeSchema);
   return json({ ok: true, results });
 }
 
@@ -2054,87 +2082,119 @@ const STORY_STEPS = [
   { id: "order_dna", phase: "Get insights", phaseDesc: "Real data about what's happening inside.",
     title: "Request your EndoMe DNA test",
     desc: "An at-home DNA kit that maps the markers most linked to endometriosis.",
+    why: "Why this matters",
+    details: "Endometriosis runs in families and is partly genetic, but most people never get tested for the markers that affect how their body handles oestrogen, inflammation and pain. The EndoMe DNA kit reads the variants that are most studied in endo so you stop guessing about whether the pill, an NSAID or a particular supplement is actually going to do anything for you. Your results stay private and feed into the picture you bring to your specialist.",
     icon: "🧬", type: "action",
     actionLabel: "Request EndoMe DNA", actionEndpoint: "/api/me/order/dna" },
   { id: "dna_results", phase: "Get insights",
     title: "Upload your DNA results",
     desc: "Send back your sample, then upload your results when they arrive.",
+    why: "Why uploading matters",
+    details: "Once your sample is processed we send you the raw report. Uploading it here unlocks the personalised insights across EndoMe — the medication page can flag whether you'll metabolise something faster or slower than average, and your story timeline can adapt to what your genetics suggest is most likely to help first.",
     icon: "📊", type: "action", requires: "order_dna",
     actionLabel: "Upload results", actionEndpoint: "/api/me/results/dna" },
 
   { id: "order_bloods", phase: "Get insights",
     title: "Request your EndoMe Bloods test",
     desc: "A blood panel covering inflammation, hormones, and key deficiencies.",
+    why: "Why this matters",
+    details: "Endo flares show up in your bloodwork before you have a clear diagnosis. The EndoMe Bloods panel covers CA-125, CRP, ferritin, vitamin D, B12 and the sex hormones — exactly the things a good endo specialist asks for at the first visit. Doing it now means you walk in with the receipts rather than waiting weeks for a referral and then weeks more for results.",
     icon: "🩸", type: "action",
     actionLabel: "Request EndoMe Bloods", actionEndpoint: "/api/me/order/bloods" },
   { id: "bloods_results", phase: "Get insights",
     title: "Upload your Bloods results",
     desc: "Get your blood draw done and upload the report here.",
+    why: "Why uploading matters",
+    details: "Your bloodwork joins your DNA and symptom log to build the full picture. Trends are more useful than single numbers, so the sooner this is in the more your future check-ins can be compared against your own baseline.",
     icon: "📊", type: "action", requires: "order_bloods",
     actionLabel: "Upload results", actionEndpoint: "/api/me/results/bloods" },
 
   { id: "order_map", phase: "Get insights",
     title: "Request your EndoMe Map test",
     desc: "An at-home urine test that maps your hormone pathways end-to-end.",
+    why: "Why this matters",
+    details: "Bloods give you a snapshot. The Map gives you the full hormone pathway: oestrogen, progesterone, androgens and their metabolites measured in urine over 24 hours. It's the test that explains why two people on the same pill have totally different experiences, and it's the data most endo specialists wish they had at the first visit.",
     icon: "🗺️", type: "action",
     actionLabel: "Request EndoMe Map", actionEndpoint: "/api/me/order/map" },
   { id: "map_results", phase: "Get insights",
     title: "Upload your Map results",
     desc: "Collect your sample at home, post it back, then upload the report here.",
+    why: "Why uploading matters",
+    details: "Map results sharpen everything: which hormones are dominant, which metabolite pathways are overactive, and which supplements or interventions actually fit your physiology. Uploading puts it side-by-side with your bloods and DNA in one view.",
     icon: "📊", type: "action", requires: "order_map",
     actionLabel: "Upload results", actionEndpoint: "/api/me/results/map" },
 
   { id: "log_14_days", phase: "Get insights",
     title: "Log symptoms for 14 days",
     desc: "Two weeks of patterns is enough to start seeing your story.",
+    why: "Why 14 days",
+    details: "Most cycles are 21 to 35 days, so a fortnight of logs catches at least half of yours including the days that tend to flare. We use these two weeks to build the first version of your timeline and to give your GP something concrete instead of \"it hurts most months\". After that, every extra day makes the pattern clearer.",
     icon: "📈", type: "auto", autoLabel: "Tracks automatically" },
 
   // Phase 2 — Talk to your doctor
   { id: "prepare_gp", phase: "Talk to your doctor", phaseDesc: "Bring the receipts. The right preparation changes how this conversation goes.",
     title: "Prepare for your GP visit",
     desc: "Pull together your symptom history, your DNA results, and a list of questions.",
+    why: "Why preparation matters",
+    details: "The average GP visit is about 12 minutes. Walking in with a short symptom summary, your test results and a written list of questions is the single biggest thing you can do to avoid being dismissed. The community has watched too many people get told \"that's just period pain\" — preparation is how you stop that happening to you.",
     icon: "📝", type: "manual" },
 
   { id: "talk_gp", phase: "Talk to your doctor",
     title: "Talk to your GP about endometriosis",
     desc: "Share what you've tracked. Be specific: pain, cycle, what you've already tried.",
+    why: "Why this conversation matters",
+    details: "Your GP is the gatekeeper to a specialist. Be specific: pain score, how many days a month it stops you doing normal things, what painkillers you've already tried, what's failed. Use the word endometriosis explicitly — it changes how the consult is documented and makes referrals much easier.",
     icon: "👩‍⚕️", type: "manual" },
 
   { id: "referral", phase: "Talk to your doctor",
     title: "Get a specialist referral",
     desc: "Ask for a gynaecologist who specifically works with endometriosis patients.",
+    why: "Why the right specialist matters",
+    details: "Not every gynaecologist is an endo expert. Endo care is sub-specialised — laparoscopic excision surgeons, advanced pelvic ultrasonographers and pain specialists all live under \"gynae\". Ask your GP to refer specifically to someone who treats endometriosis as a focus, even if it means a longer wait.",
     icon: "📋", type: "manual" },
 
   // Phase 3 — Diagnosis
   { id: "specialist", phase: "Diagnosis", phaseDesc: "The path to answers — gather everything, then bring it together.",
     title: "See an endo specialist",
     desc: "Bring your records, your DNA results, and the questions you prepared.",
+    why: "Why the first visit counts",
+    details: "Specialists make a plan in the first 30 minutes that often holds for years. Bring everything: your symptom logs, DNA, bloods, Map, prior scans, and a written list of what you want answered. If anything wasn't asked, send it as a follow-up — it goes into the notes.",
     icon: "🏥", type: "manual" },
 
   { id: "imaging", phase: "Diagnosis",
     title: "Get pelvic imaging",
     desc: "Pelvic ultrasound or MRI as recommended by your specialist.",
+    why: "Why imaging matters",
+    details: "A skilled pelvic ultrasound or MRI can pick up endometriomas, deep infiltrating lesions and adhesions without surgery. It also helps surgeons plan: knowing what's there before going in changes the operating time and the outcome. Insist on an operator who specifically scans for endo — generic pelvic ultrasounds often miss it.",
     icon: "🔬", type: "manual" },
 
   { id: "diagnosis", phase: "Diagnosis",
     title: "Receive your diagnosis",
     desc: "Formal diagnosis (or ruling out) from your specialist. Whatever it says, you're not alone.",
+    why: "Why a written diagnosis matters",
+    details: "A formal diagnosis on paper unlocks treatments, insurance claims, employer accommodations and surgical pathways that otherwise feel out of reach. If your specialist suspects endo but won't write the word, ask why, ask what would change their mind, and consider a second opinion.",
     icon: "📜", type: "manual" },
 
   // Phase 4 — Live well
   { id: "treatment", phase: "Live well", phaseDesc: "Beyond diagnosis. This is the day-to-day work that adds up.",
     title: "Agree a treatment plan",
     desc: "Lifestyle, hormonal options, pain management, surgery — discuss the right mix with your specialist.",
+    why: "Why a plan matters",
+    details: "A treatment plan is rarely one thing. It's usually a stack: pain management for the worst days, a hormonal strategy to reduce flares, lifestyle moves that support both, and a clear trigger for when to escalate to surgery. Agree it in writing so you and any new clinician can pick up where you left off.",
     icon: "💊", type: "manual" },
 
   { id: "habits", phase: "Live well",
     title: "Build daily habits that help",
     desc: "Sleep, gentle movement, anti-inflammatory eating, stress care. Small things, repeated.",
+    why: "Why the boring stuff actually works",
+    details: "Sleep, movement, anti-inflammatory eating and stress care don't sound like medicine, but they are: each one shifts the hormonal and inflammatory environment endo thrives in. Consistency beats intensity. Aim for 80% adherence rather than a perfect week followed by burnout.",
     icon: "🌿", type: "manual" },
 
   { id: "community", phase: "Live well",
     title: "Connect with the EndoMe community",
     desc: "Share your story with others who get it — when you're ready.",
+    why: "Why community matters",
+    details: "Endo is exhausting on its own. The community on EndoMe is people who already know what a flare feels like, who don't need it explained, and who have already tried the things you're about to try. You don't have to share everything. Even reading what other people are doing is enough to feel less alone.",
     icon: "💖", type: "manual" },
 ];
 const STORY_STEP_IDS = new Set(STORY_STEPS.map((s) => s.id));
@@ -4874,6 +4934,428 @@ function sanitizeUrl(v) {
     if (u.protocol !== "http:" && u.protocol !== "https:") return null;
     return u.toString();
   } catch { return null; }
+}
+
+// =============================================================================
+// RECIPES — community cookbook. Recipes have hearts and thumbs-down. Every
+// thumbs-down must come with a useful comment that lands in the moderation
+// queue, so no one can just flame a post anonymously. Each recipe stores its
+// ingredient list using a snapshot of the food name + quantity + unit, with
+// an optional pointer at the shared food catalog so the future food tracker
+// can join on the same entries.
+// =============================================================================
+const RECIPE_CATEGORIES = [
+  { id: "breakfast",   label: "Breakfast",     emoji: "🥣" },
+  { id: "lunch",       label: "Lunch",         emoji: "🥗" },
+  { id: "dinner",      label: "Dinner",        emoji: "🍽" },
+  { id: "family_meal", label: "Family meals",  emoji: "👨‍👩‍👧" },
+  { id: "quick_fast",  label: "Quick & fast",  emoji: "⚡" },
+  { id: "dessert",     label: "Desserts",      emoji: "🍰" },
+  { id: "snack",       label: "Snacks",        emoji: "🍪" },
+  { id: "drink",       label: "Drinks",        emoji: "🥤" },
+  { id: "other",       label: "Other",         emoji: "🍳" },
+];
+const RECIPE_CATEGORY_IDS = new Set(RECIPE_CATEGORIES.map((c) => c.id));
+const RECIPE_FOOD_CATEGORIES = new Set([
+  "protein", "vegetable", "fruit", "grain", "dairy", "fat", "sweetener",
+  "herb", "spice", "fluid", "legume", "nut_seed", "other",
+]);
+const RECIPE_FOOD_UNITS = new Set([
+  "g", "kg", "mg", "ml", "l", "tsp", "tbsp", "cup", "piece", "slice",
+  "clove", "pinch", "to_taste", "stalk", "bunch", "can", "packet",
+]);
+const MAX_RECIPES_PER_USER = 200;
+
+function getRecipeCategories() {
+  return json({ categories: RECIPE_CATEGORIES });
+}
+
+let _recipeSchemaChecked = false;
+async function ensureRecipeSchema(env) {
+  if (_recipeSchemaChecked) return;
+  _recipeSchemaChecked = true;
+  const stmts = [
+    // Shared food catalog. user_id=NULL marks a global entry. Anyone can read
+    // every entry; the future food tracker joins on this table.
+    "CREATE TABLE IF NOT EXISTS recipe_foods (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT," +
+    "  name TEXT NOT NULL," +
+    "  category TEXT," +
+    "  default_unit TEXT," +
+    "  notes TEXT," +
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_recipe_foods_name ON recipe_foods(LOWER(name))",
+    "CREATE TABLE IF NOT EXISTS recipes (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  title TEXT NOT NULL," +
+    "  category TEXT," +
+    "  summary TEXT," +
+    "  body TEXT," +
+    "  servings INTEGER," +
+    "  prep_minutes INTEGER," +
+    "  cook_minutes INTEGER," +
+    "  is_active INTEGER NOT NULL DEFAULT 1," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_recipes_cat  ON recipes(category, created_at DESC)",
+    "CREATE TABLE IF NOT EXISTS recipe_ingredients (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  recipe_id INTEGER NOT NULL," +
+    "  food_id INTEGER," +
+    "  food_name TEXT NOT NULL," +
+    "  quantity REAL," +
+    "  unit TEXT," +
+    "  notes TEXT" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_recipe_ing_recipe ON recipe_ingredients(recipe_id)",
+    "CREATE TABLE IF NOT EXISTS recipe_reactions (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  recipe_id INTEGER NOT NULL," +
+    "  reaction TEXT NOT NULL," +
+    "  comment TEXT," +
+    "  created_at INTEGER NOT NULL," +
+    "  UNIQUE(user_id, recipe_id)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_recipe_react_recipe ON recipe_reactions(recipe_id, reaction)",
+    "CREATE TABLE IF NOT EXISTS recipe_mod_queue (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  recipe_id INTEGER NOT NULL," +
+    "  user_id TEXT NOT NULL," +
+    "  comment TEXT NOT NULL," +
+    "  reaction_id INTEGER," +
+    "  status TEXT NOT NULL DEFAULT 'pending'," +
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_recipe_mod_status ON recipe_mod_queue(status, created_at DESC)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+
+  // Seed a small catalog of generic foods on first boot so the page isn't
+  // empty for the first poster. Skipped silently if the table already has rows.
+  try {
+    const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM recipe_foods").first();
+    if ((n || 0) === 0) await seedRecipeFoods(env);
+  } catch {}
+}
+
+async function seedRecipeFoods(env) {
+  const now = nowSec();
+  const seed = [
+    // proteins
+    ["Chicken breast","protein","g"], ["Salmon fillet","protein","g"],
+    ["Eggs","protein","piece"], ["Greek yoghurt","protein","g"],
+    ["Tofu","protein","g"], ["Tempeh","protein","g"], ["Tuna","protein","can"],
+    ["Lean beef mince","protein","g"], ["Prawns","protein","g"],
+    // veg
+    ["Spinach","vegetable","cup"], ["Kale","vegetable","cup"],
+    ["Broccoli","vegetable","g"], ["Sweet potato","vegetable","piece"],
+    ["Onion","vegetable","piece"], ["Garlic","vegetable","clove"],
+    ["Carrot","vegetable","piece"], ["Capsicum","vegetable","piece"],
+    ["Tomato","vegetable","piece"], ["Cucumber","vegetable","piece"],
+    ["Zucchini","vegetable","piece"], ["Mushrooms","vegetable","g"],
+    ["Avocado","fat","piece"],
+    // fruit
+    ["Blueberries","fruit","cup"], ["Banana","fruit","piece"],
+    ["Apple","fruit","piece"], ["Lemon","fruit","piece"],
+    ["Lime","fruit","piece"], ["Strawberries","fruit","cup"],
+    // grain / legume
+    ["Rolled oats","grain","cup"], ["Brown rice","grain","cup"],
+    ["Quinoa","grain","cup"], ["Wholegrain bread","grain","slice"],
+    ["Chickpeas","legume","can"], ["Lentils","legume","cup"],
+    ["Black beans","legume","can"],
+    // dairy / fat / sweetener
+    ["Olive oil","fat","tbsp"], ["Coconut oil","fat","tbsp"],
+    ["Almonds","nut_seed","g"], ["Walnuts","nut_seed","g"],
+    ["Chia seeds","nut_seed","tbsp"], ["Flax seeds","nut_seed","tbsp"],
+    ["Almond milk","dairy","cup"], ["Cottage cheese","dairy","g"],
+    ["Honey","sweetener","tsp"], ["Maple syrup","sweetener","tbsp"],
+    ["Dark chocolate","other","g"],
+    // herbs / spices
+    ["Turmeric","spice","tsp"], ["Cinnamon","spice","tsp"],
+    ["Ginger","spice","g"], ["Basil","herb","bunch"],
+    ["Parsley","herb","bunch"], ["Mint","herb","bunch"],
+    ["Black pepper","spice","pinch"], ["Sea salt","spice","pinch"],
+    // fluids
+    ["Water","fluid","cup"], ["Bone broth","fluid","cup"],
+  ];
+  for (const [name, cat, unit] of seed) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO recipe_foods (user_id, name, category, default_unit, notes, created_at) " +
+        "VALUES (NULL, ?, ?, ?, NULL, ?)"
+      ).bind(name, cat, unit, now).run();
+    } catch {}
+  }
+}
+
+async function listRecipes(request, env, user) {
+  await ensureRecipeSchema(env);
+  const url = new URL(request.url);
+  const cat = (url.searchParams.get("category") || "").toLowerCase();
+  const q   = (url.searchParams.get("q") || "").trim().toLowerCase();
+  const mineOnly = url.searchParams.get("scope") === "mine";
+
+  const where = ["r.is_active = 1"];
+  const binds = [];
+  if (mineOnly) { where.push("r.user_id = ?"); binds.push(user.id); }
+  if (cat && RECIPE_CATEGORY_IDS.has(cat)) { where.push("r.category = ?"); binds.push(cat); }
+  if (q) {
+    where.push("(LOWER(r.title) LIKE ? OR LOWER(r.summary) LIKE ? OR LOWER(r.body) LIKE ?)");
+    const like = `%${q.replace(/[%_]/g, "")}%`;
+    binds.push(like, like, like);
+  }
+
+  const rows = await env.DB.prepare(
+    "SELECT r.*, u.display_name AS author_display, u.username AS author_username, " +
+    "  (SELECT COUNT(*) FROM recipe_reactions WHERE recipe_id = r.id AND reaction='love') AS loves, " +
+    "  (SELECT COUNT(*) FROM recipe_reactions WHERE recipe_id = r.id AND reaction='down') AS downs, " +
+    "  (SELECT reaction FROM recipe_reactions WHERE recipe_id = r.id AND user_id = ?) AS mine " +
+    "FROM recipes r LEFT JOIN users u ON u.id = r.user_id " +
+    `WHERE ${where.join(" AND ")} ORDER BY r.created_at DESC LIMIT 200`
+  ).bind(user.id, ...binds).all().catch(() => ({ results: [] }));
+
+  return json({
+    recipes: (rows.results || []).map((r) => ({
+      id: r.id, title: r.title, category: r.category, summary: r.summary,
+      servings: r.servings, prepMinutes: r.prep_minutes, cookMinutes: r.cook_minutes,
+      createdAt: r.created_at,
+      author: r.author_display || r.author_username || "Member",
+      authorUsername: r.author_username,
+      isMine: r.user_id === user.id,
+      loves: r.loves || 0, downs: r.downs || 0,
+      myReaction: r.mine || null,
+    })),
+  });
+}
+
+async function getRecipe(env, user, id) {
+  await ensureRecipeSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT r.*, u.display_name AS author_display, u.username AS author_username " +
+    "FROM recipes r LEFT JOIN users u ON u.id = r.user_id " +
+    "WHERE r.id = ? AND r.is_active = 1"
+  ).bind(id).first();
+  if (!r) return json({ error: "Recipe not found" }, 404);
+
+  const ings = await env.DB.prepare(
+    "SELECT id, food_id, food_name, quantity, unit, notes FROM recipe_ingredients " +
+    "WHERE recipe_id = ? ORDER BY id ASC"
+  ).bind(id).all().catch(() => ({ results: [] }));
+
+  const tally = await env.DB.prepare(
+    "SELECT reaction, COUNT(*) AS n FROM recipe_reactions WHERE recipe_id = ? GROUP BY reaction"
+  ).bind(id).all().catch(() => ({ results: [] }));
+  let loves = 0, downs = 0;
+  for (const t of (tally.results || [])) {
+    if (t.reaction === "love") loves = t.n;
+    else if (t.reaction === "down") downs = t.n;
+  }
+  const mine = await env.DB.prepare(
+    "SELECT reaction, comment FROM recipe_reactions WHERE recipe_id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+
+  // Public down-comments (the moderation queue stores the same text but we
+  // also surface them on the recipe so visitors can see what people object
+  // to). Strip user_id from the wire to keep it lightly anonymous.
+  const downComments = await env.DB.prepare(
+    "SELECT comment, created_at FROM recipe_reactions " +
+    "WHERE recipe_id = ? AND reaction = 'down' AND comment IS NOT NULL " +
+    "ORDER BY created_at DESC LIMIT 30"
+  ).bind(id).all().catch(() => ({ results: [] }));
+
+  return json({
+    recipe: {
+      id: r.id, title: r.title, category: r.category, summary: r.summary,
+      body: r.body, servings: r.servings, prepMinutes: r.prep_minutes,
+      cookMinutes: r.cook_minutes, createdAt: r.created_at,
+      author: r.author_display || r.author_username || "Member",
+      authorUsername: r.author_username,
+      isMine: r.user_id === user.id,
+      ingredients: (ings.results || []).map((i) => ({
+        id: i.id, foodId: i.food_id, foodName: i.food_name,
+        quantity: i.quantity, unit: i.unit, notes: i.notes,
+      })),
+      loves, downs,
+      myReaction: mine?.reaction || null,
+      myComment: mine?.comment || null,
+      downComments: (downComments.results || []).map((c) => ({ comment: c.comment, createdAt: c.created_at })),
+    },
+  });
+}
+
+async function createRecipe(request, env, user) {
+  await ensureRecipeSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM recipes WHERE user_id = ? AND is_active = 1"
+  ).bind(user.id).first().catch(() => ({ n: 0 }));
+  if ((owned?.n || 0) >= MAX_RECIPES_PER_USER) {
+    return json({ error: "You've reached the recipe limit." }, 403);
+  }
+
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+
+  const title = sanitizeText(body.title, 140);
+  if (!title) return json({ error: "Title is required." }, 400);
+  const category = RECIPE_CATEGORY_IDS.has(body.category) ? body.category : "other";
+  const summary  = sanitizeText(body.summary, 500) || null;
+  const bodyText = sanitizeText(body.body, 8000) || null;
+  const servings = clampIntOrNull(body.servings, 1, 30);
+  const prep     = clampIntOrNull(body.prepMinutes, 0, 600);
+  const cook     = clampIntOrNull(body.cookMinutes, 0, 600);
+  const ingredients = Array.isArray(body.ingredients) ? body.ingredients.slice(0, 60) : [];
+  if (!ingredients.length) return json({ error: "Add at least one ingredient." }, 400);
+
+  const now = nowSec();
+  const res = await env.DB.prepare(
+    "INSERT INTO recipes (user_id, title, category, summary, body, servings, prep_minutes, cook_minutes, is_active, created_at, updated_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)"
+  ).bind(user.id, title, category, summary, bodyText, servings, prep, cook, now, now).run();
+  const recipeId = res.meta?.last_row_id;
+
+  for (const ing of ingredients) {
+    const foodName = sanitizeText(ing.foodName || ing.name, 120);
+    if (!foodName) continue;
+    const foodId   = ing.foodId ? (+ing.foodId || null) : null;
+    const quantity = (ing.quantity == null || ing.quantity === "") ? null : Math.max(0, Math.min(99999, +ing.quantity || 0));
+    const unit     = RECIPE_FOOD_UNITS.has(ing.unit) ? ing.unit : (ing.unit ? sanitizeText(ing.unit, 20) : null);
+    const notes    = sanitizeText(ing.notes, 200) || null;
+    try {
+      await env.DB.prepare(
+        "INSERT INTO recipe_ingredients (recipe_id, food_id, food_name, quantity, unit, notes) " +
+        "VALUES (?, ?, ?, ?, ?, ?)"
+      ).bind(recipeId, foodId, foodName, quantity, unit, notes).run();
+    } catch {}
+  }
+
+  return json({ ok: true, id: recipeId });
+}
+
+async function deleteRecipe(env, user, id) {
+  await ensureRecipeSchema(env);
+  // Owner-only soft delete.
+  const owned = await env.DB.prepare(
+    "SELECT id FROM recipes WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Recipe not found" }, 404);
+  await env.DB.prepare(
+    "UPDATE recipes SET is_active = 0, updated_at = ? WHERE id = ?"
+  ).bind(nowSec(), id).run();
+  return json({ ok: true });
+}
+
+async function postRecipeReaction(request, env, user, id) {
+  await ensureRecipeSchema(env);
+  // Confirm recipe exists.
+  const r = await env.DB.prepare(
+    "SELECT id FROM recipes WHERE id = ? AND is_active = 1"
+  ).bind(id).first().catch(() => null);
+  if (!r) return json({ error: "Recipe not found" }, 404);
+
+  const body = await readJsonSafe(request) || {};
+  const wanted = body.reaction;
+  if (wanted === null) {
+    await env.DB.prepare(
+      "DELETE FROM recipe_reactions WHERE user_id = ? AND recipe_id = ?"
+    ).bind(user.id, id).run();
+    return json({ ok: true, reaction: null });
+  }
+  if (wanted !== "love" && wanted !== "down") {
+    return json({ error: "Pick love or down." }, 400);
+  }
+  let comment = null;
+  if (wanted === "down") {
+    // Thumbs-down must come with a real, useful comment. Bare gripes get
+    // bounced; anything 10+ chars goes through and lands in the mod queue.
+    comment = sanitizeText(body.comment, 800);
+    if (!comment || comment.length < 10) {
+      return json({ error: "Add a comment (at least 10 characters) explaining what didn't work. Useful feedback only — it goes to the moderation queue." }, 400);
+    }
+  }
+
+  const now = nowSec();
+  await env.DB.prepare(
+    "INSERT INTO recipe_reactions (user_id, recipe_id, reaction, comment, created_at) VALUES (?, ?, ?, ?, ?) " +
+    "ON CONFLICT(user_id, recipe_id) DO UPDATE SET reaction = excluded.reaction, comment = excluded.comment, created_at = excluded.created_at"
+  ).bind(user.id, id, wanted, comment, now).run();
+
+  if (wanted === "down" && comment) {
+    const reactRow = await env.DB.prepare(
+      "SELECT id FROM recipe_reactions WHERE user_id = ? AND recipe_id = ?"
+    ).bind(user.id, id).first().catch(() => null);
+    try {
+      await env.DB.prepare(
+        "INSERT INTO recipe_mod_queue (recipe_id, user_id, comment, reaction_id, status, created_at) " +
+        "VALUES (?, ?, ?, ?, 'pending', ?)"
+      ).bind(id, user.id, comment, reactRow?.id || null, now).run();
+    } catch {}
+  }
+
+  const tally = await env.DB.prepare(
+    "SELECT reaction, COUNT(*) AS n FROM recipe_reactions WHERE recipe_id = ? GROUP BY reaction"
+  ).bind(id).all().catch(() => ({ results: [] }));
+  let loves = 0, downs = 0;
+  for (const t of (tally.results || [])) {
+    if (t.reaction === "love") loves = t.n;
+    else if (t.reaction === "down") downs = t.n;
+  }
+  return json({ ok: true, reaction: wanted, loves, downs });
+}
+
+async function listRecipeFoods(request, env, user) {
+  await ensureRecipeSchema(env);
+  const url = new URL(request.url);
+  const q   = (url.searchParams.get("q") || "").trim().toLowerCase();
+  const cat = url.searchParams.get("category");
+  const where = [];
+  const binds = [];
+  if (q) { where.push("LOWER(name) LIKE ?"); binds.push(`%${q.replace(/[%_]/g,"")}%`); }
+  if (cat && RECIPE_FOOD_CATEGORIES.has(cat)) { where.push("category = ?"); binds.push(cat); }
+  const sql = "SELECT id, user_id, name, category, default_unit, notes FROM recipe_foods" +
+    (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
+    " ORDER BY name ASC LIMIT 300";
+  const rows = await env.DB.prepare(sql).bind(...binds).all().catch(() => ({ results: [] }));
+  return json({
+    foods: (rows.results || []).map((r) => ({
+      id: r.id, name: r.name, category: r.category, defaultUnit: r.default_unit,
+      notes: r.notes, isMine: r.user_id === user.id, isGlobal: !r.user_id,
+    })),
+  });
+}
+
+async function createRecipeFood(request, env, user) {
+  await ensureRecipeSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const name = sanitizeText(body.name, 100);
+  if (!name) return json({ error: "Name required" }, 400);
+  const category = RECIPE_FOOD_CATEGORIES.has(body.category) ? body.category : "other";
+  const unit = RECIPE_FOOD_UNITS.has(body.defaultUnit) ? body.defaultUnit : (body.defaultUnit ? sanitizeText(body.defaultUnit, 20) : null);
+  const notes = sanitizeText(body.notes, 200) || null;
+  // De-dupe by lowercased name so we don't end up with 200 versions of "Eggs".
+  const existing = await env.DB.prepare(
+    "SELECT id FROM recipe_foods WHERE LOWER(name) = LOWER(?) LIMIT 1"
+  ).bind(name).first().catch(() => null);
+  if (existing) return json({ ok: true, id: existing.id, deduped: true });
+
+  const res = await env.DB.prepare(
+    "INSERT INTO recipe_foods (user_id, name, category, default_unit, notes, created_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(user.id, name, category, unit, notes, nowSec()).run();
+  return json({ ok: true, id: res.meta?.last_row_id });
+}
+
+function clampIntOrNull(v, lo, hi) {
+  if (v == null || v === "") return null;
+  const n = +v;
+  if (!Number.isFinite(n)) return null;
+  return Math.max(lo, Math.min(hi, Math.round(n)));
 }
 
 // =============================================================================

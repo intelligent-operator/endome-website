@@ -101,7 +101,17 @@
   position:relative;
   /* margin-top lets the floating step-num circle hang over the top edge */
   margin-top:16px;
+  cursor:pointer;
 }
+.step::before{
+  content:"Tap to read more";
+  position:absolute;bottom:8px;right:14px;
+  font-size:10px;font-weight:600;color:#c9b3c0;
+  letter-spacing:.04em;text-transform:uppercase;
+  opacity:0;transition:opacity .15s;
+  pointer-events:none;
+}
+.step:hover::before{opacity:1}
 .step:hover{
   transform:translateY(-2px);
   box-shadow:0 12px 28px rgba(255,77,138,.10);
@@ -238,4 +248,52 @@
   .story-hero-ring svg{width:130px;height:130px}
   .step-grid{grid-template-columns:1fr}
   .phase-head h2{font-size:18px}
+}
+
+/* =====================================================================
+   Step info modal
+   ===================================================================== */
+.story-info-card{padding:32px 32px 26px;display:flex;flex-direction:column;gap:14px}
+.story-info-head{
+  display:flex;align-items:flex-start;gap:14px;margin-bottom:4px;
+}
+.story-info-emoji{
+  width:60px;height:60px;border-radius:18px;
+  background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:30px;flex-shrink:0;
+}
+.story-info-eyebrow{
+  margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:#a08596;font-weight:700;
+}
+.story-info-head h2{margin:4px 0 0;font-size:22px;color:#2b1922;line-height:1.25}
+.story-info-stats{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px}
+.story-info-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  background:#fff5f8;color:#7a5f6c;border:1px solid #ffe2eb;
+  padding:4px 11px;border-radius:999px;font-size:11px;font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase;
+}
+.story-info-pill.is-done{background:linear-gradient(135deg,#dcf5cd,#bef0a3);color:#2b6f1f;border-color:#9bd97a}
+.story-info-pill.is-locked{background:#f1e7ed;color:#9a7889;border-color:#e3d2dc}
+.story-info-pill.is-todo{background:linear-gradient(135deg,#ffeaf2,#ffd6e0);color:#c4344b;border-color:#ffb3c8}
+.story-info-pill.is-meta{background:#fff;color:#7a5f6c}
+.story-info-desc{
+  margin:0;font-size:15px;color:#3a2330;line-height:1.55;font-weight:500;
+}
+.story-info-why-head{
+  margin:8px 0 0;font-size:13px;font-weight:800;color:#ff4e8a;
+  letter-spacing:.04em;text-transform:uppercase;
+}
+.story-info-details{margin:0;font-size:14px;color:#5a3a48;line-height:1.65}
+.story-info-actions{
+  display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;align-items:center;
+}
+.story-info-locked,.story-info-auto{
+  margin:0;font-size:13px;color:#7a5f6c;flex:1;min-width:0;
+}
+@media (max-width:520px){
+  .story-info-card{padding:22px 18px 18px}
+  .story-info-head h2{font-size:18px}
 }
