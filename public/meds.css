@@ -143,6 +143,16 @@
 }
 .glossary-body .btn{align-self:flex-start}
 
+/* Glossary "search to begin" placeholder */
+.glossary-placeholder{
+  list-style:none;text-align:center;padding:32px 20px;
+  background:#fff;border:1px dashed #ffd6e0;border-radius:18px;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+}
+.glossary-placeholder-emoji{font-size:34px;line-height:1;margin-bottom:4px}
+.glossary-placeholder strong{font-size:15px;color:#2b1922;font-weight:700}
+.glossary-placeholder span{font-size:13px;color:#7a5f6c;max-width:460px;line-height:1.5}
+
 /* =====================================================================
    Community engagement (hearts + thumbs-down + usage count)
    ===================================================================== */
@@ -192,10 +202,11 @@
   padding:14px;
 }
 .timetable-empty{
-  text-align:center;padding:24px 16px;color:#7a5f6c;font-size:13px;
-  display:flex;flex-direction:column;gap:4px;
+  margin:12px 0 0;text-align:center;padding:10px 12px;
+  color:#7a5f6c;font-size:12px;line-height:1.5;
+  background:#fff5f8;border:1px dashed #ffd6e0;border-radius:12px;
 }
-.timetable-empty strong{color:#2b1922}
+.timetable-empty strong{color:#ff4e8a;font-weight:700}
 .timetable-wrap{overflow-x:auto}
 .timetable{
   width:100%;border-collapse:separate;border-spacing:6px;table-layout:fixed;
@@ -211,7 +222,10 @@
   padding:8px;min-height:80px;border:1px solid transparent;
 }
 .timetable td.is-today{background:#ffeaf2;border-color:#ffd6e0}
-.slot-empty{font-size:13px;color:#a08596;text-align:center;padding:10px 0}
+.slot-empty{
+  font-size:11px;color:#b69aaa;text-align:center;
+  padding:18px 6px;font-style:italic;
+}
 .slot{
   display:flex;flex-direction:column;gap:2px;
   background:#fff;border:1px solid #ffeaf2;border-radius:10px;

@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=5" />
-  <link rel="stylesheet" href="/meds.css?v=3" />
+  <link rel="stylesheet" href="/meds.css?v=4" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -85,13 +85,10 @@
           <span class="section-hint">Click any slot to mark it taken or skipped. Today's reminders also land in your notifications.</span>
         </div>
         <div class="timetable-card">
-          <div class="timetable-empty" id="timetable-empty" hidden>
-            <strong>No schedule yet.</strong>
-            <span>Add a medication below and tap "+ Schedule" to set recurring doses.</span>
-          </div>
           <div class="timetable-wrap">
             <table class="timetable" id="timetable" aria-label="Weekly medication timetable"></table>
           </div>
+          <p class="timetable-empty" id="timetable-empty">Nothing scheduled yet. Add a medication below and tap <strong>+ Add slot</strong> in the schedule section to populate this week.</p>
         </div>
       </section>
 
@@ -195,13 +192,13 @@
               <ul class="med-schedule-list" id="med-schedule-list"></ul>
               <div class="med-schedule-add">
                 <div class="dow-row" id="dow-row" role="group" aria-label="Days of the week">
-                  <button type="button" class="dow-chip" data-day="1">Sun</button>
                   <button type="button" class="dow-chip" data-day="2">Mon</button>
                   <button type="button" class="dow-chip" data-day="4">Tue</button>
                   <button type="button" class="dow-chip" data-day="8">Wed</button>
                   <button type="button" class="dow-chip" data-day="16">Thu</button>
                   <button type="button" class="dow-chip" data-day="32">Fri</button>
                   <button type="button" class="dow-chip" data-day="64">Sat</button>
+                  <button type="button" class="dow-chip" data-day="1">Sun</button>
                 </div>
                 <div class="med-schedule-time-row">
                   <input type="time" id="sched-time" />
@@ -271,6 +268,6 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1" defer></script>
   <script src="/med-catalog.js?v=2" defer></script>
-  <script src="/meds.js?v=3" defer></script>
+  <script src="/meds.js?v=4" defer></script>
 </body>
 </html>

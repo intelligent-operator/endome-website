@@ -144,68 +144,70 @@ console.info("EndoMe meds build v3");
   }
 
   // --- Weekly timetable ---------------------------------------------------
+  // Render order is Monday → Sunday so the working week reads left-to-right.
+  // Day bits stay Sun=1, Mon=2, ..., Sat=64 (legacy of `Date.getDay()`).
+  const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon, Tue, Wed, Thu, Fri, Sat, Sun
+  const DAY_NAMES_LONG = { 0: "Sun", 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat" };
+
   async function renderTimetable() {
     const tableEl = document.getElementById("timetable");
-    const emptyEl = document.getElementById("timetable-empty");
+    const emptyHintEl = document.getElementById("timetable-empty");
+    let slots = [];
+    let recent = [];
+    let hasAny = false;
     try {
       const data = await fetchJson("/api/me/medications/timetable");
-      const slots = data.slots || [];
-      const recent = data.recentLogs || [];
-      if (!slots.length) {
-        tableEl.innerHTML = "";
-        emptyEl.hidden = false;
-        return;
-      }
-      emptyEl.hidden = true;
+      slots = data.slots || [];
+      recent = data.recentLogs || [];
+      hasAny = slots.length > 0;
+    } catch {}
 
-      // Bucket slots into 7 day columns
-      const days = [[],[],[],[],[],[],[]];
-      slots.forEach((s) => {
-        for (let i = 0; i < 7; i++) {
-          if (s.daysMask & (1 << i)) days[i].push(s);
-        }
-      });
-      // Sort each column by time
-      days.forEach((col) => col.sort((a, b) => a.timeOfDay.localeCompare(b.timeOfDay)));
+    // Always render the full Mon→Sun grid, even when empty, so the page
+    // shows the skeleton of the week as a placeholder.
+    if (emptyHintEl) emptyHintEl.hidden = hasAny;
 
-      const today = new Date().getDay();
-      let html = "<thead><tr>";
+    const days = { 0:[],1:[],2:[],3:[],4:[],5:[],6:[] };
+    slots.forEach((s) => {
       for (let i = 0; i < 7; i++) {
-        const isToday = i === today;
-        html += `<th class="${isToday ? "is-today" : ""}">${DAY_LABELS[i]}${isToday ? " · today" : ""}</th>`;
+        if (s.daysMask & (1 << i)) days[i].push(s);
       }
-      html += "</tr></thead><tbody><tr>";
-      for (let i = 0; i < 7; i++) {
-        const isToday = i === today;
-        html += `<td class="${isToday ? "is-today" : ""}">`;
-        if (!days[i].length) {
-          html += `<div class="slot-empty">—</div>`;
-        } else {
-          html += days[i].map((s) => {
-            const isPast = isToday && slotIsPastNow(s.timeOfDay);
-            const takenToday = isToday && recentLogHitsSlot(recent, s.medicationId, s.timeOfDay);
-            const cls = takenToday ? "taken" : (isPast ? "missed" : "");
-            const checkmark = takenToday ? "✓ " : "";
-            return `<div class="slot ${cls}" data-med="${s.medicationId}" data-time="${escapeHtml(s.timeOfDay)}" tabindex="0">
-              <span class="slot-time">${escapeHtml(s.timeOfDay)}</span>
-              <span class="slot-name">${checkmark}${KIND_ICO[s.kind] || "💊"} ${escapeHtml(s.name)}</span>
-              ${s.dose ? `<span class="slot-dose">${escapeHtml(s.dose)}</span>` : ""}
-            </div>`;
-          }).join("");
-        }
-        html += `</td>`;
-      }
-      html += "</tr></tbody>";
-      tableEl.innerHTML = html;
+    });
+    for (const k of Object.keys(days)) days[k].sort((a, b) => a.timeOfDay.localeCompare(b.timeOfDay));
 
-      // Wire slot clicks → confirm taken / skipped
-      tableEl.querySelectorAll(".slot").forEach((sl) => {
-        sl.addEventListener("click", () => onSlotClick(sl));
-      });
-    } catch {
-      tableEl.innerHTML = "";
-      emptyEl.hidden = false;
+    const today = new Date().getDay();
+    let html = "<thead><tr>";
+    for (const i of DAY_ORDER) {
+      const isToday = i === today;
+      html += `<th class="${isToday ? "is-today" : ""}">${DAY_NAMES_LONG[i]}${isToday ? " · today" : ""}</th>`;
     }
+    html += "</tr></thead><tbody><tr>";
+    for (const i of DAY_ORDER) {
+      const isToday = i === today;
+      html += `<td class="${isToday ? "is-today" : ""}">`;
+      if (!days[i].length) {
+        html += `<div class="slot-empty">Nothing scheduled</div>`;
+      } else {
+        html += days[i].map((s) => {
+          const isPast = isToday && slotIsPastNow(s.timeOfDay);
+          const takenToday = isToday && recentLogHitsSlot(recent, s.medicationId, s.timeOfDay);
+          const cls = takenToday ? "taken" : (isPast ? "missed" : "");
+          const checkmark = takenToday ? "✓ " : "";
+          return `<div class="slot ${cls}" data-med="${s.medicationId}" data-time="${escapeHtml(s.timeOfDay)}" tabindex="0">
+            <span class="slot-time">${escapeHtml(s.timeOfDay)}</span>
+            <span class="slot-name">${checkmark}${KIND_ICO[s.kind] || "💊"} ${escapeHtml(s.name)}</span>
+            ${s.dose ? `<span class="slot-dose">${escapeHtml(s.dose)}</span>` : ""}
+          </div>`;
+        }).join("");
+      }
+      html += `</td>`;
+    }
+    html += "</tr></tbody>";
+    tableEl.innerHTML = html;
+
+    // Wire slot clicks → confirm taken / skipped
+    tableEl.querySelectorAll(".slot").forEach((sl) => {
+      sl.addEventListener("click", () => onSlotClick(sl));
+    });
   }
 
   function slotIsPastNow(timeOfDay) {
@@ -608,14 +610,40 @@ console.info("EndoMe meds build v3");
 
   function renderGlossary() {
     if (!glossaryList) return;
-    const q = (glossarySearch.value || "").trim().toLowerCase();
+    const q = (glossarySearch.value || "").trim();
+    const hasCategoryFilter = glossaryCategory && glossaryCategory !== "All";
+
+    // No search + no category picked → show a "start typing" placeholder
+    // rather than dumping the entire catalog. Keeps the page focused on the
+    // user's actual meds and lets them search to discover the rest.
+    if (!q && !hasCategoryFilter) {
+      glossaryList.innerHTML = `<li class="glossary-placeholder">
+        <span class="glossary-placeholder-emoji">🔎</span>
+        <strong>Search the glossary</strong>
+        <span>Start typing a medication, vitamin, brand or category — like "ibuprofen", "Slynd", "magnesium" or "birth control".</span>
+      </li>`;
+      return;
+    }
+
+    // Lightweight fuzzy ranking: score each entry by where the query lands
+    // (name prefix > name contains > alias > category > summary). Tiered so
+    // exact-ish matches surface to the top as the user keeps typing.
+    const ql = q.toLowerCase();
     let items = catalog;
-    if (glossaryCategory !== "All") items = items.filter((c) => (c.category || "Other") === glossaryCategory);
-    if (q) items = items.filter((c) =>
-      c.name.toLowerCase().includes(q) ||
-      (c.aliases || []).some((a) => a.toLowerCase().includes(q)) ||
-      (c.summary || "").toLowerCase().includes(q));
-    items = items.slice(0, 100);
+    if (hasCategoryFilter) items = items.filter((c) => (c.category || "Other") === glossaryCategory);
+
+    if (ql) {
+      const scored = [];
+      for (const c of items) {
+        const score = scoreGlossaryMatch(c, ql);
+        if (score > 0) scored.push({ c, score });
+      }
+      scored.sort((a, b) => b.score - a.score || a.c.name.localeCompare(b.c.name));
+      items = scored.slice(0, 60).map((x) => x.c);
+    } else {
+      items = items.slice(0, 60);
+    }
+
     if (!items.length) {
       glossaryList.innerHTML = `<li class="empty-state">Nothing matches "${escapeHtml(glossarySearch.value || "")}".</li>`;
       return;
@@ -637,6 +665,26 @@ console.info("EndoMe meds build v3");
     // Lazy-load community stats for the visible items
     const names = items.map((c) => c.name);
     fetchCommunityStatsForGlossary(names);
+  }
+
+  function scoreGlossaryMatch(c, ql) {
+    const name = (c.name || "").toLowerCase();
+    if (name === ql)            return 100;
+    if (name.startsWith(ql))    return 80;
+    if (name.includes(ql))      return 60;
+    for (const a of (c.aliases || [])) {
+      const al = a.toLowerCase();
+      if (al === ql)         return 55;
+      if (al.startsWith(ql)) return 45;
+      if (al.includes(ql))   return 30;
+    }
+    const cat = (c.category || "").toLowerCase();
+    if (cat.includes(ql))       return 20;
+    const kind = (c.kind || "").toLowerCase();
+    if (kind.includes(ql))      return 15;
+    const sum = (c.summary || "").toLowerCase();
+    if (sum.includes(ql))       return 10;
+    return 0;
   }
 
   async function fetchCommunityStatsForGlossary(names) {
