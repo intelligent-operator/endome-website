@@ -121,7 +121,8 @@
 
 /* Soft hero variant for stories/resources views */
 .community-hero.soft{
-  background:linear-gradient(135deg,#fff5f8,#fff);
+  background:linear-gradient(135deg,#fff,#fff5f8);
+  border:1px solid #ffe2eb;
 }
 
 /* Coming-soon + resource cards */

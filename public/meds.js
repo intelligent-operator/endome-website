@@ -39,6 +39,27 @@ console.info("EndoMe meds build v3");
     document.getElementById("page-loader")?.classList.add("is-hidden");
   })();
 
+  // ------------------------------------------------------------------
+  // Sub-nav: My routine / Recent doses / Glossary
+  // Each tab pill toggles visibility on its [data-tab] sibling section.
+  // ------------------------------------------------------------------
+  document.querySelectorAll(".subnav-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const target = tab.dataset.tabTarget;
+      document.querySelectorAll(".subnav-tab").forEach((t) => {
+        const on = t === tab;
+        t.classList.toggle("on", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      document.querySelectorAll("[data-tab]").forEach((p) => {
+        p.hidden = p.dataset.tab !== target;
+      });
+      // Scroll to top of the page-subnav so the user sees the start of the
+      // tab they just switched to, not the middle of a long list.
+      document.querySelector(".page-subnav")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+
   async function load() {
     try {
       const data = await fetchJson("/api/me/medications");

@@ -13,8 +13,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=3" />
-  <link rel="stylesheet" href="/dashboard.css?v=11" />
-  <link rel="stylesheet" href="/meds.css?v=6" />
+  <link rel="stylesheet" href="/dashboard.css?v=12" />
+  <link rel="stylesheet" href="/meds.css?v=7" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -79,48 +79,69 @@
         <button class="btn btn-primary" id="btn-add-med">+ Add medication</button>
       </header>
 
-      <!-- Weekly timetable: visual at-a-glance of every scheduled dose -->
-      <section class="community-section">
-        <div class="section-head">
-          <h2>This week's routine</h2>
-          <span class="section-hint">Click any slot to mark it taken or skipped. Today's reminders also land in your notifications.</span>
-        </div>
-        <div class="timetable-card">
-          <div class="timetable-wrap">
-            <table class="timetable" id="timetable" aria-label="Weekly medication timetable"></table>
+      <!-- Sub-nav for the medications page: My Routine / Recent doses /
+           Glossary. Each tab toggles visibility on [data-tab] panels. -->
+      <nav class="page-subnav" role="tablist" aria-label="Medications view">
+        <button type="button" class="subnav-tab on" role="tab" aria-selected="true" data-tab-target="routine">
+          <span class="subnav-emoji">📅</span> My routine
+        </button>
+        <button type="button" class="subnav-tab" role="tab" aria-selected="false" data-tab-target="doses">
+          <span class="subnav-emoji">💊</span> Recent doses
+        </button>
+        <button type="button" class="subnav-tab" role="tab" aria-selected="false" data-tab-target="glossary">
+          <span class="subnav-emoji">📖</span> Glossary
+        </button>
+      </nav>
+
+      <!-- ===== My routine tab — schedule + medications list ===== -->
+      <div data-tab="routine">
+        <section class="community-section">
+          <div class="section-head">
+            <h2>This week's routine</h2>
+            <span class="section-hint">Click any slot to mark it taken or skipped. Today's reminders also land in your notifications.</span>
           </div>
-          <p class="timetable-empty" id="timetable-empty">Nothing scheduled yet. Add a medication below and tap <strong>+ Add slot</strong> in the schedule section to populate this week.</p>
-        </div>
-      </section>
+          <div class="timetable-card">
+            <div class="timetable-wrap">
+              <table class="timetable" id="timetable" aria-label="Weekly medication timetable"></table>
+            </div>
+            <p class="timetable-empty" id="timetable-empty">Nothing scheduled yet. Add a medication below and tap <strong>+ Add slot</strong> in the schedule section to populate this week.</p>
+          </div>
+        </section>
 
-      <section class="community-section" id="medications-section">
-        <ul class="med-list" id="med-list">
-          <li class="empty-state">Loading…</li>
-        </ul>
-      </section>
+        <section class="community-section" id="medications-section">
+          <ul class="med-list" id="med-list">
+            <li class="empty-state">Loading…</li>
+          </ul>
+        </section>
+      </div>
 
-      <section class="community-section">
-        <div class="section-head">
-          <h2>Recent doses</h2>
-          <span class="section-hint">Your last 20 entries across every medication</span>
-        </div>
-        <ul class="med-log-list" id="med-log-list">
-          <li class="empty-state">Nothing logged yet.</li>
-        </ul>
-      </section>
+      <!-- ===== Recent doses tab ===== -->
+      <div data-tab="doses" hidden>
+        <section class="community-section">
+          <div class="section-head">
+            <h2>Recent doses</h2>
+            <span class="section-hint">Your last 20 entries across every medication</span>
+          </div>
+          <ul class="med-log-list" id="med-log-list">
+            <li class="empty-state">Nothing logged yet.</li>
+          </ul>
+        </section>
+      </div>
 
-      <!-- ===== Glossary: searchable catalog of meds + vitamins ===== -->
-      <section class="community-section" id="glossary-section">
-        <div class="section-head">
-          <h2>Glossary</h2>
-          <span class="section-hint">Searchable list of endo + women's health meds and vitamins</span>
-        </div>
-        <div class="glossary-toolbar">
-          <input type="search" id="glossary-search" placeholder="Search: ibuprofen, magnesium, dienogest, NAC…" />
-          <div class="glossary-filters" id="glossary-filters"></div>
-        </div>
-        <ul class="glossary-list" id="glossary-list"></ul>
-      </section>
+      <!-- ===== Glossary tab: searchable catalog of meds + vitamins ===== -->
+      <div data-tab="glossary" hidden>
+        <section class="community-section" id="glossary-section">
+          <div class="section-head">
+            <h2>Glossary</h2>
+            <span class="section-hint">Searchable list of endo + women's health meds and vitamins</span>
+          </div>
+          <div class="glossary-toolbar">
+            <input type="search" id="glossary-search" placeholder="Search: ibuprofen, magnesium, dienogest, NAC…" />
+            <div class="glossary-filters" id="glossary-filters"></div>
+          </div>
+          <ul class="glossary-list" id="glossary-list"></ul>
+        </section>
+      </div>
 
       <!-- Add / Edit modal -->
       <div class="modal" id="med-modal" aria-hidden="true" role="dialog">
@@ -302,8 +323,8 @@
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
-  <script src="/account-menu.js?v=3" defer></script>
+  <script src="/account-menu.js?v=4" defer></script>
   <script src="/med-catalog.js?v=3" defer></script>
-  <script src="/meds.js?v=6" defer></script>
+  <script src="/meds.js?v=7" defer></script>
 </body>
 </html>

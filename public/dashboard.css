@@ -52,7 +52,7 @@
 /* LAYOUT */
 .dash-layout{
   display:grid;grid-template-columns:230px 1fr 300px;
-  gap:20px;padding:20px 28px;max-width:1600px;margin:0 auto;
+  gap:32px;padding:24px 36px 40px;max-width:1600px;margin:0 auto;
 }
 
 /* SIDEBARS */
@@ -1007,4 +1007,33 @@ body.drawer-open{overflow:hidden}
   .notif-dropdown{right:14px}
   .fab span{display:none}
   .modal-xl{padding:22px 18px 18px;border-radius:18px}
+}
+
+/* =====================================================================
+   Small dashboard footer — injected onto every signed-in page by
+   account-menu.js so we don't have to touch every HTML file. Sits at
+   the bottom of the page in a quiet pink tint, gives users the same
+   support + legal hooks no matter what dashboard surface they're on.
+   ===================================================================== */
+.dash-footer{
+  background:#fff;border-top:1px solid #ffe2eb;
+  padding:14px 28px;font-size:12px;color:#7a5f6c;
+}
+.dash-footer-inner{
+  max-width:1600px;margin:0 auto;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+}
+.dash-footer-brand{display:inline-flex;align-items:center;gap:8px;font-weight:700;color:#2b1922}
+.dash-footer-brand img{width:18px;height:18px}
+.dash-footer-links{display:inline-flex;gap:14px;flex-wrap:wrap}
+.dash-footer-links a{
+  color:#7a5f6c;font-weight:600;text-decoration:none;
+  transition:color .12s;
+}
+.dash-footer-links a:hover{color:#ff4e8a}
+.dash-footer-copy{color:#a08596;font-size:11px}
+@media (max-width:640px){
+  .dash-footer{padding:12px 16px}
+  .dash-footer-inner{gap:8px}
+  .dash-footer-copy{flex:1 1 100%;text-align:center}
 }

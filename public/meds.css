@@ -341,3 +341,34 @@
 @media (max-width:1100px){
   .timetable{min-width:600px}
 }
+
+/* =====================================================================
+   Page sub-navigation — pill row that lets users tab between the
+   medication views without overwhelming the page with one giant scroll.
+   Shared style so other pages can pick this up later.
+   ===================================================================== */
+.page-subnav{
+  display:flex;flex-wrap:wrap;gap:6px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:999px;
+  padding:6px;margin-bottom:6px;
+  box-shadow:0 4px 14px rgba(255,77,138,.06);
+  align-self:flex-start;
+}
+.subnav-tab{
+  display:inline-flex;align-items:center;gap:8px;
+  background:transparent;border:none;color:#7a5f6c;
+  padding:9px 18px;border-radius:999px;cursor:pointer;
+  font-family:inherit;font-size:13px;font-weight:600;
+  transition:background .15s, color .15s, transform .12s, box-shadow .15s;
+}
+.subnav-tab:hover{background:#fff5f8;color:#ff4e8a}
+.subnav-tab.on{
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;
+  box-shadow:0 4px 12px rgba(255,77,138,.28);
+}
+.subnav-emoji{font-size:14px;line-height:1}
+@media (max-width:520px){
+  .page-subnav{align-self:stretch;justify-content:space-between}
+  .subnav-tab{flex:1;justify-content:center;padding:9px 10px;font-size:12px}
+  .subnav-emoji{display:none}
+}

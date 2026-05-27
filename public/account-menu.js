@@ -108,4 +108,32 @@
     });
   }
   setupMobileNav();
+
+  // -- Small dashboard footer ------------------------------------------------
+  // Injected once per page so we don't have to touch every dashboard HTML.
+  // Skipped on the public site (no .dash-body) so it doesn't show on the
+  // marketing pages.
+  (function injectFooter() {
+    if (!document.body.classList.contains("dash-body")) return;
+    if (document.querySelector(".dash-footer")) return;
+    const year = new Date().getFullYear();
+    const footer = document.createElement("footer");
+    footer.className = "dash-footer";
+    footer.innerHTML = `
+      <div class="dash-footer-inner">
+        <a class="dash-footer-brand" href="/dashboard">
+          <img src="/logo-final.png" alt="" />
+          EndoMe
+        </a>
+        <nav class="dash-footer-links" aria-label="Footer">
+          <a href="/profile">Profile</a>
+          <a href="/security">Security</a>
+          <a href="/community">Community</a>
+          <a href="/research">Donate</a>
+          <a href="/api/logout">Sign out</a>
+        </nav>
+        <span class="dash-footer-copy">© ${year} EndoMe · Built with 💖 for the endo community</span>
+      </div>`;
+    document.body.appendChild(footer);
+  })();
 })();
