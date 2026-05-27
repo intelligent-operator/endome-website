@@ -1270,7 +1270,7 @@ const ALLOWED_MOVEMENT = new Set(["none", "light", "moderate", "vigorous"]);
 const ALLOWED_BOWEL    = new Set(["constipated", "normal", "loose"]);
 const ALLOWED_INTIMACY = new Set(["none", "comfortable", "uncomfortable"]);
 const ALLOWED_TRIGGERS = new Set(["food","stress","exercise","intimacy","cold","hormones","travel","sleep","unknown"]);
-const ALLOWED_RELIEF   = new Set(["heat","rest","medication","hydration","movement","massage","bath","sleep","none"]);
+const ALLOWED_RELIEF   = new Set(["heat","tens","rest","medication","hydration","movement","massage","bath","sleep","none"]);
 const ALLOWED_EVENING_SYMPTOMS = new Set([
   "bloating", "ovulation_pain", "nausea", "fatigue", "headaches",
   "dizziness", "pms", "skin_breakout",

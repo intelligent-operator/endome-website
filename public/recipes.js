@@ -316,6 +316,8 @@ console.info("EndoMe recipes build v1");
     document.getElementById("recipe-form").reset();
     pendingIngredients = [];
     pendingMethodSteps = [];
+    const bulk = document.getElementById("method-bulk-input");
+    if (bulk) bulk.value = "";
     paintIngredientList();
     paintMethodSteps();
     document.getElementById("recipe-status").textContent = "";
@@ -367,14 +369,15 @@ console.info("EndoMe recipes build v1");
   });
 
   // ------------------------------------------------------------------
-  // Method step editor — each Enter / "Add step" creates a new step
+  // Method editor — single textarea (one step per line). Steps parse live
+  // as the user types/pastes; the rendered preview list below supports
+  // edit, remove and drag-to-reorder. No per-step "add" loop.
   // ------------------------------------------------------------------
   function paintMethodSteps() {
     const list = document.getElementById("method-step-list");
     if (!list) return;
     if (!pendingMethodSteps.length) {
-      list.innerHTML = `<li class="method-empty">No steps yet. Type your first one below.</li>`;
-      // Also clear the textarea fallback so we don't double-publish.
+      list.innerHTML = `<li class="method-empty">Steps will appear here. Drag to reorder, ✏️ to edit, × to remove.</li>`;
       const body = document.getElementById("method-body");
       if (body) body.value = "";
       return;
@@ -382,20 +385,20 @@ console.info("EndoMe recipes build v1");
     list.innerHTML = pendingMethodSteps.map((s, idx) => `
       <li class="method-step" draggable="true" data-idx="${idx}">
         <span class="method-step-num">${idx + 1}</span>
-        <span class="method-step-text">${escapeHtml(s)}</span>
+        <span class="method-step-text" data-edit-step="${idx}" title="Click to edit">${escapeHtml(s)}</span>
         <div class="method-step-actions">
           <button type="button" class="method-step-btn" data-move-step="${idx}" data-dir="-1" aria-label="Move up">↑</button>
           <button type="button" class="method-step-btn" data-move-step="${idx}" data-dir="1" aria-label="Move down">↓</button>
           <button type="button" class="method-step-btn danger" data-del-step="${idx}" aria-label="Remove">×</button>
         </div>
       </li>`).join("");
-    // Mirror into the hidden textarea so the form submit still has it.
     const body = document.getElementById("method-body");
     if (body) body.value = pendingMethodSteps.map((s, i) => `${i + 1}. ${s}`).join("\n");
 
     list.querySelectorAll("[data-del-step]").forEach((b) => {
       b.addEventListener("click", () => {
         pendingMethodSteps.splice(+b.dataset.delStep, 1);
+        syncBulkFromSteps();
         paintMethodSteps();
       });
     });
@@ -406,6 +409,19 @@ console.info("EndoMe recipes build v1");
         const j = i + dir;
         if (j < 0 || j >= pendingMethodSteps.length) return;
         [pendingMethodSteps[i], pendingMethodSteps[j]] = [pendingMethodSteps[j], pendingMethodSteps[i]];
+        syncBulkFromSteps();
+        paintMethodSteps();
+      });
+    });
+    list.querySelectorAll("[data-edit-step]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const idx = +el.dataset.editStep;
+        const next = prompt("Edit this step:", pendingMethodSteps[idx]);
+        if (next == null) return;
+        const trimmed = next.trim();
+        if (!trimmed) return;
+        pendingMethodSteps[idx] = trimmed;
+        syncBulkFromSteps();
         paintMethodSteps();
       });
     });
@@ -421,25 +437,56 @@ console.info("EndoMe recipes build v1");
         if (dragIdx == null || target === dragIdx) return;
         const moved = pendingMethodSteps.splice(dragIdx, 1)[0];
         pendingMethodSteps.splice(target, 0, moved);
+        syncBulkFromSteps();
         paintMethodSteps();
       });
     });
   }
 
-  function addMethodStep() {
-    const input = document.getElementById("method-step-input");
-    if (!input) return false;
-    const v = input.value.trim();
-    if (!v) return false;
-    pendingMethodSteps.push(v);
-    input.value = "";
-    paintMethodSteps();
-    input.focus();
-    return true;
+  // Split a free-form blob into clean steps. Splits on newlines; strips
+  // leading numbering ("1.", "1)", "Step 1:"), bullets ("-", "*", "•") and
+  // empty lines.
+  function parseStepsFromBulk(text) {
+    return String(text || "")
+      .split(/\r?\n+/)
+      .map((line) => line
+        .replace(/^\s*(?:step\s*)?\d+[\.\):\-]\s*/i, "")  // "1." / "1)" / "Step 1:"
+        .replace(/^\s*[-*•]\s*/, "")                      // "- " / "* " / "• "
+        .trim())
+      .filter(Boolean);
   }
-  document.getElementById("method-step-add-btn")?.addEventListener("click", addMethodStep);
-  document.getElementById("method-step-input")?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); addMethodStep(); }
+
+  function syncBulkFromSteps() {
+    const bulk = document.getElementById("method-bulk-input");
+    if (bulk) bulk.value = pendingMethodSteps.join("\n");
+  }
+
+  // Live parse: every keystroke in the bulk textarea re-derives the steps.
+  // This means typing is the only thing the user has to do; the preview
+  // updates as they go.
+  const bulkInput = document.getElementById("method-bulk-input");
+  if (bulkInput) {
+    let bulkTimer = null;
+    bulkInput.addEventListener("input", () => {
+      clearTimeout(bulkTimer);
+      bulkTimer = setTimeout(() => {
+        pendingMethodSteps = parseStepsFromBulk(bulkInput.value);
+        paintMethodSteps();
+      }, 150);
+    });
+  }
+  document.getElementById("method-bulk-apply")?.addEventListener("click", () => {
+    if (!bulkInput) return;
+    pendingMethodSteps = parseStepsFromBulk(bulkInput.value);
+    paintMethodSteps();
+    const list = document.getElementById("method-step-list");
+    list?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+  document.getElementById("method-bulk-clear")?.addEventListener("click", () => {
+    if (bulkInput) bulkInput.value = "";
+    pendingMethodSteps = [];
+    paintMethodSteps();
+    bulkInput?.focus();
   });
 
   // ------------------------------------------------------------------

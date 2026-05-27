@@ -487,6 +487,13 @@
   font-size:11px;color:#c2811a;background:#fff5e6;
   padding:3px 8px;border-radius:999px;display:inline-block;margin-top:4px;font-weight:600;
 }
+/* `display:inline-block` above and `position:absolute` below would normally
+   beat the browser's default `[hidden]{display:none}` rule, leaving the
+   "needs a clean" hint and the 💩 spot visible even after the pet has been
+   cleaned. Force them back to hidden when the attribute is set. */
+.ep-poop-hint[hidden],
+.ep-poop-hint-live[hidden],
+.ep-poop-spot[hidden]{display:none !important}
 .ep-poop-row{
   display:flex;align-items:center;gap:10px;
   background:#fff5e6;border:1px solid #ffe1c0;border-radius:12px;

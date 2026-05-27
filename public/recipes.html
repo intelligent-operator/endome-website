@@ -13,8 +13,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
-  <link rel="stylesheet" href="/dashboard.css?v=8" />
-  <link rel="stylesheet" href="/recipes.css?v=2" />
+  <link rel="stylesheet" href="/dashboard.css?v=9" />
+  <link rel="stylesheet" href="/recipes.css?v=3" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -204,18 +204,17 @@
 
         <fieldset class="method-editor">
           <legend>Method</legend>
-          <p class="ingredient-hint">Build it step by step. Press <strong>Enter</strong> in the box below to add a step. Drag to reorder, click ×  to remove.</p>
-          <ol class="method-step-list" id="method-step-list">
-            <li class="method-empty">No steps yet. Type your first one below.</li>
-          </ol>
-          <div class="method-step-add">
-            <input type="text" id="method-step-input" placeholder="e.g. Heat the olive oil in a pan over medium heat" maxlength="500" />
-            <button type="button" class="btn btn-primary small" id="method-step-add-btn">Add step</button>
+          <p class="ingredient-hint">Type or paste all your steps below — <strong>one step per line</strong>. We split them automatically so you don't have to add them one by one. Numbering, leading dashes and bullet markers all get stripped.</p>
+          <textarea id="method-bulk-input" rows="7" maxlength="8000" placeholder="Heat the olive oil in a pan over medium heat&#10;Add the onion and cook for 5 minutes&#10;Stir in the garlic and turmeric, cook 1 minute more&#10;Add the lentils, broth and coconut milk and simmer 25 minutes&#10;Season with salt and pepper, serve with rice"></textarea>
+          <div class="method-bulk-actions">
+            <button type="button" class="btn btn-primary small" id="method-bulk-apply">Use these steps →</button>
+            <button type="button" class="btn-soft small" id="method-bulk-clear">Clear all</button>
+            <span class="method-bulk-hint" id="method-bulk-hint">Steps update live as you type. You can still drag to reorder below.</span>
           </div>
-          <details class="method-paste-fallback">
-            <summary>Or paste the whole method as plain text</summary>
-            <textarea name="body" id="method-body" rows="6" maxlength="8000" placeholder="1. Heat oil in a pan…&#10;2. Add onion and cook 5 mins…"></textarea>
-          </details>
+          <ol class="method-step-list" id="method-step-list">
+            <li class="method-empty">Steps will appear here. Drag to reorder, ✏️ to edit, × to remove.</li>
+          </ol>
+          <textarea name="body" id="method-body" hidden></textarea>
         </fieldset>
 
         <div class="form-actions">
@@ -318,6 +317,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=2" defer></script>
-  <script src="/recipes.js?v=2" defer></script>
+  <script src="/recipes.js?v=3" defer></script>
 </body>
 </html>
