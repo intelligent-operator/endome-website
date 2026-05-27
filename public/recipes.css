@@ -487,3 +487,158 @@
 .food-library-placeholder-emoji{font-size:32px;line-height:1;margin-bottom:4px}
 .food-library-placeholder strong{font-size:15px;color:#2b1922;font-weight:700}
 .food-library-placeholder span{font-size:13px;color:#7a5f6c;max-width:460px;line-height:1.5}
+
+/* =====================================================================
+   Recipe modal polish — pink-themed scrollbar, sticky close, inline
+   owner edit button, no more random grey buttons.
+   ===================================================================== */
+
+/* Branded scrollbar inside the scrollable modal-xl shell. Falls back
+   cleanly in Firefox via scrollbar-color. */
+.modal-xl{
+  scrollbar-width:thin;
+  scrollbar-color:#ffd6e0 transparent;
+  scrollbar-gutter:stable;
+}
+.modal-xl::-webkit-scrollbar{width:10px;height:10px}
+.modal-xl::-webkit-scrollbar-track{background:transparent;border-radius:10px}
+.modal-xl::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,#ffd6e0,#ffb3c8);
+  border-radius:10px;border:2px solid #fff;
+}
+.modal-xl::-webkit-scrollbar-thumb:hover{
+  background:linear-gradient(180deg,#ff7aa6,#ff4e8a);
+}
+
+/* Sticky close button so it never disappears off-screen while the
+   user scrolls a long form. */
+.modal-xl > .modal-close{
+  position:sticky;float:right;top:6px;z-index:3;
+  width:34px;height:34px;border-radius:50%;
+  background:#fff;border:1px solid #ffd6e0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;line-height:1;color:#ff4e8a;
+  box-shadow:0 4px 10px rgba(255,77,138,.18);
+  transition:background .12s, color .12s, transform .12s;
+}
+.modal-xl > .modal-close:hover{background:#ffeaf2;transform:scale(1.05)}
+
+/* Make the recipe modal card use comfortable internal spacing without
+   needing a huge scroll. */
+.recipe-modal-card{max-width:720px;padding:30px 30px 24px}
+.recipe-modal-card .modal-h{margin-bottom:18px}
+.recipe-modal-card .modal-h h3{font-size:22px}
+.recipe-modal-card .field{margin-bottom:14px}
+
+/* Choose-photo label-as-button needs the brand pill styles to actually
+   apply (a <label> doesn't pick up some button defaults cleanly). */
+.recipe-photo-actions label.btn,
+.recipe-photo-actions label.btn-primary,
+.avatar-upload-actions label.btn-soft,
+.avatar-upload-actions label.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  cursor:pointer;line-height:1;font-family:inherit;user-select:none;
+  border:1.5px solid transparent;
+  transition:background .12s, color .12s, border-color .12s, transform .12s, box-shadow .12s;
+}
+.recipe-photo-actions label.btn.btn-primary.small{
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border:none;
+  padding:9px 16px;font-size:13px;font-weight:700;border-radius:999px;
+  box-shadow:0 4px 12px rgba(255,77,138,.28);
+}
+.recipe-photo-actions label.btn.btn-primary.small:hover{
+  transform:translateY(-1px);box-shadow:0 8px 18px rgba(255,77,138,.4);
+}
+.recipe-photo-actions label.btn.btn-primary.small:active{transform:translateY(0) scale(.98)}
+
+/* Same for the avatar uploader (was using grey btn-soft). Switch to a
+   branded outlined pill to match the rest of the page. */
+.avatar-upload-actions .btn-soft{
+  background:#fff;border:1.5px solid #ffd6e0;color:#ff4e8a;
+  border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;line-height:1;
+}
+.avatar-upload-actions .btn-soft:hover{background:#ffeaf2;border-color:#ff4e8a;transform:translateY(-1px)}
+
+/* Owner edit button now sits inline at the top of the detail card,
+   right-aligned with a margin so it doesn't look bolted on. */
+.recipe-detail-owner-actions{
+  position:absolute;top:14px;right:60px;z-index:2;
+  display:flex;gap:8px;
+}
+.recipe-detail-owner-actions .btn{
+  background:rgba(255,255,255,.95);color:#ff4e8a;
+  border:1.5px solid #ffd6e0;
+  padding:8px 14px;font-size:12px;font-weight:700;
+  border-radius:999px;cursor:pointer;font-family:inherit;line-height:1;
+  display:inline-flex;align-items:center;gap:6px;
+  box-shadow:0 6px 14px rgba(58,29,43,.18);
+  backdrop-filter:blur(4px);
+  transition:background .12s, color .12s, border-color .12s, transform .12s;
+}
+.recipe-detail-owner-actions .btn:hover{
+  background:#ff4e8a;color:#fff;border-color:#ff4e8a;transform:translateY(-1px);
+}
+.recipe-detail-card{position:relative}
+
+/* Method "Clear all" and ingredient editor buttons — force the brand
+   pink outline. The community.css .btn-soft already does most of this;
+   this guarantees specificity in the recipe modal. */
+.recipe-modal-card .btn-soft{
+  background:#fff;border:1.5px solid #ffd6e0;color:#ff4e8a;
+  border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;
+  transition:background .12s, color .12s, border-color .12s, transform .12s;
+}
+.recipe-modal-card .btn-soft:hover{background:#ffeaf2;border-color:#ff4e8a;transform:translateY(-1px)}
+.recipe-modal-card .btn-soft.danger{color:#c4344b;border-color:#ffd0d8;background:#fff}
+.recipe-modal-card .btn-soft.danger:hover{background:#fff0f3;border-color:#c4344b}
+
+/* Form actions row — keep buttons aligned, danger pushed to the right
+   of the row so destructive sits visually separated from publish. */
+.recipe-modal-card .form-actions{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-top:16px;padding-top:14px;border-top:1px solid #ffeaf2;
+}
+.recipe-modal-card .form-actions .btn-danger{margin-left:auto;order:3}
+.recipe-modal-card .form-actions .btn-ghost-pink{order:2}
+.recipe-modal-card .form-actions .form-status{flex:1 1 100%;order:4;margin:0}
+@media (max-width:520px){
+  .recipe-modal-card .form-actions .btn-danger{margin-left:0}
+}
+
+/* Down-comment + food modals — pick up the same scrollbar treatment. */
+.down-comment-card,
+.appt-modal-card,
+.modal-card{
+  scrollbar-width:thin;
+  scrollbar-color:#ffd6e0 transparent;
+}
+.modal-card::-webkit-scrollbar{width:10px;height:10px}
+.modal-card::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,#ffd6e0,#ffb3c8);
+  border-radius:10px;border:2px solid #fff;
+}
+
+/* Hero wrap so the owner edit CTA can float over the photo */
+.recipe-detail-hero-wrap{
+  position:relative;
+  margin:-30px -30px 0;
+}
+.recipe-detail-hero-wrap .recipe-detail-hero{margin:0}
+.recipe-detail-hero-wrap .recipe-detail-owner-actions{
+  position:absolute;top:14px;right:14px;
+}
+.recipe-detail-owner-inline{
+  display:flex;justify-content:flex-end;margin-bottom:4px;
+}
+.recipe-detail-owner-inline .recipe-edit-cta{
+  background:#fff;border:1.5px solid #ffd6e0;color:#ff4e8a;
+  padding:8px 16px;border-radius:999px;font-family:inherit;
+  font-size:13px;font-weight:700;cursor:pointer;line-height:1;
+  display:inline-flex;align-items:center;gap:6px;
+  transition:background .12s, color .12s, border-color .12s, transform .12s;
+}
+.recipe-detail-owner-inline .recipe-edit-cta:hover{
+  background:#ff4e8a;color:#fff;border-color:#ff4e8a;transform:translateY(-1px);
+}

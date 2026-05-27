@@ -269,15 +269,16 @@ console.info("EndoMe recipes build v1");
     const hero = r.imageUrl
       ? `<div class="recipe-detail-hero" style="background-image:url('${escapeHtml(r.imageUrl)}')"></div>`
       : "";
+    // Owner CTA: floats over the hero photo (top-right) when there's a
+    // hero, otherwise sits inline next to the meta row. Either way, it
+    // stays on-brand and aligned with the page's pink palette.
     const ownerControls = r.isMine
-      ? `<div class="recipe-detail-owner-actions">
-          <button type="button" class="btn btn-primary small" data-detail-edit="${r.id}">✎ Edit recipe</button>
-        </div>`
+      ? `<button type="button" class="btn recipe-edit-cta" data-detail-edit="${r.id}">✎ Edit recipe</button>`
       : "";
     body.innerHTML = `
-      ${hero}
+      ${hero ? `<div class="recipe-detail-hero-wrap">${hero}${ownerControls && hero ? `<div class="recipe-detail-owner-actions">${ownerControls}</div>` : ""}</div>` : ""}
       <header class="recipe-detail-head">
-        ${ownerControls}
+        ${!hero && ownerControls ? `<div class="recipe-detail-owner-inline">${ownerControls}</div>` : ""}
         <p class="recipe-detail-eyebrow">${escapeHtml(cat.emoji)} ${escapeHtml(cat.label)} · ${authorBadge(r)} by ${escapeHtml(r.author || "Member")}</p>
         <h2>${escapeHtml(r.title)}</h2>
         ${r.summary ? `<p class="recipe-detail-summary">${escapeHtml(r.summary)}</p>` : ""}
