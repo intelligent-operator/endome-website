@@ -142,3 +142,135 @@
   padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;
 }
 .glossary-body .btn{align-self:flex-start}
+
+/* =====================================================================
+   Community engagement (hearts + thumbs-down + usage count)
+   ===================================================================== */
+.med-community{
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  background:#fff5f8;border:1px solid #ffe2eb;border-radius:12px;
+  padding:8px 12px;
+}
+.med-community-stat{font-size:12px;color:#7a5f6c;font-weight:600}
+.med-react{display:inline-flex;gap:6px}
+.react-chip{
+  background:#fff;border:1px solid #ffd6e0;color:#7a5f6c;
+  padding:5px 11px;border-radius:999px;
+  font-family:inherit;font-size:12px;font-weight:600;
+  cursor:pointer;display:inline-flex;align-items:center;gap:5px;
+  transition:transform .12s, background .12s, color .12s, border-color .12s, box-shadow .12s;
+}
+.react-chip:hover{transform:translateY(-1px)}
+.react-chip.love:hover{background:#ffeaf2;color:#ff4e8a;border-color:#ff4e8a}
+.react-chip.down:hover{background:#f5e9ef;color:#9a4856;border-color:#e3b8c4}
+.react-chip.love.on{background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border-color:#ff4e8a;box-shadow:0 4px 12px rgba(255,77,138,.3)}
+.react-chip.down.on{background:linear-gradient(135deg,#6a4757,#8f5d70);color:#fff;border-color:#6a4757;box-shadow:0 4px 12px rgba(106,71,87,.25)}
+.glossary-community{margin-top:2px}
+
+/* =====================================================================
+   Right sidebar — top picks
+   ===================================================================== */
+.meds-right .side-card{padding:18px}
+.meds-right .section-head{margin-bottom:4px}
+.meds-right .section-head h2{font-size:18px;font-weight:800;margin:0;color:#2b1922;letter-spacing:-.2px}
+.side-sub{margin:0 0 12px;font-size:12px;color:#7a5f6c}
+.side-empty{margin:0;font-size:13px;color:#9a7889;font-style:italic}
+.top-pick-name{font-size:15px;color:#2b1922;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.top-pick-name strong{font-weight:700}
+.top-pick-stats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.tp-stat{
+  background:#fff5f8;color:#7a5f6c;border:1px solid #ffe2eb;
+  padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;
+}
+.top-pick-hint{margin:0;font-size:11px;color:#9a7889;line-height:1.4}
+
+/* =====================================================================
+   Weekly timetable
+   ===================================================================== */
+.timetable-card{
+  background:#fff;border:1px solid #ffeaf2;border-radius:18px;
+  padding:14px;
+}
+.timetable-empty{
+  text-align:center;padding:24px 16px;color:#7a5f6c;font-size:13px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.timetable-empty strong{color:#2b1922}
+.timetable-wrap{overflow-x:auto}
+.timetable{
+  width:100%;border-collapse:separate;border-spacing:6px;table-layout:fixed;
+  min-width:700px;
+}
+.timetable th{
+  font-size:11px;font-weight:700;color:#7a5f6c;text-align:center;
+  padding:6px 4px;text-transform:uppercase;letter-spacing:.04em;
+}
+.timetable th.is-today{color:#ff4e8a}
+.timetable td{
+  vertical-align:top;background:#fff5f8;border-radius:12px;
+  padding:8px;min-height:80px;border:1px solid transparent;
+}
+.timetable td.is-today{background:#ffeaf2;border-color:#ffd6e0}
+.slot-empty{font-size:13px;color:#a08596;text-align:center;padding:10px 0}
+.slot{
+  display:flex;flex-direction:column;gap:2px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:10px;
+  padding:8px 10px;margin-bottom:6px;cursor:pointer;
+  transition:transform .12s, border-color .12s, box-shadow .12s, background .12s;
+}
+.slot:hover{transform:translateY(-1px);border-color:#ffd6e0;box-shadow:0 6px 14px rgba(255,77,138,.10)}
+.slot.taken{background:linear-gradient(135deg,#e8f8e0,#d1f0c2);border-color:#9bd97a;cursor:default}
+.slot.missed{opacity:.55;border-style:dashed;border-color:#cdb9c4}
+.slot-time{font-size:11px;font-weight:700;color:#ff4e8a;letter-spacing:.04em}
+.slot.taken .slot-time{color:#3a9b4b}
+.slot-name{font-size:12px;font-weight:600;color:#2b1922}
+.slot-dose{font-size:11px;color:#7a5f6c}
+
+/* =====================================================================
+   Schedule editor inside the medication modal
+   ===================================================================== */
+.med-schedule-editor{
+  border:1px dashed #ffd6e0;border-radius:14px;padding:14px;margin:8px 0;
+  background:#fff5f8;
+}
+.med-schedule-editor legend{
+  font-size:12px;font-weight:700;color:#ff4e8a;
+  padding:0 8px;letter-spacing:.04em;text-transform:uppercase;
+}
+.med-schedule-hint{margin:0 0 10px;font-size:12px;color:#7a5f6c;line-height:1.5}
+.med-schedule-list{list-style:none;padding:0;margin:0 0 12px;display:flex;flex-direction:column;gap:6px}
+.med-schedule-empty{font-size:12px;color:#9a7889;font-style:italic;padding:6px 0}
+.med-schedule-row{
+  display:flex;align-items:center;gap:10px;
+  background:#fff;border:1px solid #ffe2eb;border-radius:10px;padding:8px 12px;
+}
+.sched-days{font-size:12px;font-weight:600;color:#2b1922;flex:1;min-width:0}
+.sched-time{font-size:12px;font-weight:700;color:#ff4e8a;letter-spacing:.04em}
+.med-schedule-add{display:flex;flex-direction:column;gap:8px}
+.dow-row{display:flex;gap:6px;flex-wrap:wrap}
+.dow-chip{
+  background:#fff;border:1px solid #ffd6e0;color:#7a5f6c;
+  padding:6px 12px;border-radius:999px;
+  font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;
+  transition:background .12s, color .12s, border-color .12s;
+}
+.dow-chip:hover{background:#ffeaf2;color:#ff4e8a}
+.dow-chip.on{background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border-color:#ff4e8a}
+.med-schedule-time-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.med-schedule-time-row input[type="time"]{
+  padding:9px 12px;border:1px solid #ffd6e0;border-radius:10px;
+  font-family:inherit;font-size:13px;background:#fff;outline:none;
+}
+.med-schedule-time-row input[type="time"]:focus{border-color:#ff4e8a}
+
+/* Schedule summary pill shown on each med card */
+.med-sched-pill{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#fff5f8;color:#5a3a48;border:1px solid #ffe2eb;
+  padding:5px 11px;border-radius:999px;font-size:11px;font-weight:600;
+  align-self:flex-start;
+}
+
+@media (max-width:1100px){
+  .timetable{min-width:600px}
+}

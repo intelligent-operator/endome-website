@@ -1,5 +1,6 @@
-// /meds — manage user's medications + log doses + searchable catalog.
-console.info("EndoMe meds build v2");
+// /meds — manage user's medications, log doses, schedule weekly routine,
+// react to other people's meds and see the community's top picks.
+console.info("EndoMe meds build v3");
 
 (() => {
   const FREQ_LABEL = {
@@ -16,7 +17,13 @@ console.info("EndoMe meds build v2");
   const KIND_ICO = {
     medication: "💊", vitamin: "🌿", supplement: "🧴", herbal: "🍃",
   };
+  const DAY_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
   let meds = [];
+  let editingMedId = null;
+  let editingSchedules = []; // local schedule list for the open modal
+  let pendingDays = 0;       // bitmask of days chosen by the user in the modal
+
   const medModal = document.getElementById("med-modal");
   const logModal = document.getElementById("med-log-modal");
 
@@ -28,6 +35,7 @@ console.info("EndoMe meds build v2");
       });
     } catch {}
     await load();
+    await loadTopPicks();
     document.getElementById("page-loader")?.classList.add("is-hidden");
   })();
 
@@ -37,6 +45,7 @@ console.info("EndoMe meds build v2");
       meds = data.medications || [];
       renderMeds();
       await renderRecentLogs();
+      await renderTimetable();
     } catch (err) {
       document.getElementById("med-list").innerHTML =
         `<li class="empty-state">${escapeHtml(err.message || "Couldn't load.")}</li>`;
@@ -59,6 +68,8 @@ console.info("EndoMe meds build v2");
     const nextLabel = m.nextAllowedAt
       ? (okNow ? "✅ Available now" : `⏳ Next dose ${relTimeFuture(m.nextAllowedAt)}`)
       : "⚡ Take whenever needed";
+    const c = m.community || { loves: 0, downs: 0, users: 0 };
+    const mine = m.myReaction;
     return `<li class="med-card">
       <div class="med-card-head">
         <div class="med-card-icon">${KIND_ICO[m.kind] || "💊"}</div>
@@ -69,7 +80,15 @@ console.info("EndoMe meds build v2");
         <div class="med-card-status ${okNow ? "ok" : "wait"}">${nextLabel}</div>
       </div>
       ${m.notes ? `<p class="med-notes">${escapeHtml(m.notes)}</p>` : ""}
+      ${schedSummary(m.schedules)}
       ${m.insight ? `<div class="med-insight"><span class="med-insight-tag">ℹ️ Why this</span><p>${escapeHtml(m.insight)}</p>${m.link ? `<a href="${escapeHtml(m.link)}" target="_blank" rel="noopener">More info →</a>` : ""}</div>` : (m.link ? `<a class="med-link" href="${escapeHtml(m.link)}" target="_blank" rel="noopener">Reference →</a>` : "")}
+      <div class="med-community" data-name="${escapeHtml(m.name)}">
+        <span class="med-community-stat">👥 ${c.users} ${c.users === 1 ? "person" : "people"} taking this</span>
+        <div class="med-react">
+          <button class="react-chip love ${mine === "love" ? "on" : ""}" data-react="love" data-name="${escapeHtml(m.name)}" aria-label="Love this medication">❤ <span>${c.loves}</span></button>
+          <button class="react-chip down ${mine === "down" ? "on" : ""}" data-react="down" data-name="${escapeHtml(m.name)}" aria-label="Thumbs down">👎 <span>${c.downs}</span></button>
+        </div>
+      </div>
       <div class="med-card-foot">
         <span class="med-last">Last taken: ${lastTaken}</span>
         <div class="med-card-actions">
@@ -79,6 +98,25 @@ console.info("EndoMe meds build v2");
         </div>
       </div>
     </li>`;
+  }
+
+  function schedSummary(schedules) {
+    if (!schedules || !schedules.length) return "";
+    const parts = schedules.slice(0, 4).map((s) => `${formatDays(s.daysMask)} · ${s.timeOfDay}`);
+    const more = schedules.length > 4 ? ` +${schedules.length - 4} more` : "";
+    return `<div class="med-sched-pill">📅 ${escapeHtml(parts.join(" · "))}${more}</div>`;
+  }
+
+  function formatDays(mask) {
+    const all = mask === 127;
+    if (all) return "Every day";
+    const weekdays = mask === (2|4|8|16|32);
+    if (weekdays) return "Weekdays";
+    const weekend = mask === (1|64);
+    if (weekend) return "Weekend";
+    const out = [];
+    for (let i = 0; i < 7; i++) if (mask & (1 << i)) out.push(DAY_LABELS[i]);
+    return out.join("/");
   }
 
   async function renderRecentLogs() {
@@ -105,6 +143,130 @@ console.info("EndoMe meds build v2");
       </li>`).join("");
   }
 
+  // --- Weekly timetable ---------------------------------------------------
+  async function renderTimetable() {
+    const tableEl = document.getElementById("timetable");
+    const emptyEl = document.getElementById("timetable-empty");
+    try {
+      const data = await fetchJson("/api/me/medications/timetable");
+      const slots = data.slots || [];
+      const recent = data.recentLogs || [];
+      if (!slots.length) {
+        tableEl.innerHTML = "";
+        emptyEl.hidden = false;
+        return;
+      }
+      emptyEl.hidden = true;
+
+      // Bucket slots into 7 day columns
+      const days = [[],[],[],[],[],[],[]];
+      slots.forEach((s) => {
+        for (let i = 0; i < 7; i++) {
+          if (s.daysMask & (1 << i)) days[i].push(s);
+        }
+      });
+      // Sort each column by time
+      days.forEach((col) => col.sort((a, b) => a.timeOfDay.localeCompare(b.timeOfDay)));
+
+      const today = new Date().getDay();
+      let html = "<thead><tr>";
+      for (let i = 0; i < 7; i++) {
+        const isToday = i === today;
+        html += `<th class="${isToday ? "is-today" : ""}">${DAY_LABELS[i]}${isToday ? " · today" : ""}</th>`;
+      }
+      html += "</tr></thead><tbody><tr>";
+      for (let i = 0; i < 7; i++) {
+        const isToday = i === today;
+        html += `<td class="${isToday ? "is-today" : ""}">`;
+        if (!days[i].length) {
+          html += `<div class="slot-empty">—</div>`;
+        } else {
+          html += days[i].map((s) => {
+            const isPast = isToday && slotIsPastNow(s.timeOfDay);
+            const takenToday = isToday && recentLogHitsSlot(recent, s.medicationId, s.timeOfDay);
+            const cls = takenToday ? "taken" : (isPast ? "missed" : "");
+            const checkmark = takenToday ? "✓ " : "";
+            return `<div class="slot ${cls}" data-med="${s.medicationId}" data-time="${escapeHtml(s.timeOfDay)}" tabindex="0">
+              <span class="slot-time">${escapeHtml(s.timeOfDay)}</span>
+              <span class="slot-name">${checkmark}${KIND_ICO[s.kind] || "💊"} ${escapeHtml(s.name)}</span>
+              ${s.dose ? `<span class="slot-dose">${escapeHtml(s.dose)}</span>` : ""}
+            </div>`;
+          }).join("");
+        }
+        html += `</td>`;
+      }
+      html += "</tr></tbody>";
+      tableEl.innerHTML = html;
+
+      // Wire slot clicks → confirm taken / skipped
+      tableEl.querySelectorAll(".slot").forEach((sl) => {
+        sl.addEventListener("click", () => onSlotClick(sl));
+      });
+    } catch {
+      tableEl.innerHTML = "";
+      emptyEl.hidden = false;
+    }
+  }
+
+  function slotIsPastNow(timeOfDay) {
+    const [h, m] = timeOfDay.split(":").map(Number);
+    const d = new Date();
+    return (d.getHours() > h) || (d.getHours() === h && d.getMinutes() > m + 5);
+  }
+  function recentLogHitsSlot(logs, medId, timeOfDay) {
+    const [h, m] = timeOfDay.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    const slotSec = Math.floor(d.getTime() / 1000);
+    return logs.some((l) => l.medicationId === medId && Math.abs(l.takenAt - slotSec) < 3600 * 2);
+  }
+  async function onSlotClick(sl) {
+    const medId = +sl.dataset.med;
+    if (sl.classList.contains("taken")) {
+      toast("Already logged for this slot", "ok");
+      return;
+    }
+    const action = confirm("Did you take this dose?\n\nOK = Yes, log it.\nCancel = No, skip.");
+    if (!action) {
+      sl.classList.add("missed");
+      toast("Skipped", "ok");
+      return;
+    }
+    try {
+      await fetchJson(`/api/me/medications/${medId}/log`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ doseText: null, notes: "Scheduled dose" }),
+      });
+      toast("Logged ✨", "ok");
+      await load();
+    } catch (err) {
+      toast(err.message || "Couldn't log", "err");
+    }
+  }
+
+  // --- Top picks sidebar -------------------------------------------------
+  async function loadTopPicks() {
+    try {
+      const data = await fetchJson("/api/me/medications/top");
+      paintTopPick("top-medication-body", data.medication);
+      paintTopPick("top-vitamin-body", data.vitamin);
+    } catch {}
+  }
+  function paintTopPick(elId, entry) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!entry) return; // keep the empty-state copy
+    el.innerHTML = `
+      <div class="top-pick-name">${KIND_ICO[entry.kind] || "💊"} <strong>${escapeHtml(entry.name)}</strong></div>
+      <div class="top-pick-stats">
+        <span class="tp-stat">❤ ${entry.loves}</span>
+        <span class="tp-stat">👎 ${entry.downs}</span>
+        <span class="tp-stat">👥 ${entry.users}</span>
+      </div>
+      <p class="top-pick-hint">Score based on community votes + how many people are taking it.</p>`;
+  }
+
   // --- Add / Edit -------------------------------------------------------
   document.getElementById("btn-add-med").addEventListener("click", () => openMedModal(null));
   function openMedModal(m) {
@@ -113,6 +275,9 @@ console.info("EndoMe meds build v2");
     form.id.value = m?.id || "";
     document.getElementById("med-modal-title").textContent = m ? "Edit medication" : "Add a medication";
     document.getElementById("med-status").textContent = "";
+    editingMedId = m?.id || null;
+    editingSchedules = m?.schedules ? [...m.schedules] : [];
+    pendingDays = 0;
     if (m) {
       form.name.value = m.name || "";
       form.kind.value = m.kind || "medication";
@@ -124,9 +289,82 @@ console.info("EndoMe meds build v2");
       form.link.value = m.link || "";
       form.notes.value = m.notes || "";
     }
+    paintScheduleEditor();
     medModal.classList.add("open"); medModal.setAttribute("aria-hidden", "false");
   }
   function closeMedModal() { medModal.classList.remove("open"); medModal.setAttribute("aria-hidden", "true"); }
+
+  function paintScheduleEditor() {
+    const wrap = document.getElementById("med-schedule-editor");
+    const list = document.getElementById("med-schedule-list");
+    if (!wrap || !list) return;
+    if (!editingMedId) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    if (!editingSchedules.length) {
+      list.innerHTML = `<li class="med-schedule-empty">No recurring schedule yet. Pick days + a time below to add one.</li>`;
+    } else {
+      list.innerHTML = editingSchedules.map((s) => `
+        <li class="med-schedule-row">
+          <span class="sched-days">${escapeHtml(formatDays(s.daysMask))}</span>
+          <span class="sched-time">${escapeHtml(s.timeOfDay)}</span>
+          <button type="button" class="btn-soft small danger" data-del-sched="${s.id}">Remove</button>
+        </li>`).join("");
+    }
+    // Reset day chips
+    document.querySelectorAll(".dow-chip").forEach((b) => b.classList.toggle("on", (pendingDays & +b.dataset.day) !== 0));
+  }
+
+  // Day-of-week chip toggling
+  document.querySelector("#dow-row").addEventListener("click", (e) => {
+    const btn = e.target.closest(".dow-chip");
+    if (!btn) return;
+    e.preventDefault();
+    const bit = +btn.dataset.day;
+    pendingDays ^= bit;
+    btn.classList.toggle("on", (pendingDays & bit) !== 0);
+  });
+
+  document.getElementById("sched-add").addEventListener("click", async () => {
+    if (!editingMedId) return;
+    const status = document.getElementById("sched-status");
+    const time = document.getElementById("sched-time").value;
+    status.textContent = "";
+    status.className = "form-status";
+    if (!pendingDays) { status.textContent = "Pick at least one day."; status.className = "form-status err"; return; }
+    if (!time) { status.textContent = "Pick a time."; status.className = "form-status err"; return; }
+    try {
+      const res = await fetchJson(`/api/me/medications/${editingMedId}/schedules`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ daysMask: pendingDays, timeOfDay: time }),
+      });
+      editingSchedules.push({ id: res.id, daysMask: pendingDays, timeOfDay: time });
+      pendingDays = 0;
+      document.getElementById("sched-time").value = "";
+      paintScheduleEditor();
+      toast("Schedule added", "ok");
+      await renderTimetable();
+    } catch (err) {
+      status.textContent = err.message || "Couldn't save.";
+      status.className = "form-status err";
+    }
+  });
+
+  document.getElementById("med-schedule-list").addEventListener("click", async (e) => {
+    const del = e.target.closest("[data-del-sched]");
+    if (!del || !editingMedId) return;
+    const schedId = +del.dataset.delSched;
+    try {
+      await fetchJson(`/api/me/medications/${editingMedId}/schedules/${schedId}`, { method: "DELETE" });
+      editingSchedules = editingSchedules.filter((s) => s.id !== schedId);
+      paintScheduleEditor();
+      toast("Schedule removed", "ok");
+      await renderTimetable();
+    } catch (err) { toast(err.message || "Couldn't remove", "err"); }
+  });
 
   document.getElementById("med-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -146,12 +384,19 @@ console.info("EndoMe meds build v2");
     const status = document.getElementById("med-status");
     status.textContent = "Saving…"; status.className = "form-status";
     try {
-      await fetchJson(id ? `/api/me/medications/${id}` : "/api/me/medications", {
+      const res = await fetchJson(id ? `/api/me/medications/${id}` : "/api/me/medications", {
         method: id ? "PUT" : "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
       toast(id ? "Medication updated" : "Medication added", "ok");
+      // If we just created a new med, swap into edit mode so the user can add a schedule.
+      if (!id && res.id) {
+        await load();
+        const created = meds.find((x) => x.id === res.id);
+        if (created) openMedModal(created);
+        return;
+      }
       closeMedModal();
       await load();
     } catch (err) {
@@ -160,7 +405,7 @@ console.info("EndoMe meds build v2");
     }
   });
 
-  // --- Log / Edit / Delete actions -------------------------------------
+  // --- Log / Edit / Delete / React actions ----------------------------------
   document.addEventListener("click", async (e) => {
     if (e.target.closest("[data-close-modal]")) {
       e.preventDefault();
@@ -184,6 +429,52 @@ console.info("EndoMe meds build v2");
         toast("Removed", "ok");
         await load();
       } catch (err) { toast(err.message || "Couldn't remove", "err"); }
+      return;
+    }
+    const react = e.target.closest("[data-react]");
+    if (react) {
+      e.preventDefault();
+      const name = react.dataset.name;
+      const wanted = react.dataset.react;
+      // If already on, clear; otherwise switch to the chosen reaction.
+      const reaction = react.classList.contains("on") ? null : wanted;
+      try {
+        const res = await fetchJson("/api/me/medications/react", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, reaction }),
+        });
+        // Update local state in place
+        const target = meds.find((m) => m.name === name);
+        if (target) {
+          target.community = res.stats;
+          target.myReaction = res.reaction;
+          renderMeds();
+        }
+        // Also refresh the glossary item if it's expanded
+        applyCommunityToGlossary({ [medKey(name)]: { stats: res.stats, mine: res.reaction } });
+        await loadTopPicks();
+      } catch (err) { toast(err.message || "Couldn't save reaction", "err"); }
+      return;
+    }
+    const greact = e.target.closest("[data-greact]");
+    if (greact) {
+      e.preventDefault();
+      const name = greact.dataset.name;
+      const wanted = greact.dataset.greact;
+      const reaction = greact.classList.contains("on") ? null : wanted;
+      try {
+        const res = await fetchJson("/api/me/medications/react", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, reaction }),
+        });
+        applyCommunityToGlossary({ [medKey(name)]: { stats: res.stats, mine: res.reaction } });
+        // If user owns this med, also refresh card stats
+        const target = meds.find((m) => m.name === name);
+        if (target) { target.community = res.stats; target.myReaction = res.reaction; renderMeds(); }
+        await loadTopPicks();
+      } catch (err) { toast(err.message || "Couldn't save", "err"); }
       return;
     }
   });
@@ -228,6 +519,8 @@ console.info("EndoMe meds build v2");
   // CATALOG — autocomplete in the Add form + searchable glossary section
   // ====================================================================
   const catalog = Array.isArray(window.MED_CATALOG) ? window.MED_CATALOG : [];
+  // Caches the latest community stats per med_key for glossary rendering
+  const glossaryCommunity = {};
 
   // --- Autocomplete on the Name input -----------------------------------
   const nameInput  = document.getElementById("med-name-input");
@@ -255,8 +548,7 @@ console.info("EndoMe meds build v2");
     const q = query.toLowerCase();
     let matches;
     if (!q) {
-      // Show a curated top-of-list when the field is empty/focused.
-      matches = catalog.filter((c) => ["Ibuprofen","Paracetamol","Magnesium","Vitamin D","Omega-3","Iron","NAC (N-Acetyl Cysteine)","PEA (Palmitoylethanolamide)","Dienogest"].includes(c.name));
+      matches = catalog.filter((c) => ["Ibuprofen","Paracetamol","Magnesium","Vitamin D","Omega-3","Iron","NAC (N-Acetyl Cysteine)","PEA (Palmitoylethanolamide)","Dienogest","Slynd","Yaz","Levonorgestrel IUD"].includes(c.name));
     } else {
       matches = catalog.filter((c) =>
         c.name.toLowerCase().includes(q) ||
@@ -342,11 +634,59 @@ console.info("EndoMe meds build v2");
     glossaryList.querySelectorAll(".glossary-item-head").forEach((head) => {
       head.addEventListener("click", () => head.parentElement.classList.toggle("is-open"));
     });
+    // Lazy-load community stats for the visible items
+    const names = items.map((c) => c.name);
+    fetchCommunityStatsForGlossary(names);
+  }
+
+  async function fetchCommunityStatsForGlossary(names) {
+    try {
+      const data = await fetchJson("/api/me/medications/community", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ names }),
+      });
+      // Stash + paint
+      const merged = {};
+      for (const k of Object.keys(data.stats || {})) {
+        merged[k] = { stats: data.stats[k], mine: (data.mine || {})[k] || null };
+        glossaryCommunity[k] = merged[k];
+      }
+      applyCommunityToGlossary(merged);
+    } catch {}
+  }
+
+  function applyCommunityToGlossary(byKey) {
+    if (!glossaryList) return;
+    for (const k of Object.keys(byKey)) {
+      const wrap = glossaryList.querySelector(`[data-gcomm="${cssEscape(k)}"]`);
+      if (!wrap) continue;
+      const { stats, mine } = byKey[k];
+      wrap.innerHTML = communityChipsHtml(wrap.dataset.gname, stats || {loves:0,downs:0,users:0}, mine);
+    }
+  }
+
+  function communityChipsHtml(name, stats, mine) {
+    return `
+      <span class="med-community-stat">👥 ${stats.users || 0} taking this</span>
+      <div class="med-react">
+        <button class="react-chip love ${mine === "love" ? "on" : ""}" data-greact="love" data-name="${escapeHtml(name)}" aria-label="Love this">❤ <span>${stats.loves || 0}</span></button>
+        <button class="react-chip down ${mine === "down" ? "on" : ""}" data-greact="down" data-name="${escapeHtml(name)}" aria-label="Thumbs down">👎 <span>${stats.downs || 0}</span></button>
+      </div>`;
   }
 
   function glossaryItem(c) {
     const aliases = (c.aliases || []).slice(0, 4).join(", ");
     const KIND_ICO = { medication: "💊", vitamin: "🌿", supplement: "🧴", herbal: "🍃" };
+    const k = medKey(c.name);
+    const cached = glossaryCommunity[k];
+    const chips = cached
+      ? communityChipsHtml(c.name, cached.stats, cached.mine)
+      : `<span class="med-community-stat">👥 –</span>
+         <div class="med-react">
+           <button class="react-chip love" data-greact="love" data-name="${escapeHtml(c.name)}">❤ <span>0</span></button>
+           <button class="react-chip down" data-greact="down" data-name="${escapeHtml(c.name)}">👎 <span>0</span></button>
+         </div>`;
     return `<li class="glossary-item">
       <div class="glossary-item-head" role="button" tabindex="0">
         <span class="glossary-ico">${KIND_ICO[c.kind] || "💊"}</span>
@@ -363,6 +703,7 @@ console.info("EndoMe meds build v2");
           ${c.defaultFreq ? `<span class="glossary-pill">${escapeHtml(FREQ_LABEL[c.defaultFreq] || c.defaultFreq)}</span>` : ""}
           ${c.minHoursBetween != null ? `<span class="glossary-pill">Min ${c.minHoursBetween}h between</span>` : ""}
         </div>
+        <div class="med-community glossary-community" data-gcomm="${escapeHtml(k)}" data-gname="${escapeHtml(c.name)}">${chips}</div>
         <button class="btn btn-primary small" data-add-from-glossary="${escapeHtml(c.name)}">+ Add to my list</button>
       </div>
     </li>`;
@@ -381,6 +722,12 @@ console.info("EndoMe meds build v2");
     return String(s ?? "").replace(/[<>&"']/g, (c) => ({
       "<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;",
     })[c]);
+  }
+  function cssEscape(s) {
+    return String(s).replace(/["\\]/g, (c) => "\\" + c);
+  }
+  function medKey(s) {
+    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
   }
   function relTime(unixSec) {
     if (!unixSec) return "never";

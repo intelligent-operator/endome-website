@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/dashboard.css?v=5" />
-  <link rel="stylesheet" href="/meds.css?v=2" />
+  <link rel="stylesheet" href="/meds.css?v=3" />
   <link rel="stylesheet" href="/account-menu.css?v=1" />
 </head>
 <body class="dash-body">
@@ -53,7 +53,7 @@
     </div>
   </header>
 
-  <div class="dash-layout community-layout">
+  <div class="dash-layout meds-layout">
     <aside class="dash-sidebar">
       <nav class="side-nav">
         <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
@@ -73,10 +73,27 @@
         <div>
           <p class="hero-eyebrow">Medications</p>
           <h1>Your meds, your vitamins, your routine.</h1>
-          <p class="hero-lead">Track everything you take — when, how much, and what for. We'll remind you when the next dose is allowed.</p>
+          <p class="hero-lead">Track everything you take, when you take it, and what's actually working. The community pitches in too — love a med or thumbs-down it so others can see what helps.</p>
         </div>
         <button class="btn btn-primary" id="btn-add-med">+ Add medication</button>
       </header>
+
+      <!-- Weekly timetable: visual at-a-glance of every scheduled dose -->
+      <section class="community-section">
+        <div class="section-head">
+          <h2>This week's routine</h2>
+          <span class="section-hint">Click any slot to mark it taken or skipped. Today's reminders also land in your notifications.</span>
+        </div>
+        <div class="timetable-card">
+          <div class="timetable-empty" id="timetable-empty" hidden>
+            <strong>No schedule yet.</strong>
+            <span>Add a medication below and tap "+ Schedule" to set recurring doses.</span>
+          </div>
+          <div class="timetable-wrap">
+            <table class="timetable" id="timetable" aria-label="Weekly medication timetable"></table>
+          </div>
+        </div>
+      </section>
 
       <section class="community-section" id="medications-section">
         <ul class="med-list" id="med-list">
@@ -170,6 +187,30 @@
             <label class="field"><span>Notes <em>(optional)</em></span>
               <textarea name="notes" rows="3" maxlength="1000" placeholder="What it's for, when you take it, anything to remember."></textarea>
             </label>
+
+            <!-- Recurring schedule editor (only enabled when editing an existing med) -->
+            <fieldset class="med-schedule-editor" id="med-schedule-editor" hidden>
+              <legend>Recurring schedule</legend>
+              <p class="med-schedule-hint">Pick the days and time you want to take this. We'll add it to your weekly timetable and remind you in the notifications bell when each dose is due.</p>
+              <ul class="med-schedule-list" id="med-schedule-list"></ul>
+              <div class="med-schedule-add">
+                <div class="dow-row" id="dow-row" role="group" aria-label="Days of the week">
+                  <button type="button" class="dow-chip" data-day="1">Sun</button>
+                  <button type="button" class="dow-chip" data-day="2">Mon</button>
+                  <button type="button" class="dow-chip" data-day="4">Tue</button>
+                  <button type="button" class="dow-chip" data-day="8">Wed</button>
+                  <button type="button" class="dow-chip" data-day="16">Thu</button>
+                  <button type="button" class="dow-chip" data-day="32">Fri</button>
+                  <button type="button" class="dow-chip" data-day="64">Sat</button>
+                </div>
+                <div class="med-schedule-time-row">
+                  <input type="time" id="sched-time" />
+                  <button type="button" class="btn btn-primary small" id="sched-add">+ Add slot</button>
+                </div>
+                <p class="form-status" id="sched-status" role="status"></p>
+              </div>
+            </fieldset>
+
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Save medication</button>
               <button type="button" class="btn-soft" data-close-modal>Cancel</button>
@@ -202,11 +243,34 @@
         </div>
       </div>
     </main>
+
+    <!-- ===== RIGHT SIDEBAR — community top picks ===== -->
+    <aside class="dash-right meds-right">
+      <section class="side-card top-pick" id="top-medication-card">
+        <div class="section-head">
+          <h2>💊 Top medicine</h2>
+        </div>
+        <p class="side-sub">Most loved by the community right now.</p>
+        <div class="top-pick-body" id="top-medication-body">
+          <p class="side-empty">Be the first to love a medication and it'll show up here.</p>
+        </div>
+      </section>
+
+      <section class="side-card top-pick" id="top-vitamin-card">
+        <div class="section-head">
+          <h2>🌿 Top vitamin</h2>
+        </div>
+        <p class="side-sub">What people swear by for their endo routine.</p>
+        <div class="top-pick-body" id="top-vitamin-body">
+          <p class="side-empty">Once a few people heart a supplement, the winner lands here.</p>
+        </div>
+      </section>
+    </aside>
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1" defer></script>
-  <script src="/med-catalog.js?v=1" defer></script>
-  <script src="/meds.js?v=2" defer></script>
+  <script src="/med-catalog.js?v=2" defer></script>
+  <script src="/meds.js?v=3" defer></script>
 </body>
 </html>

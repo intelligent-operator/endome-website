@@ -83,7 +83,8 @@
 .step-grid{
   display:grid;
   grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
-  gap:16px;
+  gap:22px 16px;
+  padding-top:8px;
 }
 
 /* ---------- Step card (compact, vertical) ---------- */
@@ -97,7 +98,9 @@
   gap:12px;
   min-height:200px;
   transition:transform .14s, box-shadow .14s, border-color .14s, background .2s;
-  position:relative;overflow:hidden;
+  position:relative;
+  /* margin-top lets the floating step-num circle hang over the top edge */
+  margin-top:16px;
 }
 .step:hover{
   transform:translateY(-2px);
@@ -110,12 +113,13 @@
   background:linear-gradient(160deg,#fff 0%, #fff5f8 100%);
   border-color:#ffd6e0;
 }
-.step.is-done::before{
+.step.is-done::after{
   content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
   background:linear-gradient(180deg,#ff4e8a,#ffb380);
+  border-radius:18px 0 0 18px;
 }
 
-.step-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.step-top{display:flex;align-items:flex-start;gap:10px}
 .step-icon{
   width:52px;height:52px;border-radius:14px;
   background:linear-gradient(135deg,#fff5f8,#ffeaf2);
@@ -125,11 +129,25 @@
 .step.is-done .step-icon{
   background:linear-gradient(135deg,#ffeaf2,#ffd6e0);
 }
+/* Floating numbered badge — sits over the top-right corner of the card. */
 .step-num{
-  font-size:11px;font-weight:700;color:#a08596;font-variant-numeric:tabular-nums;
-  letter-spacing:.06em;line-height:1;padding:6px 0;
+  position:absolute;top:-14px;right:-10px;
+  width:44px;height:44px;border-radius:50%;
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);
+  color:#fff;font-size:14px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;
+  font-variant-numeric:tabular-nums;letter-spacing:.02em;
+  box-shadow:0 8px 18px rgba(255,77,138,.32), 0 0 0 4px #fff;
+  z-index:2;
 }
-.step.is-done .step-num{color:#ff4e8a}
+.step.is-locked .step-num{
+  background:linear-gradient(135deg,#cdb9c4,#a08596);
+  box-shadow:0 6px 14px rgba(0,0,0,.10), 0 0 0 4px #fff;
+}
+.step.is-done .step-num{
+  background:linear-gradient(135deg,#22c55e,#4ade80);
+  box-shadow:0 8px 18px rgba(34,197,94,.32), 0 0 0 4px #fff;
+}
 
 .step-body{display:flex;flex-direction:column;gap:6px;flex:1}
 .step-body h3{

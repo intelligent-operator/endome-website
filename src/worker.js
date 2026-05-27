@@ -118,6 +118,26 @@ export default {
           if (url.pathname === "/api/me/medications" && request.method === "POST") {
             return jsonHeaders(await createMedication(request, env, user));
           }
+          if (url.pathname === "/api/me/medications/community" && request.method === "POST") {
+            return jsonHeaders(await getCommunityStatsForCatalog(request, env, user));
+          }
+          if (url.pathname === "/api/me/medications/react" && request.method === "POST") {
+            return jsonHeaders(await postMedReaction(request, env, user));
+          }
+          if (url.pathname === "/api/me/medications/top" && request.method === "GET") {
+            return jsonHeaders(await getMedTopPicks(env));
+          }
+          if (url.pathname === "/api/me/medications/timetable" && request.method === "GET") {
+            return jsonHeaders(await getMedicationTimetable(env, user));
+          }
+          const medSchedMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)\/schedules(?:\/(\d+))?$/);
+          if (medSchedMatch) {
+            const medId = +medSchedMatch[1];
+            const schedId = medSchedMatch[2] ? +medSchedMatch[2] : null;
+            if (!schedId && request.method === "GET")  return jsonHeaders(await getMedicationSchedules(env, user, medId));
+            if (!schedId && request.method === "POST") return jsonHeaders(await createMedicationSchedule(request, env, user, medId));
+            if (schedId && request.method === "DELETE") return jsonHeaders(await deleteMedicationSchedule(env, user, medId, schedId));
+          }
           const medMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)(?:\/(\w+))?$/);
           if (medMatch) {
             const id = +medMatch[1];
@@ -1367,8 +1387,59 @@ async function getMeToday(request, env, user) {
     pointsToday: daily?.points_total || 0,
     pet: petResponse(pet),
     tests,
-    notifications: notifs.results || [],
+    notifications: [
+      ...(notifs.results || []),
+      ...(await computeMedReminders(env, user).catch(() => [])),
+    ],
   });
+}
+
+// Virtual reminders synthesised from medication_schedules. Returns notification
+// objects shaped like the real `notifications` table so the dashboard bell can
+// render them with the same template. Each due slot offers a "yes I took it /
+// no I skipped" action linking back to /meds#timetable.
+async function computeMedReminders(env, user) {
+  await ensureMedSchema(env);
+  // Pull all of today's slots + recent logs (past 6h).
+  const day = new Date(); // server UTC — best-effort until we honour user TZ.
+  const todayBit = 1 << day.getUTCDay();
+  const slots = await env.DB.prepare(
+    "SELECT s.medication_id, s.time_of_day, m.name " +
+    "FROM medication_schedules s JOIN medications m " +
+    "  ON m.id = s.medication_id AND m.is_active = 1 " +
+    "WHERE s.user_id = ? AND (s.days_mask & ?) != 0"
+  ).bind(user.id, todayBit).all().catch(() => ({ results: [] }));
+
+  const recentLogs = await env.DB.prepare(
+    "SELECT medication_id, taken_at FROM medication_logs " +
+    "WHERE user_id = ? AND taken_at >= ?"
+  ).bind(user.id, nowSec() - 6 * 3600).all().catch(() => ({ results: [] }));
+
+  const out = [];
+  const now = nowSec();
+  for (const s of (slots.results || [])) {
+    const [hh, mm] = (s.time_of_day || "0:0").split(":").map(Number);
+    const slotDate = new Date(day);
+    slotDate.setUTCHours(hh, mm, 0, 0);
+    const slotSec = Math.floor(slotDate.getTime() / 1000);
+    // Active window: 15 minutes before until 2 hours after the scheduled time.
+    if (now < slotSec - 15 * 60) continue;
+    if (now > slotSec + 2 * 3600) continue;
+    const taken = (recentLogs.results || []).some(
+      (l) => l.medication_id === s.medication_id && Math.abs(l.taken_at - slotSec) < 2 * 3600
+    );
+    if (taken) continue;
+    out.push({
+      id: `med:${s.medication_id}:${s.time_of_day}`,
+      type: "med_due",
+      title: `💊 Time for ${s.name}`,
+      body: `Scheduled ${s.time_of_day}. Did you take it? Tap to mark yes or no.`,
+      action_url: "/meds#timetable",
+      created_at: slotSec,
+      read_at: null,
+    });
+  }
+  return out;
 }
 
 // --- /api/me/checkin/morning ----------------------------------------------
@@ -1684,7 +1755,8 @@ async function getNotifications(env, user) {
       "ORDER BY created_at DESC LIMIT 50"
     )
     .bind(user.id).all();
-  return json({ notifications: res.results || [] });
+  const meds = await computeMedReminders(env, user).catch(() => []);
+  return json({ notifications: [...(res.results || []), ...meds] });
 }
 
 async function dismissNotification(env, user, id) {
@@ -4326,6 +4398,28 @@ async function ensureMedSchema(env) {
     ")",
     "CREATE INDEX IF NOT EXISTS idx_medlogs_med ON medication_logs(medication_id, taken_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_medlogs_user ON medication_logs(user_id, taken_at DESC)",
+    // Community ratings: one row per (user, normalised med name).
+    "CREATE TABLE IF NOT EXISTS med_reactions (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  med_key TEXT NOT NULL," +              // lower-cased name for grouping
+    "  reaction TEXT NOT NULL," +              // 'love' | 'down'
+    "  updated_at INTEGER NOT NULL," +
+    "  UNIQUE(user_id, med_key)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_medreact_key ON med_reactions(med_key, reaction)",
+    // Recurring schedules: 0+ rows per medication. Each row is a single
+    // weekly slot (days bitmask + HH:MM local time).
+    "CREATE TABLE IF NOT EXISTS medication_schedules (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  medication_id INTEGER NOT NULL," +
+    "  days_mask INTEGER NOT NULL," +          // Sun=1, Mon=2, Tue=4, Wed=8, Thu=16, Fri=32, Sat=64
+    "  time_of_day TEXT NOT NULL," +           // 'HH:MM' 24h local
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_medsched_user ON medication_schedules(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_medsched_med ON medication_schedules(medication_id)",
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
 }
@@ -4362,8 +4456,50 @@ async function getMedications(env, user) {
     "WHERE m.user_id = ? AND m.is_active = 1 " +
     "ORDER BY m.created_at DESC"
   ).bind(user.id).all().catch(() => ({ results: [] }));
+  const rows = meds.results || [];
+
+  // Side-load schedules + community stats so the page paints in one round-trip.
+  const ids = rows.map((r) => r.id);
+  let schedByMed = {};
+  if (ids.length) {
+    const ph = ids.map(() => "?").join(",");
+    try {
+      const s = await env.DB.prepare(
+        `SELECT id, medication_id, days_mask, time_of_day
+         FROM medication_schedules WHERE user_id = ? AND medication_id IN (${ph})
+         ORDER BY time_of_day ASC, id ASC`
+      ).bind(user.id, ...ids).all();
+      for (const r of (s.results || [])) {
+        (schedByMed[r.medication_id] = schedByMed[r.medication_id] || [])
+          .push({ id: r.id, daysMask: r.days_mask, timeOfDay: r.time_of_day });
+      }
+    } catch {}
+  }
+
+  const keys = [...new Set(rows.map((r) => medKey(r.name)).filter(Boolean))];
+  const stats = await getMedCommunityStats(env, keys);
+  const mine = {};
+  if (keys.length) {
+    const ph = keys.map(() => "?").join(",");
+    try {
+      const r = await env.DB.prepare(
+        `SELECT med_key, reaction FROM med_reactions WHERE user_id = ? AND med_key IN (${ph})`
+      ).bind(user.id, ...keys).all();
+      for (const row of (r.results || [])) mine[row.med_key] = row.reaction;
+    } catch {}
+  }
+
   return json({
-    medications: (meds.results || []).map((r) => medRow(r, r.last_taken_at)),
+    medications: rows.map((r) => {
+      const key = medKey(r.name);
+      const base = medRow(r, r.last_taken_at);
+      return {
+        ...base,
+        schedules: schedByMed[r.id] || [],
+        community: stats[key] || { loves: 0, downs: 0, users: 0 },
+        myReaction: mine[key] || null,
+      };
+    }),
   });
 }
 
@@ -4467,6 +4603,250 @@ async function getMedicationLogs(env, user, id) {
     "WHERE medication_id = ? AND user_id = ? ORDER BY taken_at DESC LIMIT 100"
   ).bind(id, user.id).all().catch(() => ({ results: [] }));
   return json({ logs: logs.results || [] });
+}
+
+// =============================================================================
+// MEDICATION COMMUNITY ENGAGEMENT — hearts / thumbs-down + usage counts per
+// medication name. Aggregated across all users so the community can see what
+// is working and what isn't.
+// =============================================================================
+function medKey(name) {
+  return String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// Stats for a list of meds in one round-trip. Returns map keyed by med_key.
+async function getMedCommunityStats(env, keys) {
+  if (!keys.length) return {};
+  await ensureMedSchema(env);
+  const out = {};
+  for (const k of keys) out[k] = { loves: 0, downs: 0, users: 0 };
+
+  const ph = keys.map(() => "?").join(",");
+  // Reaction counts
+  try {
+    const reacts = await env.DB.prepare(
+      `SELECT med_key, reaction, COUNT(*) AS n FROM med_reactions
+       WHERE med_key IN (${ph}) GROUP BY med_key, reaction`
+    ).bind(...keys).all();
+    for (const r of (reacts.results || [])) {
+      const bucket = out[r.med_key]; if (!bucket) continue;
+      if (r.reaction === "love") bucket.loves = r.n;
+      else if (r.reaction === "down") bucket.downs = r.n;
+    }
+  } catch {}
+
+  // Distinct active users per med name
+  try {
+    const usage = await env.DB.prepare(
+      `SELECT LOWER(TRIM(name)) AS med_key, COUNT(DISTINCT user_id) AS n
+       FROM medications WHERE is_active = 1 AND LOWER(TRIM(name)) IN (${ph})
+       GROUP BY LOWER(TRIM(name))`
+    ).bind(...keys).all();
+    for (const r of (usage.results || [])) {
+      if (out[r.med_key]) out[r.med_key].users = r.n;
+    }
+  } catch {}
+  return out;
+}
+
+async function getCommunityStatsForCatalog(request, env, user) {
+  // POST {names: [...]} to fetch the engagement stats + the caller's own reactions.
+  const body = await readJsonSafe(request) || {};
+  const names = Array.isArray(body.names) ? body.names.slice(0, 200) : [];
+  const keys = [...new Set(names.map(medKey).filter(Boolean))];
+  const stats = await getMedCommunityStats(env, keys);
+
+  // Caller's own votes
+  const mine = {};
+  if (keys.length) {
+    try {
+      const ph = keys.map(() => "?").join(",");
+      const rows = await env.DB.prepare(
+        `SELECT med_key, reaction FROM med_reactions WHERE user_id = ? AND med_key IN (${ph})`
+      ).bind(user.id, ...keys).all();
+      for (const r of (rows.results || [])) mine[r.med_key] = r.reaction;
+    } catch {}
+  }
+  return json({ stats, mine });
+}
+
+async function postMedReaction(request, env, user) {
+  await ensureMedSchema(env);
+  const body = await readJsonSafe(request) || {};
+  const key = medKey(body.name);
+  const reaction = body.reaction === "love" ? "love"
+                 : body.reaction === "down" ? "down"
+                 : body.reaction === null ? null : null;
+  if (!key) return json({ error: "Medication name required." }, 400);
+
+  if (reaction === null) {
+    // Clear vote
+    await env.DB.prepare(
+      "DELETE FROM med_reactions WHERE user_id = ? AND med_key = ?"
+    ).bind(user.id, key).run();
+  } else {
+    await env.DB.prepare(
+      "INSERT INTO med_reactions (user_id, med_key, reaction, updated_at) VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT(user_id, med_key) DO UPDATE SET reaction = excluded.reaction, updated_at = excluded.updated_at"
+    ).bind(user.id, key, reaction, nowSec()).run();
+  }
+
+  const stats = (await getMedCommunityStats(env, [key]))[key] || { loves: 0, downs: 0, users: 0 };
+  return json({ ok: true, key, reaction, stats });
+}
+
+// Top-ranked picks for the right sidebar. Ranked by (loves - downs) with a
+// minimum sample so a single user can't dominate, falling back to most-used.
+async function getMedTopPicks(env) {
+  await ensureMedSchema(env);
+  const out = { medication: null, vitamin: null };
+
+  // 1) Aggregate vote scores across med_reactions
+  let voteRows = { results: [] };
+  try {
+    voteRows = await env.DB.prepare(
+      "SELECT med_key, " +
+      "  SUM(CASE WHEN reaction='love' THEN 1 ELSE 0 END) AS loves, " +
+      "  SUM(CASE WHEN reaction='down' THEN 1 ELSE 0 END) AS downs " +
+      "FROM med_reactions GROUP BY med_key"
+    ).all();
+  } catch {}
+
+  // 2) Pull usage counts grouped by lower(name) + kind
+  let usageRows = { results: [] };
+  try {
+    usageRows = await env.DB.prepare(
+      "SELECT LOWER(TRIM(name)) AS med_key, MIN(name) AS display_name, " +
+      "       kind, COUNT(DISTINCT user_id) AS users " +
+      "FROM medications WHERE is_active = 1 GROUP BY LOWER(TRIM(name)), kind"
+    ).all();
+  } catch {}
+
+  const voteMap = new Map();
+  for (const r of (voteRows.results || [])) voteMap.set(r.med_key, { loves: +r.loves || 0, downs: +r.downs || 0 });
+
+  const ranked = (usageRows.results || []).map((r) => {
+    const v = voteMap.get(r.med_key) || { loves: 0, downs: 0 };
+    const score = v.loves - v.downs;
+    return {
+      key: r.med_key,
+      name: r.display_name,
+      kind: r.kind || "medication",
+      users: r.users || 0,
+      loves: v.loves,
+      downs: v.downs,
+      score,
+    };
+  });
+
+  function pick(kinds) {
+    const pool = ranked.filter((r) => kinds.includes(r.kind));
+    if (!pool.length) return null;
+    pool.sort((a, b) => {
+      // Score first, then usage, then alphabetical for determinism.
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.users !== a.users) return b.users - a.users;
+      return a.name.localeCompare(b.name);
+    });
+    return pool[0];
+  }
+
+  out.medication = pick(["medication"]);
+  out.vitamin    = pick(["vitamin", "supplement", "herbal"]);
+  return json(out);
+}
+
+// =============================================================================
+// MEDICATION SCHEDULES — recurring weekly slots + computed weekly timetable.
+// =============================================================================
+const DOW_MAX = 127; // 7-bit bitmask (Sun..Sat)
+
+function sanitizeTimeOfDay(v) {
+  if (typeof v !== "string") return null;
+  const m = v.trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!m) return null;
+  const h = String(+m[1]).padStart(2, "0");
+  return `${h}:${m[2]}`;
+}
+
+async function getMedicationSchedules(env, user, medId) {
+  await ensureMedSchema(env);
+  const rows = await env.DB.prepare(
+    "SELECT id, medication_id, days_mask, time_of_day, created_at " +
+    "FROM medication_schedules WHERE user_id = ? AND medication_id = ? " +
+    "ORDER BY time_of_day ASC, id ASC"
+  ).bind(user.id, medId).all().catch(() => ({ results: [] }));
+  return json({
+    schedules: (rows.results || []).map((r) => ({
+      id: r.id, medicationId: r.medication_id, daysMask: r.days_mask,
+      timeOfDay: r.time_of_day, createdAt: r.created_at,
+    })),
+  });
+}
+
+async function createMedicationSchedule(request, env, user, medId) {
+  await ensureMedSchema(env);
+  // Confirm ownership
+  const owned = await env.DB.prepare(
+    "SELECT id FROM medications WHERE id = ? AND user_id = ? AND is_active = 1"
+  ).bind(medId, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Medication not found" }, 404);
+
+  const body = await readJsonSafe(request) || {};
+  const daysMask = Math.max(1, Math.min(DOW_MAX, +body.daysMask || 0));
+  const time = sanitizeTimeOfDay(body.timeOfDay);
+  if (!time) return json({ error: "Pick a valid time (HH:MM)." }, 400);
+  if (!daysMask) return json({ error: "Pick at least one day." }, 400);
+
+  const res = await env.DB.prepare(
+    "INSERT INTO medication_schedules (user_id, medication_id, days_mask, time_of_day, created_at) " +
+    "VALUES (?, ?, ?, ?, ?)"
+  ).bind(user.id, medId, daysMask, time, nowSec()).run();
+  return json({ ok: true, id: res.meta?.last_row_id });
+}
+
+async function deleteMedicationSchedule(env, user, medId, schedId) {
+  await ensureMedSchema(env);
+  await env.DB.prepare(
+    "DELETE FROM medication_schedules WHERE id = ? AND medication_id = ? AND user_id = ?"
+  ).bind(schedId, medId, user.id).run();
+  return json({ ok: true });
+}
+
+// Returns the full weekly grid with all of the user's scheduled doses + the
+// most recent log for each slot so the UI can mark "taken" / "skipped".
+async function getMedicationTimetable(env, user) {
+  await ensureMedSchema(env);
+  const rows = await env.DB.prepare(
+    "SELECT s.id AS schedule_id, s.medication_id, s.days_mask, s.time_of_day, " +
+    "       m.name, m.kind, m.dose " +
+    "FROM medication_schedules s " +
+    "JOIN medications m ON m.id = s.medication_id AND m.is_active = 1 " +
+    "WHERE s.user_id = ? ORDER BY s.time_of_day ASC"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+
+  // For each (medication_id, day), include the latest log within ±2 hours
+  // of the slot — so the UI can show whether it's been taken today.
+  const todayStart = Math.floor(Date.now() / 1000) - 14 * 86400;
+  const logRows = await env.DB.prepare(
+    "SELECT medication_id, taken_at FROM medication_logs " +
+    "WHERE user_id = ? AND taken_at >= ?"
+  ).bind(user.id, todayStart).all().catch(() => ({ results: [] }));
+
+  return json({
+    slots: (rows.results || []).map((r) => ({
+      scheduleId: r.schedule_id,
+      medicationId: r.medication_id,
+      name: r.name,
+      kind: r.kind || "medication",
+      dose: r.dose || null,
+      daysMask: r.days_mask,
+      timeOfDay: r.time_of_day,
+    })),
+    recentLogs: (logRows.results || []).map((r) => ({
+      medicationId: r.medication_id, takenAt: r.taken_at,
+    })),
+  });
 }
 
 function parseMedFields(body) {
