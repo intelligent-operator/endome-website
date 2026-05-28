@@ -7464,7 +7464,7 @@ async function invokeBedrock(env, prompt, model) {
     });
     if (!res.ok) {
       const t = await res.text();
-      return { ok: false, error: `Bedrock ${res.status}: ${t.slice(0, 400)}` };
+      return { ok: false, error: `Bedrock ${res.status} (model=${model}, region=${region}): ${t.slice(0, 400)}` };
     }
     const data = await res.json();
     const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
