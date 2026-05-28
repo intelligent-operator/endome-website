@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1779934116" />
-  <link rel="stylesheet" href="/acp.css?v=1779934116" />
+  <link rel="stylesheet" href="/acp.css?v=1779969382" />
 </head>
 <body class="acp-body">
   <header class="acp-topbar">
@@ -24,6 +24,7 @@
       <nav class="acp-nav">
         <button class="acp-tab active" data-tab="users">Users</button>
         <button class="acp-tab" data-tab="circles">Circles</button>
+        <button class="acp-tab" data-tab="insights">Insights</button>
         <button class="acp-tab" data-tab="system">System</button>
       </nav>
       <a href="/api/logout" class="acp-signout">Sign out</a>
@@ -62,6 +63,48 @@
       </header>
       <div class="acp-card" id="members-card">
         <p class="acp-empty">Loading members…</p>
+      </div>
+    </section>
+
+    <!-- INSIGHTS -->
+    <section class="acp-view" id="view-insights" hidden>
+      <header class="acp-section-head">
+        <h1>Insights engine</h1>
+        <span class="acp-hint">Status, diagnostics and recent activity for the EndoMe insight engine.</span>
+      </header>
+
+      <div class="acp-card" style="padding:18px">
+        <p style="margin:0 0 12px;font-size:14px;color:#3a2330"><strong>Engine status</strong></p>
+        <div id="engine-status" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <span class="acp-pill">Loading…</span>
+        </div>
+        <p style="margin:0 0 8px;font-size:13px;color:#5a3a48;line-height:1.55">
+          Fire a one-line ping at the engine to confirm it can answer. Returns the full backend response —
+          model attempted, region, elapsed time, tokens, and any error message AWS reports.
+        </p>
+        <button class="acp-btn primary" id="btn-engine-test">⚡ Test engine connection</button>
+        <pre id="engine-test-out" hidden style="margin-top:12px;background:#1b1224;color:#f5e8ee;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.5;padding:14px 16px;border-radius:14px;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;border:1px solid #2a1a36"></pre>
+      </div>
+
+      <div class="acp-card" style="padding:18px;margin-top:14px">
+        <p style="margin:0 0 8px;font-size:14px;color:#3a2330"><strong>Available inference profiles</strong></p>
+        <p style="margin:0 0 12px;font-size:13px;color:#5a3a48;line-height:1.55">
+          Lists every Bedrock inference profile your IAM key can see in <code>AWS_BEDROCK_REGION</code>.
+          The <strong>id</strong> column is the exact string to paste into the <code>BEDROCK_MODEL_ID</code>
+          secret. Needs <code>bedrock:ListInferenceProfiles</code> in your IAM policy.
+        </p>
+        <button class="acp-btn" id="btn-list-profiles">List available profiles</button>
+        <div id="profiles-out" style="margin-top:12px"></div>
+      </div>
+
+      <div class="acp-card" style="padding:18px;margin-top:14px">
+        <p style="margin:0 0 8px;font-size:14px;color:#3a2330"><strong>Recent insight runs</strong></p>
+        <p style="margin:0 0 12px;font-size:13px;color:#5a3a48;line-height:1.55">
+          Last 50 runs across all users — useful for spotting whether the monthly cron fired
+          and whether any users are hitting errors.
+        </p>
+        <button class="acp-btn" id="btn-runs-refresh">Refresh</button>
+        <div id="runs-out" style="margin-top:12px"></div>
       </div>
     </section>
 
@@ -122,6 +165,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/acp.js?v=1779934116" defer></script>
+  <script src="/acp.js?v=1779969382" defer></script>
 </body>
 </html>

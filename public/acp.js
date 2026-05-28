@@ -2,10 +2,11 @@
 // Server already blocks non-admins from this page; the JS just talks to /api/acp/*.
 (() => {
   const views = {
-    users:   document.getElementById("view-users"),
-    circles: document.getElementById("view-circles"),
-    circle:  document.getElementById("view-circle"),
-    system:  document.getElementById("view-system"),
+    users:    document.getElementById("view-users"),
+    circles:  document.getElementById("view-circles"),
+    circle:   document.getElementById("view-circle"),
+    insights: document.getElementById("view-insights"),
+    system:   document.getElementById("view-system"),
   };
   let allUsersCache = []; // for the add-member dropdown
   let currentCircleId = null;
@@ -18,13 +19,15 @@
       showView(name);
       if (name === "users") loadUsers();
       if (name === "circles") loadCircles();
+      if (name === "insights") loadInsightsTab();
     });
   });
   function showView(name) {
-    views.users.hidden   = name !== "users";
-    views.circles.hidden = name !== "circles";
-    views.circle.hidden  = name !== "circle";
-    if (views.system) views.system.hidden = name !== "system";
+    views.users.hidden    = name !== "users";
+    views.circles.hidden  = name !== "circles";
+    views.circle.hidden   = name !== "circle";
+    if (views.insights) views.insights.hidden = name !== "insights";
+    if (views.system)   views.system.hidden   = name !== "system";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -272,6 +275,121 @@
       btn.disabled = false; btn.textContent = "Run schema bootstrap now";
     }
   });
+
+  // --- Insights tab ----------------------------------------------------
+  async function loadInsightsTab() {
+    await Promise.all([paintEngineStatus(), loadRecentRuns()]);
+  }
+
+  async function paintEngineStatus() {
+    const el = document.getElementById("engine-status");
+    if (!el) return;
+    el.innerHTML = `<span class="acp-pill">Loading…</span>`;
+    try {
+      const data = await fetchJson("/api/me/insights");
+      // /api/me/insights is auth-only (not /acp), so this works because the
+      // admin is also a signed-in user. It returns engine connection state.
+      const ok = !!data.aiConfigured;
+      const backendLabel = data.aiBackend === "bedrock" ? "Bedrock"
+                         : data.aiBackend === "anthropic" ? "Direct API"
+                         : "none";
+      el.innerHTML = [
+        `<span class="acp-pill" style="background:${ok ? "#dff5e0" : "#ffe0e0"};color:${ok ? "#2b6f1f" : "#a63a3a"}">${ok ? "✓ Ready" : "✗ Offline"}</span>`,
+        `<span class="acp-pill">Backend: ${escapeHtml(backendLabel)}</span>`,
+      ].join("");
+    } catch (err) {
+      el.innerHTML = `<span class="acp-pill" style="background:#ffe0e0;color:#a63a3a">Status check failed</span>`;
+    }
+  }
+
+  document.getElementById("btn-engine-test")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const out = document.getElementById("engine-test-out");
+    btn.disabled = true; btn.textContent = "Pinging engine…";
+    out.hidden = false; out.textContent = "Calling engine…";
+    try {
+      const res = await fetch("/api/acp/insights/test", { method: "POST", credentials: "same-origin" });
+      const data = await res.json();
+      out.textContent = JSON.stringify(data, null, 2);
+      out.style.borderColor = data.ok ? "#3a7a2e" : "#a04444";
+      out.style.background  = data.ok ? "#1b1224" : "#2a1418";
+      toast(data.ok ? "Engine responded" : "Engine error — see output", data.ok ? "ok" : "err");
+    } catch (err) {
+      out.textContent = "Request failed: " + (err?.message || err);
+      out.style.borderColor = "#a04444";
+    } finally {
+      btn.disabled = false; btn.textContent = "⚡ Test engine connection";
+    }
+  });
+
+  document.getElementById("btn-list-profiles")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const out = document.getElementById("profiles-out");
+    btn.disabled = true; btn.textContent = "Listing…";
+    out.innerHTML = `<p style="font-size:13px;color:#7a5f6c;margin:0">Calling Bedrock…</p>`;
+    try {
+      const data = await fetchJson("/api/acp/insights/profiles");
+      if (!data.ok) {
+        out.innerHTML = `<p style="color:#c4344b;font-size:13px;margin:0">${escapeHtml(data.error || "Failed")}</p>`;
+        return;
+      }
+      if (!data.profiles.length) {
+        out.innerHTML = `<p style="font-size:13px;color:#7a5f6c;margin:0">No inference profiles visible in <strong>${escapeHtml(data.region)}</strong>. Enable cross-region inference for the model in the Bedrock console.</p>`;
+        return;
+      }
+      out.innerHTML = `
+        <p style="font-size:12px;color:#7a5f6c;margin:0 0 8px">${data.count} profile(s) in ${escapeHtml(data.region)}. Click an id to copy.</p>
+        <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px">
+          ${data.profiles.map((p) => `
+            <li style="background:#fff5f9;border:1px solid #ffe2eb;border-radius:10px;padding:10px 12px;font-size:13px">
+              <strong>${escapeHtml(p.name || p.id)}</strong>
+              <span style="color:#7a5f6c"> · ${escapeHtml(p.type || "")} · ${escapeHtml(p.status || "")}</span>
+              <div style="margin-top:4px"><button class="acp-btn" data-copy="${escapeHtml(p.id)}" style="font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:4px 8px">${escapeHtml(p.id)}</button></div>
+            </li>`).join("")}
+        </ul>`;
+      out.querySelectorAll("[data-copy]").forEach((b) => {
+        b.addEventListener("click", () => {
+          navigator.clipboard?.writeText(b.dataset.copy);
+          toast("Copied: " + b.dataset.copy, "ok");
+        });
+      });
+    } catch (err) {
+      out.innerHTML = `<p style="color:#c4344b;font-size:13px;margin:0">${escapeHtml(err.message || "Failed")}</p>`;
+    } finally {
+      btn.disabled = false; btn.textContent = "List available profiles";
+    }
+  });
+
+  async function loadRecentRuns() {
+    const out = document.getElementById("runs-out");
+    if (!out) return;
+    out.innerHTML = `<p style="font-size:13px;color:#7a5f6c;margin:0">Loading…</p>`;
+    try {
+      const data = await fetchJson("/api/acp/insights/runs");
+      if (!data.runs.length) {
+        out.innerHTML = `<p style="font-size:13px;color:#7a5f6c;margin:0">No runs recorded yet.</p>`;
+        return;
+      }
+      out.innerHTML = `
+        <table class="acp-table" style="font-size:13px">
+          <thead><tr><th>When</th><th>User</th><th>Insight</th><th>Status</th><th>Tokens</th><th>Error</th></tr></thead>
+          <tbody>
+            ${data.runs.map((r) => `
+              <tr>
+                <td>${escapeHtml(new Date(r.generatedAt * 1000).toLocaleString(undefined, { month:"short", day:"numeric", hour:"numeric", minute:"2-digit" }))}</td>
+                <td>${escapeHtml(r.displayName || r.username || r.userId.slice(0,8))}</td>
+                <td><code>${escapeHtml(r.slug)}</code></td>
+                <td><span style="color:${r.status === "ok" ? "#2b9b48" : r.status === "running" ? "#c2811a" : "#c4344b"};font-weight:700">${escapeHtml(r.status)}</span></td>
+                <td style="color:#7a5f6c">${r.inputTokens || "—"} / ${r.outputTokens || "—"}</td>
+                <td style="color:#c4344b;max-width:360px;font-size:12px">${escapeHtml((r.error || "").slice(0,200))}</td>
+              </tr>`).join("")}
+          </tbody>
+        </table>`;
+    } catch (err) {
+      out.innerHTML = `<p style="color:#c4344b;font-size:13px;margin:0">${escapeHtml(err.message || "Failed")}</p>`;
+    }
+  }
+  document.getElementById("btn-runs-refresh")?.addEventListener("click", loadRecentRuns);
 
   // --- Bootstrap -------------------------------------------------------
   loadUsers();

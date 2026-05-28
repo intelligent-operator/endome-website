@@ -25,21 +25,10 @@ console.info("EndoMe insights build v2");
       const data = await fetchJson("/api/me/insights");
       engineInfo = data;
       insights = data.insights || [];
-      paintEngineStatus();
       paintInsights();
     } catch (err) {
       document.getElementById("insights-list").innerHTML =
         `<li class="empty-state">${escapeHtml(err.message || "Couldn't load.")}</li>`;
-    }
-  }
-
-  function paintEngineStatus() {
-    const el = document.getElementById("ai-status");
-    if (!el) return;
-    if (engineInfo.aiConfigured) {
-      el.innerHTML = `<span class="ai-status-pill ok">✨ Insights engine ready</span>`;
-    } else {
-      el.innerHTML = `<span class="ai-status-pill warn">⚠ Insights engine offline</span>`;
     }
   }
 
@@ -131,35 +120,10 @@ console.info("EndoMe insights build v2");
       const data = await r.json();
       if (!data.admin) return;
       document.getElementById("admin-config-section").hidden = false;
-      wireEngineTest();
       await loadConfigs();
     } catch {}
   }
 
-  function wireEngineTest() {
-    const btn = document.getElementById("engine-test-btn");
-    const out = document.getElementById("engine-test-out");
-    if (!btn || btn.dataset.wired) return;
-    btn.dataset.wired = "1";
-    btn.addEventListener("click", async () => {
-      btn.disabled = true; btn.textContent = "Testing…";
-      out.hidden = false; out.textContent = "Calling engine…";
-      try {
-        const r = await fetch("/api/acp/insights/test", {
-          method: "POST", credentials: "same-origin",
-        });
-        const data = await r.json();
-        out.textContent = JSON.stringify(data, null, 2);
-        out.classList.toggle("ok", !!data.ok);
-        out.classList.toggle("err", !data.ok);
-      } catch (err) {
-        out.textContent = "Request failed: " + (err?.message || err);
-        out.classList.add("err");
-      } finally {
-        btn.disabled = false; btn.textContent = "⚡ Test engine connection";
-      }
-    });
-  }
 
   async function loadConfigs() {
     try {

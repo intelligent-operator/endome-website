@@ -5993,6 +5993,12 @@ async function handleAcp(request, env, url) {
   if (path === "/insights/test" && request.method === "POST") {
     return await testInsightEngine(env);
   }
+  if (path === "/insights/profiles" && request.method === "GET") {
+    return await listBedrockInferenceProfiles(env);
+  }
+  if (path === "/insights/runs" && request.method === "GET") {
+    return await listRecentInsightRuns(env);
+  }
 
   if (path === "/users" && request.method === "GET") {
     return await acpListUsers(env, url);
@@ -7440,6 +7446,71 @@ async function testInsightEngine(env) {
       BEDROCK_MODEL_ID: env.BEDROCK_MODEL_ID || null,
       ANTHROPIC_API_KEY: hasAnthropic ? "present" : null,
     },
+  });
+}
+
+// Admin diagnostic — calls the Bedrock control-plane ListInferenceProfiles
+// API and returns every profile id available to this account in the
+// configured region. This is the easiest way to find the EXACT model id
+// string to put in BEDROCK_MODEL_ID (the console column "Inference profile
+// ID" mirrors this list). Needs `bedrock:ListInferenceProfiles` IAM.
+async function listBedrockInferenceProfiles(env) {
+  if (!env.AWS_ACCESS_KEY_ID || !env.AWS_SECRET_ACCESS_KEY || !env.AWS_BEDROCK_REGION) {
+    return json({ ok: false, error: "Bedrock credentials not set." });
+  }
+  const region = env.AWS_BEDROCK_REGION;
+  // ListInferenceProfiles lives on the bedrock CONTROL plane host, not
+  // bedrock-runtime. Path is /inference-profiles, method GET, empty body.
+  const host = `bedrock.${region}.amazonaws.com`;
+  const path = "/inference-profiles";
+  try {
+    const headers = await sigv4Sign({
+      method: "GET", host, path,
+      service: "bedrock", region,
+      accessKey: env.AWS_ACCESS_KEY_ID,
+      secretKey: env.AWS_SECRET_ACCESS_KEY,
+      sessionToken: env.AWS_SESSION_TOKEN || null,
+      payload: "", contentType: "application/json",
+    });
+    const res = await fetch(`https://${host}${path}`, { method: "GET", headers });
+    const body = await res.text();
+    if (!res.ok) {
+      return json({ ok: false, status: res.status, error: body.slice(0, 600) });
+    }
+    const data = JSON.parse(body);
+    const profiles = (data.inferenceProfileSummaries || []).map((p) => ({
+      id: p.inferenceProfileId,
+      name: p.inferenceProfileName,
+      arn: p.inferenceProfileArn,
+      status: p.status,
+      type: p.type,
+      models: (p.models || []).map((m) => m.modelArn),
+    }));
+    return json({ ok: true, region, count: profiles.length, profiles });
+  } catch (err) {
+    return json({ ok: false, error: String(err?.message || err) });
+  }
+}
+
+// Admin diagnostic — last N insight runs across all users so admins can
+// see real-time engine health from /acp.
+async function listRecentInsightRuns(env) {
+  await ensureInsightSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT r.id, r.user_id, r.slug, r.status, r.error, r.input_tokens, r.output_tokens, " +
+    "       r.generated_at, u.username, u.display_name " +
+    "FROM insight_runs r LEFT JOIN users u ON u.id = r.user_id " +
+    "ORDER BY r.generated_at DESC LIMIT 50"
+  ).all().catch(() => ({ results: [] }));
+  return json({
+    ok: true,
+    runs: (r.results || []).map((x) => ({
+      id: x.id, userId: x.user_id, username: x.username || null,
+      displayName: x.display_name || null, slug: x.slug,
+      status: x.status, error: x.error || null,
+      inputTokens: x.input_tokens || null, outputTokens: x.output_tokens || null,
+      generatedAt: x.generated_at,
+    })),
   });
 }
 

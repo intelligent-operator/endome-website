@@ -91,14 +91,7 @@
           <h2>🛠 Insight configuration <span class="badge">admin</span></h2>
           <span class="section-hint">Edit the prompts, data scope and refresh cadence for every insight. Changes apply on the next run.</span>
         </div>
-        <div class="ai-status admin-only" id="ai-status"></div>
-
-        <!-- Temporary engine connection tester. Remove once the integration is stable. -->
-        <div class="engine-test admin-only">
-          <button type="button" class="btn-soft small" id="engine-test-btn">⚡ Test engine connection</button>
-          <pre class="engine-test-out" id="engine-test-out" hidden></pre>
-        </div>
-
+        <p class="section-hint" style="margin:0 0 14px">Engine status, connection tests and recent runs live on the <a href="/acp" style="color:#ff4e8a;font-weight:700">Admin Control Panel → Insights</a>.</p>
         <ul class="insight-config-list" id="insight-config-list"></ul>
       </section>
     </main>
@@ -173,6 +166,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/my-insights.js?v=1779968156" defer></script>
+  <script src="/my-insights.js?v=1779969382" defer></script>
 </body>
 </html>
