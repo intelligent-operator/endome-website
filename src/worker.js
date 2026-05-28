@@ -7495,8 +7495,16 @@ async function sigv4Sign({ method, host, path, service, region, accessKey, secre
     `x-amz-date:${amzDate}\n`;
   const signedHeaders = "content-type;host" + (sessionToken ? ";x-amz-security-token" : "") + ";x-amz-content-sha256;x-amz-date";
 
+  // Canonical URI for non-S3 SigV4 must be the request path with every
+  // segment URI-encoded TWICE. Our `path` is already encoded once (e.g.
+  // colons in the model id are now "%3A"), so we re-encode percent signs
+  // to "%25" to get the double encoding AWS expects. Without this, the
+  // model id "anthropic.claude-3-5-sonnet-20241022-v2:0" produces a
+  // 403 "signature does not match" because we sign "%3A" and AWS
+  // re-canonicalises to "%253A".
+  const canonicalUri = path.replace(/%/g, "%25");
   const canonicalRequest = [
-    method, path, "", canonicalHeaders, signedHeaders, payloadHash,
+    method, canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash,
   ].join("\n");
 
   const algorithm = "AWS4-HMAC-SHA256";

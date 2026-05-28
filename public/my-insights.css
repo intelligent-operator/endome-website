@@ -1,9 +1,9 @@
 /* =====================================================================
-   /my-insights — AI-generated insight cards + admin prompt editor
+   /my-insights — insight cards + admin prompt editor
    ===================================================================== */
 
-/* AI status pill in the hero corner */
-.ai-status{display:flex;justify-content:flex-end;align-items:flex-start}
+/* Engine status pill — admin-only, shown inside the admin config section. */
+.ai-status{display:flex;justify-content:flex-start;align-items:center;margin:0 0 14px}
 .ai-status-pill{
   display:inline-flex;align-items:center;gap:6px;
   background:#fff;border:1px solid #ffe2eb;

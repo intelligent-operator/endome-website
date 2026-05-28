@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1779934116" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/my-insights.css?v=1779966180" />
+  <link rel="stylesheet" href="/my-insights.css?v=1779966419" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -77,7 +77,6 @@
           <h1>What your data is telling you.</h1>
           <p class="hero-lead">Everything you've logged — symptoms, daily check-ins, medications, test results, appointments — feeds the EndoMe insight engine. It spots the patterns you might miss, sums up your month, and suggests the next move.</p>
         </div>
-        <div class="ai-status" id="ai-status"></div>
       </header>
 
       <section class="community-section">
@@ -92,6 +91,7 @@
           <h2>🛠 Insight configuration <span class="badge">admin</span></h2>
           <span class="section-hint">Edit the prompts, data scope and refresh cadence for every insight. Changes apply on the next run.</span>
         </div>
+        <div class="ai-status admin-only" id="ai-status"></div>
         <ul class="insight-config-list" id="insight-config-list"></ul>
       </section>
     </main>
@@ -166,6 +166,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/my-insights.js?v=1779966180" defer></script>
+  <script src="/my-insights.js?v=1779966419" defer></script>
 </body>
 </html>
