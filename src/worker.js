@@ -5986,6 +5986,14 @@ async function handleAcp(request, env, url) {
     return await updateInsightConfig(request, env, insightMatch[1]);
   }
 
+  // Temporary diagnostic — fires a 1-line prompt at the engine and returns
+  // the raw response so admins can sanity-check the Bedrock connection
+  // without having to interpret a real insight's "error" string. Safe to
+  // remove once the integration is stable.
+  if (path === "/insights/test" && request.method === "POST") {
+    return await testInsightEngine(env);
+  }
+
   if (path === "/users" && request.method === "GET") {
     return await acpListUsers(env, url);
   }
@@ -7398,6 +7406,41 @@ async function invokeClaude(env, prompt, model) {
            "Set AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_BEDROCK_REGION " +
            "(or ANTHROPIC_API_KEY) via `wrangler secret put`.",
   };
+}
+
+// Admin diagnostic — call the engine with a tiny prompt and surface the
+// whole result (text, tokens, model id, backend) plus the env credentials
+// it found, so we can tell at a glance what's connected and what's not.
+async function testInsightEngine(env) {
+  const hasBedrock = !!(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_BEDROCK_REGION);
+  const hasAnthropic = !!env.ANTHROPIC_API_KEY;
+  const backend = hasBedrock ? "bedrock" : hasAnthropic ? "anthropic" : null;
+  const modelAttempted = hasBedrock
+    ? (env.BEDROCK_MODEL_ID || DEFAULT_BEDROCK_MODEL)
+    : (env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL);
+
+  const started = Date.now();
+  const res = await invokeClaude(env, "Reply with exactly: pong");
+  const elapsedMs = Date.now() - started;
+
+  return json({
+    ok: !!res.ok,
+    backend,
+    modelAttempted,
+    region: env.AWS_BEDROCK_REGION || null,
+    elapsedMs,
+    text: res.text || null,
+    error: res.error || null,
+    inputTokens: res.inputTokens || null,
+    outputTokens: res.outputTokens || null,
+    creds: {
+      AWS_ACCESS_KEY_ID: hasBedrock ? `${(env.AWS_ACCESS_KEY_ID || "").slice(0,4)}…${(env.AWS_ACCESS_KEY_ID || "").slice(-4)}` : null,
+      AWS_BEDROCK_REGION: env.AWS_BEDROCK_REGION || null,
+      AWS_SECRET_ACCESS_KEY: hasBedrock ? "present" : null,
+      BEDROCK_MODEL_ID: env.BEDROCK_MODEL_ID || null,
+      ANTHROPIC_API_KEY: hasAnthropic ? "present" : null,
+    },
+  });
 }
 
 async function invokeAnthropicDirect(env, prompt, model) {

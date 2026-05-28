@@ -4,6 +4,16 @@
 
 /* Engine status pill — admin-only, shown inside the admin config section. */
 .ai-status{display:flex;justify-content:flex-start;align-items:center;margin:0 0 14px}
+
+/* Temporary engine connection tester (admin). */
+.engine-test{display:flex;flex-direction:column;gap:10px;margin:0 0 18px}
+.engine-test-out{
+  background:#1b1224;color:#f5e8ee;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;line-height:1.5;padding:14px 16px;border-radius:14px;
+  white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;border:1px solid #2a1a36;
+}
+.engine-test-out.ok{border-color:#3a7a2e}
+.engine-test-out.err{border-color:#a04444;background:#2a1418}
 .ai-status-pill{
   display:inline-flex;align-items:center;gap:6px;
   background:#fff;border:1px solid #ffe2eb;
