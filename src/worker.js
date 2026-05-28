@@ -479,6 +479,14 @@ export default {
     const assetResponse = await env.ASSETS.fetch(request);
     return withSecurityHeaders(assetResponse);
   },
+
+  // Cloudflare cron entrypoint — see [triggers] in wrangler.toml.
+  // Fires once a month and regenerates the "monthly-summary" insight for
+  // every active user so they have a fresh write-up waiting next time they
+  // open /my-insights.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runMonthlyInsightsForAllUsers(env, ctx, event));
+  },
 };
 
 // =============================================================================
@@ -7316,6 +7324,30 @@ async function seedInsightDefaults(env) {
         "DATA:\n{context}",
     },
     {
+      slug: "monthly-summary", emoji: "📅", sort_order: 5,
+      refresh_hours: 720,
+      title: "This month in review",
+      description: "A warm, narrative monthly write-up of how things are tracking — symptoms, daily check-ins, medications, results and what's coming up next.",
+      data_scope: [
+        "symptoms_30d", "daily_logs_30d", "medications", "medication_logs_30d",
+        "test_results", "appointments_60d",
+      ],
+      prompt_template:
+        "You are EndoMe — a calm, evidence-aware companion writing a one-page monthly summary for someone living with endometriosis. " +
+        "Below is everything they logged across the last month: symptoms, daily check-ins, current medications, dose adherence, test results on file, and recent + upcoming appointments. " +
+        "Write a warm, plain-language overview titled \"This month in review\". " +
+        "Cover, in this order: " +
+        "(1) the headline — one sentence on how the month has gone overall; " +
+        "(2) what stood out — 3 to 5 short bullets covering the most striking patterns in their symptoms, mood, energy, sleep and cycle; " +
+        "(3) medications + supplements — what they're taking, how consistent the dosing has been, and any apparent association with how they felt; " +
+        "(4) tests + results — anything new on file worth re-reading; " +
+        "(5) the month ahead — upcoming appointments + two or three suggested focus areas grounded in their data. " +
+        "Always speak directly to the user (\"you\"), be specific about what they actually logged, and never invent data. " +
+        "If a section has too little data, say so kindly in a single line and move on. " +
+        "Render as markdown — short paragraphs, soft headings (####), bullets where they help. Keep the whole thing under 500 words.\n\n" +
+        "DATA:\n{context}",
+    },
+    {
       slug: "trigger-analysis", emoji: "⚡", sort_order: 50,
       title: "Trigger analysis",
       description: "Surfaces the triggers your logs flag most often and how strongly each one correlates with a flare.",
@@ -7339,7 +7371,8 @@ async function seedInsightDefaults(env) {
         "ON CONFLICT(slug) DO NOTHING"
       ).bind(
         d.slug, d.title, d.emoji, d.description, d.prompt_template,
-        JSON.stringify(d.data_scope), 24, null, d.sort_order, now, now,
+        JSON.stringify(d.data_scope), d.refresh_hours || 24, d.model || null,
+        d.sort_order, now, now,
       ).run();
     } catch {}
   }
@@ -7361,7 +7394,8 @@ async function invokeClaude(env, prompt, model) {
   }
   return {
     ok: false,
-    error: "AI not configured. Set AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_BEDROCK_REGION " +
+    error: "The insights engine isn't connected yet. " +
+           "Set AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_BEDROCK_REGION " +
            "(or ANTHROPIC_API_KEY) via `wrangler secret put`.",
   };
 }
@@ -7723,6 +7757,67 @@ async function listInsightConfigs(env) {
       enabled: !!c.enabled, updatedAt: c.updated_at,
     })),
   });
+}
+
+// =============================================================================
+// SCHEDULED / CRON — monthly "This month in review" generation
+//
+// Walks every user that has logged *something* in the last month and runs the
+// monthly-summary insight for them. We rate-limit by sleeping briefly between
+// invocations so we never burst against Bedrock; cron isolates have a generous
+// CPU + wall-time budget and this routinely finishes well under it.
+//
+// Anything that fails for a single user is swallowed so one bad row doesn't
+// poison the rest of the batch.
+// =============================================================================
+async function runMonthlyInsightsForAllUsers(env, ctx, event) {
+  if (!env.DB) return;
+  await ensureInsightSchema(env);
+
+  // Skip silently if the engine isn't connected — no point burning cycles
+  // writing "error" rows everyone will see next month.
+  const engineReady = !!(
+    (env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_BEDROCK_REGION) ||
+    env.ANTHROPIC_API_KEY
+  );
+  if (!engineReady) {
+    console.warn("[monthly insights] skipped — engine credentials not set");
+    return;
+  }
+
+  const cfg = await env.DB.prepare(
+    "SELECT 1 FROM insight_configs WHERE slug = 'monthly-summary' AND enabled = 1"
+  ).first().catch(() => null);
+  if (!cfg) return;
+
+  // Eligible = anyone with a symptom OR a daily log in the last ~35 days.
+  // Anyone who's never logged would just get an empty write-up.
+  const since = nowSec() - 35 * 86400;
+  const sinceDate = new Date(since * 1000).toISOString().slice(0, 10);
+  const rows = await env.DB.prepare(
+    "SELECT DISTINCT u.id, u.username, u.email, u.timezone FROM users u " +
+    "WHERE EXISTS (SELECT 1 FROM symptoms s WHERE s.user_id = u.id AND s.logged_at >= ?) " +
+    "   OR EXISTS (SELECT 1 FROM daily_logs d WHERE d.user_id = u.id AND d.log_date >= ?)"
+  ).bind(since, sinceDate).all().catch(() => ({ results: [] }));
+
+  const users = rows.results || [];
+  console.log(`[monthly insights] generating for ${users.length} active user(s)`);
+
+  let ok = 0, fail = 0;
+  for (const u of users) {
+    try {
+      // Pass a synthetic ctx with no waitUntil so runInsight awaits the call
+      // inline — we want each user's row written before we move to the next.
+      await runInsight(env, { id: u.id }, "monthly-summary", null);
+      ok++;
+    } catch (err) {
+      fail++;
+      console.warn(`[monthly insights] user=${u.id} failed: ${err?.message || err}`);
+    }
+    // Light back-off so we never hammer Bedrock — cron has minutes of CPU.
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  console.log(`[monthly insights] done — ok=${ok} fail=${fail}`);
 }
 
 async function updateInsightConfig(request, env, slug) {

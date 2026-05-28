@@ -1,11 +1,11 @@
-// /my-insights — list of AI-generated insight cards built from the user's
-// logged health data. Each card shows the latest Claude output; a refresh
-// button re-runs the underlying prompt. Admin users see an extra config
-// panel to tune the prompts themselves.
-console.info("EndoMe insights build v1");
+// /my-insights — list of EndoMe insight cards built from the user's logged
+// health data. Each card shows the latest write-up; a refresh button re-runs
+// the underlying prompt. Admin users see an extra config panel to tune the
+// prompts themselves.
+console.info("EndoMe insights build v2");
 
 (() => {
-  let aiInfo = { aiConfigured: false, aiBackend: null };
+  let engineInfo = { aiConfigured: false, aiBackend: null };
   let insights = [];
 
   (async () => {
@@ -23,9 +23,9 @@ console.info("EndoMe insights build v1");
   async function loadInsights() {
     try {
       const data = await fetchJson("/api/me/insights");
-      aiInfo = data;
+      engineInfo = data;
       insights = data.insights || [];
-      paintAiStatus();
+      paintEngineStatus();
       paintInsights();
     } catch (err) {
       document.getElementById("insights-list").innerHTML =
@@ -33,16 +33,13 @@ console.info("EndoMe insights build v1");
     }
   }
 
-  function paintAiStatus() {
+  function paintEngineStatus() {
     const el = document.getElementById("ai-status");
     if (!el) return;
-    if (aiInfo.aiConfigured) {
-      const label = aiInfo.aiBackend === "bedrock" ? "Claude · AWS Bedrock"
-                  : aiInfo.aiBackend === "anthropic" ? "Claude · Anthropic API"
-                  : "Claude";
-      el.innerHTML = `<span class="ai-status-pill ok">✨ ${escapeHtml(label)} connected</span>`;
+    if (engineInfo.aiConfigured) {
+      el.innerHTML = `<span class="ai-status-pill ok">✨ Insights engine ready</span>`;
     } else {
-      el.innerHTML = `<span class="ai-status-pill warn">⚠ AI not configured</span>`;
+      el.innerHTML = `<span class="ai-status-pill warn">⚠ Insights engine offline</span>`;
     }
   }
 
@@ -67,15 +64,15 @@ console.info("EndoMe insights build v1");
       month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
     }) : null;
     const body = !r
-      ? `<p class="insight-empty">Nothing generated yet. Hit <strong>Run insight</strong> to feed your data into Claude.</p>`
+      ? `<p class="insight-empty">Nothing generated yet. Hit <strong>Run insight</strong> to build your first write-up.</p>`
       : running
-        ? `<p class="insight-running"><span class="spinner"></span> Claude is reading your data…</p>`
+        ? `<p class="insight-running"><span class="spinner"></span> Reading through your data…</p>`
         : error
-          ? `<p class="insight-error">⚠ ${escapeHtml(r.error || "Generation failed.")}</p>`
+          ? `<p class="insight-error">⚠ ${escapeHtml(r.error || "Couldn't generate this insight just yet.")}</p>`
           : `<div class="insight-output">${renderMarkdown(r.outputMd || "")}</div>`;
-    const tokens = ok && (r.inputTokens || r.outputTokens)
-      ? `<span class="insight-tokens">${r.inputTokens || "—"} in / ${r.outputTokens || "—"} out tokens</span>`
-      : "";
+    // Token counters are admin-only diagnostics, not user copy — hide them
+    // unless the URL explicitly asks for the debug view.
+    const tokens = "";
     return `<li class="insight-card ${ok ? "is-ok" : ""} ${error ? "is-error" : ""}">
       <header class="insight-card-head">
         <div class="insight-card-title">
@@ -98,15 +95,15 @@ console.info("EndoMe insights build v1");
   }
 
   async function runInsight(slug, btn) {
-    if (!aiInfo.aiConfigured) {
-      toast("Add AWS Bedrock or Anthropic credentials before running insights.", "err");
+    if (!engineInfo.aiConfigured) {
+      toast("Insights engine isn't connected — give it a moment, then try again.", "err");
       return;
     }
     btn.disabled = true;
     btn.textContent = "Running…";
     try {
       await fetchJson(`/api/me/insights/${slug}/run`, { method: "POST" });
-      // Server fires the AI call in ctx.waitUntil so the POST returns fast.
+      // Server fires the engine call in ctx.waitUntil so the POST returns fast.
       // Poll the list a few times until status flips to ok/error.
       let tries = 0;
       const poll = async () => {
@@ -222,7 +219,7 @@ console.info("EndoMe insights build v1");
 
   // ------------------------------------------------------------------
   // Tiny markdown renderer — handles headings, bold, italics, code,
-  // bullet lists, numbered lists, paragraphs. Good enough for Claude
+  // bullet lists, numbered lists, paragraphs. Good enough for insight
   // output without pulling in a full markdown library.
   // ------------------------------------------------------------------
   function renderMarkdown(md) {

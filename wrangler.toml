@@ -51,6 +51,13 @@ STRIPE_DNA_PRICE_ID = "price_replace_me"
 [observability]
 enabled = true
 
+# Cron triggers — fire `scheduled()` in src/worker.js on this schedule.
+# "0 7 1 * *" = 07:00 UTC on the 1st of every month. That's a soft, off-peak
+# window for the EndoMe insight engine to refresh every user's monthly summary
+# (~5pm AEST / 6pm AEDT — done well before anyone opens the app for the day).
+[triggers]
+crons = ["0 7 1 * *"]
+
 # ----------------------------------------------------------------------
 # D1 — relational storage for users, daily logs, symptoms, pets, notifs.
 # One-time setup:

@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1779934116" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/my-insights.css?v=1779934116" />
+  <link rel="stylesheet" href="/my-insights.css?v=1779966180" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -73,9 +73,9 @@
     <main class="dash-main community-main">
       <header class="community-hero soft">
         <div>
-          <p class="hero-eyebrow">Your AI insights</p>
+          <p class="hero-eyebrow">EndoMe insights</p>
           <h1>What your data is telling you.</h1>
-          <p class="hero-lead">Everything you've logged — symptoms, daily check-ins, medications, test results, appointments — flows into a set of Claude-powered prompts that spot the patterns you might miss and suggest the next move.</p>
+          <p class="hero-lead">Everything you've logged — symptoms, daily check-ins, medications, test results, appointments — feeds the EndoMe insight engine. It spots the patterns you might miss, sums up your month, and suggests the next move.</p>
         </div>
         <div class="ai-status" id="ai-status"></div>
       </header>
@@ -89,8 +89,8 @@
       <!-- Admin-only insight config panel — hidden until /api/acp/me confirms admin. -->
       <section class="community-section admin-only" id="admin-config-section" hidden>
         <div class="section-head">
-          <h2>🛠 Prompt configuration <span class="badge">admin</span></h2>
-          <span class="section-hint">Edit the prompts, data scope and refresh cadence for every insight. Changes apply on next run.</span>
+          <h2>🛠 Insight configuration <span class="badge">admin</span></h2>
+          <span class="section-hint">Edit the prompts, data scope and refresh cadence for every insight. Changes apply on the next run.</span>
         </div>
         <ul class="insight-config-list" id="insight-config-list"></ul>
       </section>
@@ -105,7 +105,7 @@
       <header class="modal-h">
         <span class="modal-emoji">🛠</span>
         <h3 id="cfg-title">Edit insight</h3>
-        <p>Tune the Claude prompt, change which data slices it sees, and decide how often it refreshes.</p>
+        <p>Tune the prompt, change which data slices it sees, and decide how often it refreshes.</p>
       </header>
       <form id="cfg-form" novalidate>
         <input type="hidden" name="slug" />
@@ -166,6 +166,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/my-insights.js?v=1779934116" defer></script>
+  <script src="/my-insights.js?v=1779966180" defer></script>
 </body>
 </html>
