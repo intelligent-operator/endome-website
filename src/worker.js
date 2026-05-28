@@ -397,6 +397,14 @@ export default {
           if (trMatch && request.method === "GET") {
             return jsonHeaders(await getTestResult(env, user, +trMatch[1]));
           }
+          // --- AI insights (Claude on Bedrock) -------------------------------
+          if (url.pathname === "/api/me/insights" && request.method === "GET") {
+            return jsonHeaders(await listInsights(env, user));
+          }
+          const insightRunMatch = url.pathname.match(/^\/api\/me\/insights\/([a-z0-9-]+)\/run$/);
+          if (insightRunMatch && request.method === "POST") {
+            return jsonHeaders(await runInsight(env, user, insightRunMatch[1], ctx));
+          }
           const dismissMatch = url.pathname.match(/^\/api\/me\/notifications\/(\d+)\/dismiss$/);
           if (dismissMatch && request.method === "POST") {
             return jsonHeaders(await dismissNotification(env, user, +dismissMatch[1]));
@@ -439,6 +447,7 @@ export default {
       url.pathname === "/recipes"     || url.pathname.startsWith("/recipes/") ||
       url.pathname === "/appointments" || url.pathname.startsWith("/appointments/") ||
       url.pathname === "/results"     || url.pathname.startsWith("/results/") ||
+      url.pathname === "/my-insights" || url.pathname.startsWith("/my-insights/") ||
       url.pathname === "/explore"     || url.pathname.startsWith("/explore/")
     ) {
       const session = await readSession(request, env);
@@ -1362,6 +1371,7 @@ async function bootstrapSchema(env) {
       ensureReadSchema(env),
       ensureEmailLogSchema(env),
       ensureTestResultsSchema(env),
+      ensureInsightSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -5959,6 +5969,15 @@ async function handleAcp(request, env, url) {
     return await adminBootstrapSchema(env);
   }
 
+  // --- Insight configs (Claude prompt management) ------------------------
+  if (path === "/insights" && request.method === "GET") {
+    return await listInsightConfigs(env);
+  }
+  const insightMatch = path.match(/^\/insights\/([a-z0-9-]+)$/);
+  if (insightMatch && request.method === "PUT") {
+    return await updateInsightConfig(request, env, insightMatch[1]);
+  }
+
   if (path === "/users" && request.method === "GET") {
     return await acpListUsers(env, url);
   }
@@ -7186,4 +7205,544 @@ async function getTestResult(env, user, id) {
       assessedAt: row.assessed_at, createdAt: row.created_at, data,
     },
   });
+}
+
+// =============================================================================
+// AI INSIGHTS — aggregates the user's logged health data (symptoms, daily
+// check-ins, medications, test results, appointments) and runs a per-insight
+// Claude prompt against it via Anthropic on AWS Bedrock. Each insight has a
+// configurable prompt template stored in `insight_configs` so the prompts
+// can be tuned in the admin panel without redeploying.
+// =============================================================================
+
+let _insightSchemaChecked = false;
+async function ensureInsightSchema(env) {
+  if (_insightSchemaChecked) return;
+  _insightSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS insight_configs (" +
+    "  slug TEXT PRIMARY KEY," +
+    "  title TEXT NOT NULL," +
+    "  emoji TEXT," +
+    "  description TEXT," +
+    "  prompt_template TEXT NOT NULL," +
+    "  data_scope_json TEXT NOT NULL," +
+    "  refresh_hours INTEGER NOT NULL DEFAULT 24," +
+    "  model TEXT," +
+    "  sort_order INTEGER NOT NULL DEFAULT 100," +
+    "  enabled INTEGER NOT NULL DEFAULT 1," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE TABLE IF NOT EXISTS insight_runs (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  slug TEXT NOT NULL," +
+    "  output_md TEXT," +
+    "  status TEXT NOT NULL," +              // ok | error | empty | running
+    "  error TEXT," +
+    "  input_tokens INTEGER," +
+    "  output_tokens INTEGER," +
+    "  generated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_insight_runs_user ON insight_runs(user_id, slug, generated_at DESC)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+  await seedInsightDefaults(env);
+}
+
+// One-time seeding of the starter insight pack. Re-running is safe — we only
+// insert configs that aren't already present so admin edits aren't clobbered.
+async function seedInsightDefaults(env) {
+  const now = nowSec();
+  const defaults = [
+    {
+      slug: "pattern-spotter", emoji: "🔍", sort_order: 10,
+      title: "Pattern spotter",
+      description: "Looks across the last 30 days of symptoms and highlights the patterns you might have missed.",
+      data_scope: ["symptoms_30d", "daily_logs_30d"],
+      prompt_template:
+        "You are a careful, evidence-aware women's health analyst speaking with someone living with endometriosis. " +
+        "Below is the user's logged symptom and daily check-in data for the past 30 days. " +
+        "Identify the 3–5 strongest patterns you can see — symptom co-occurrences, times of day, days of cycle, severity clusters. " +
+        "For each pattern, give a one-line evidence statement (what the data shows) and a one-line plain-English interpretation. " +
+        "Be specific about what they logged. Never invent data they didn't enter. " +
+        "End with one short paragraph about which pattern would be most useful to track more closely next month. " +
+        "Render as markdown — short paragraphs, no big headings, bullet points where they help.\n\n" +
+        "DATA:\n{context}",
+    },
+    {
+      slug: "cycle-correlation", emoji: "🌀", sort_order: 20,
+      title: "Cycle ↔ symptoms",
+      description: "Maps symptom flares against your cycle phase so you can prepare for the days that get hardest.",
+      data_scope: ["symptoms_30d", "daily_logs_30d"],
+      prompt_template:
+        "You are an analyst helping someone with endometriosis spot cycle patterns. " +
+        "Below is their cycle + symptom log for the past 30 days. " +
+        "For each cycle phase the data covers (menstrual, follicular, ovulation, luteal), summarise: " +
+        "(1) what symptoms cluster there, (2) typical severity, (3) one tactical preparation that the data + endo literature suggest may help. " +
+        "Be honest if you don't have enough data for a phase. " +
+        "Render as markdown.\n\n" +
+        "DATA:\n{context}",
+    },
+    {
+      slug: "whats-working", emoji: "💚", sort_order: 30,
+      title: "What's working",
+      description: "Looks at the meds, supplements and lifestyle moves you've logged and ranks what seems to be helping.",
+      data_scope: ["symptoms_30d", "medications", "medication_logs_30d", "daily_logs_30d"],
+      prompt_template:
+        "You are reviewing the user's medications, supplements and what-helped tags from the last 30 days. " +
+        "Rank the interventions by the strength of the apparent association with lower pain / better mood / better energy logs. " +
+        "Be careful: this is correlation, not causation — say so. " +
+        "Call out anything they're taking that doesn't appear to be helping. " +
+        "If something is being taken too rarely to judge, say that. " +
+        "End with one experiment they could run this month (e.g. 'try magnesium glycinate consistently for 21 days and re-check'). " +
+        "Render as markdown.\n\n" +
+        "DATA:\n{context}",
+    },
+    {
+      slug: "next-steps", emoji: "🎯", sort_order: 40,
+      title: "Your next 3 steps",
+      description: "Cuts through everything you've logged + the results we have on file and gives you the 3 highest-leverage moves this month.",
+      data_scope: ["symptoms_30d", "daily_logs_30d", "medications", "test_results", "appointments_60d"],
+      prompt_template:
+        "You are an evidence-aware care navigator for someone with endometriosis. " +
+        "Below is everything we have on them — symptoms, daily check-ins, current medications, recent test results, and upcoming appointments. " +
+        "Synthesise the 3 highest-leverage actions for the next 30 days. " +
+        "For each action, write a 2–3 sentence rationale grounded in the user's own data + endo literature. " +
+        "Keep the language warm but direct — this is what the data is telling them, not vague wellness advice. " +
+        "If a step is best taken with their clinician, say so explicitly. " +
+        "Render as markdown.\n\n" +
+        "DATA:\n{context}",
+    },
+    {
+      slug: "trigger-analysis", emoji: "⚡", sort_order: 50,
+      title: "Trigger analysis",
+      description: "Surfaces the triggers your logs flag most often and how strongly each one correlates with a flare.",
+      data_scope: ["symptoms_30d"],
+      prompt_template:
+        "You are summarising the user's logged triggers from their symptom entries over the past 30 days. " +
+        "List the top triggers by frequency, and for each give: " +
+        "(1) how often it shows up, (2) the average severity of symptoms logged alongside it, " +
+        "(3) a one-line plain-English interpretation (correlation, not causation). " +
+        "If the data is thin, say so honestly. " +
+        "Render as markdown.\n\n" +
+        "DATA:\n{context}",
+    },
+  ];
+  for (const d of defaults) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO insight_configs (slug, title, emoji, description, prompt_template, " +
+        "  data_scope_json, refresh_hours, model, sort_order, enabled, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?) " +
+        "ON CONFLICT(slug) DO NOTHING"
+      ).bind(
+        d.slug, d.title, d.emoji, d.description, d.prompt_template,
+        JSON.stringify(d.data_scope), 24, null, d.sort_order, now, now,
+      ).run();
+    } catch {}
+  }
+}
+
+// =============================================================================
+// AI INVOCATION — Anthropic on AWS Bedrock (preferred), with the Anthropic
+// direct API as a fallback. Returns { ok, text, usage }.
+// =============================================================================
+const DEFAULT_BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0";
+const DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022";
+
+async function invokeClaude(env, prompt, model) {
+  if (env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_BEDROCK_REGION) {
+    return invokeBedrock(env, prompt, model || env.BEDROCK_MODEL_ID || DEFAULT_BEDROCK_MODEL);
+  }
+  if (env.ANTHROPIC_API_KEY) {
+    return invokeAnthropicDirect(env, prompt, model || env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL);
+  }
+  return {
+    ok: false,
+    error: "AI not configured. Set AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY + AWS_BEDROCK_REGION " +
+           "(or ANTHROPIC_API_KEY) via `wrangler secret put`.",
+  };
+}
+
+async function invokeAnthropicDirect(env, prompt, model) {
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      return { ok: false, error: `Anthropic ${res.status}: ${t.slice(0, 400)}` };
+    }
+    const data = await res.json();
+    const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+    return {
+      ok: true,
+      text,
+      inputTokens: data.usage?.input_tokens || null,
+      outputTokens: data.usage?.output_tokens || null,
+    };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+// AWS Bedrock InvokeModel endpoint, signed with SigV4. The Bedrock body for
+// an Anthropic model is the standard messages-shaped JSON with an extra
+// "anthropic_version" field instead of the HTTP header.
+async function invokeBedrock(env, prompt, model) {
+  const region = env.AWS_BEDROCK_REGION;
+  const host = `bedrock-runtime.${region}.amazonaws.com`;
+  const path = `/model/${encodeURIComponent(model)}/invoke`;
+  const body = JSON.stringify({
+    anthropic_version: "bedrock-2023-05-31",
+    max_tokens: 1500,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  try {
+    const headers = await sigv4Sign({
+      method: "POST",
+      host,
+      path,
+      service: "bedrock",
+      region,
+      accessKey: env.AWS_ACCESS_KEY_ID,
+      secretKey: env.AWS_SECRET_ACCESS_KEY,
+      sessionToken: env.AWS_SESSION_TOKEN || null,
+      payload: body,
+      contentType: "application/json",
+    });
+
+    const res = await fetch(`https://${host}${path}`, {
+      method: "POST", headers, body,
+    });
+    if (!res.ok) {
+      const t = await res.text();
+      return { ok: false, error: `Bedrock ${res.status}: ${t.slice(0, 400)}` };
+    }
+    const data = await res.json();
+    const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n");
+    return {
+      ok: true,
+      text,
+      inputTokens: data.usage?.input_tokens || null,
+      outputTokens: data.usage?.output_tokens || null,
+    };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+// Minimal AWS SigV4 implementation for the Bedrock InvokeModel call. Built
+// on top of the Workers Web Crypto API so we don't need the AWS SDK.
+async function sigv4Sign({ method, host, path, service, region, accessKey, secretKey, sessionToken, payload, contentType }) {
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const dateStamp = amzDate.slice(0, 8);
+
+  const payloadHash = await sha256Hex(payload);
+  const canonicalHeaders =
+    `content-type:${contentType}\n` +
+    `host:${host}\n` +
+    (sessionToken ? `x-amz-security-token:${sessionToken}\n` : "") +
+    `x-amz-content-sha256:${payloadHash}\n` +
+    `x-amz-date:${amzDate}\n`;
+  const signedHeaders = "content-type;host" + (sessionToken ? ";x-amz-security-token" : "") + ";x-amz-content-sha256;x-amz-date";
+
+  const canonicalRequest = [
+    method, path, "", canonicalHeaders, signedHeaders, payloadHash,
+  ].join("\n");
+
+  const algorithm = "AWS4-HMAC-SHA256";
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    algorithm, amzDate, credentialScope, await sha256Hex(canonicalRequest),
+  ].join("\n");
+
+  const kDate    = await hmacRaw("AWS4" + secretKey, dateStamp);
+  const kRegion  = await hmacRaw(kDate, region);
+  const kService = await hmacRaw(kRegion, service);
+  const kSigning = await hmacRaw(kService, "aws4_request");
+  const signature = bufToHex(await hmacRaw(kSigning, stringToSign));
+
+  const authorization = `${algorithm} Credential=${accessKey}/${credentialScope}, ` +
+    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers = {
+    "content-type": contentType,
+    "host": host,
+    "x-amz-content-sha256": payloadHash,
+    "x-amz-date": amzDate,
+    "authorization": authorization,
+  };
+  if (sessionToken) headers["x-amz-security-token"] = sessionToken;
+  return headers;
+}
+
+async function sha256Hex(input) {
+  const enc = new TextEncoder().encode(typeof input === "string" ? input : "");
+  const hash = await crypto.subtle.digest("SHA-256", enc);
+  return bufToHex(hash);
+}
+async function hmacRaw(key, msg) {
+  const keyBuf = typeof key === "string" ? new TextEncoder().encode(key) : key;
+  const msgBuf = new TextEncoder().encode(msg);
+  const k = await crypto.subtle.importKey("raw", keyBuf, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return crypto.subtle.sign("HMAC", k, msgBuf);
+}
+function bufToHex(buf) {
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// =============================================================================
+// CONTEXT BUILDERS — turn the user's raw data into a tight text block we can
+// drop into the prompt. Each scope token formats one slice of their history.
+// =============================================================================
+async function buildInsightContext(env, user, scope) {
+  const parts = [];
+  for (const s of (Array.isArray(scope) ? scope : [])) {
+    let chunk = null;
+    try {
+      if (s === "symptoms_30d")        chunk = await ctxSymptoms(env, user, 30);
+      else if (s === "daily_logs_30d") chunk = await ctxDailyLogs(env, user, 30);
+      else if (s === "medications")    chunk = await ctxMedications(env, user);
+      else if (s === "medication_logs_30d") chunk = await ctxMedLogs(env, user, 30);
+      else if (s === "test_results")   chunk = await ctxTestResults(env, user);
+      else if (s === "appointments_60d") chunk = await ctxAppointments(env, user, 60);
+    } catch (err) {
+      chunk = `(${s}: read failed — ${err?.message || "unknown"})`;
+    }
+    if (chunk) parts.push(chunk);
+  }
+  return parts.join("\n\n") || "(no data logged yet)";
+}
+
+async function ctxSymptoms(env, user, days) {
+  const since = nowSec() - days * 86400;
+  const r = await env.DB.prepare(
+    "SELECT log_date, logged_at, symptom, severity, location, notes, triggers, relief, pain_type " +
+    "FROM symptoms WHERE user_id = ? AND logged_at >= ? ORDER BY logged_at DESC LIMIT 400"
+  ).bind(user.id, since).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return `### Symptoms (last ${days} days)\nNothing logged.`;
+  const lines = (r.results || []).map((s) =>
+    `- ${s.log_date}: ${s.symptom} sev=${s.severity}${s.location ? ` loc=${s.location}` : ""}` +
+    `${s.triggers ? ` triggers=${s.triggers}` : ""}${s.relief ? ` helped=${s.relief}` : ""}` +
+    `${s.pain_type ? ` painType=${s.pain_type}` : ""}${s.notes ? ` note="${String(s.notes).slice(0,120)}"` : ""}`
+  ).join("\n");
+  return `### Symptoms (last ${days} days, ${r.results.length} entries)\n${lines}`;
+}
+
+async function ctxDailyLogs(env, user, days) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const r = await env.DB.prepare(
+    "SELECT * FROM daily_logs WHERE user_id = ? AND log_date >= ? ORDER BY log_date DESC LIMIT 60"
+  ).bind(user.id, since).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return `### Daily check-ins (last ${days} days)\nNothing logged.`;
+  const lines = (r.results || []).map((d) => {
+    const bits = [
+      d.morning_logged_at ? `morning mood=${d.morning_mood}/energy=${d.morning_energy}/pain=${d.morning_pain}/sleep=${d.morning_sleep_hours || "?"}h${d.morning_symptoms ? "/sym=" + d.morning_symptoms : ""}` : null,
+      d.afternoon_logged_at ? `midday mood=${d.afternoon_mood}/energy=${d.afternoon_energy}/pain=${d.afternoon_pain}${d.afternoon_symptoms ? "/sym=" + d.afternoon_symptoms : ""}` : null,
+      d.evening_logged_at ? `evening overall=${d.evening_overall}/stress=${d.stress_level || "?"}/water=${d.water_glasses || 0}/move=${d.movement_level || "?"}/sym=${d.evening_symptoms || "-"}${d.evening_relief ? "/helped=" + d.evening_relief : ""}` : null,
+      d.cycle_day != null ? `cycleDay=${d.cycle_day}` : null,
+      d.cycle_phase ? `phase=${d.cycle_phase}` : null,
+      d.flow ? `flow=${d.flow}` : null,
+    ].filter(Boolean);
+    return `- ${d.log_date}: ${bits.join(" | ")}`;
+  }).join("\n");
+  return `### Daily check-ins (last ${days} days, ${r.results.length} days)\n${lines}`;
+}
+
+async function ctxMedications(env, user) {
+  const r = await env.DB.prepare(
+    "SELECT name, kind, dose, frequency, notes FROM medications WHERE user_id = ? AND is_active = 1"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return "### Current medications + supplements\nNone tracked.";
+  const lines = (r.results || []).map((m) =>
+    `- ${m.name} (${m.kind || "med"})${m.dose ? " " + m.dose : ""}${m.frequency ? " · " + m.frequency : ""}${m.notes ? ` · note="${String(m.notes).slice(0,100)}"` : ""}`
+  ).join("\n");
+  return `### Current medications + supplements (${r.results.length})\n${lines}`;
+}
+
+async function ctxMedLogs(env, user, days) {
+  const since = nowSec() - days * 86400;
+  const r = await env.DB.prepare(
+    "SELECT m.name, l.taken_at FROM medication_logs l JOIN medications m ON m.id = l.medication_id " +
+    "WHERE l.user_id = ? AND l.taken_at >= ? ORDER BY l.taken_at DESC LIMIT 200"
+  ).bind(user.id, since).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return `### Dose logs (last ${days} days)\nNothing logged.`;
+  // Aggregate count per medication so the prompt sees adherence at a glance.
+  const counts = new Map();
+  for (const x of r.results) counts.set(x.name, (counts.get(x.name) || 0) + 1);
+  const lines = [...counts.entries()].sort((a,b) => b[1] - a[1]).map(([n,c]) => `- ${n}: ${c} doses`).join("\n");
+  return `### Dose adherence (last ${days} days)\n${lines}`;
+}
+
+async function ctxTestResults(env, user) {
+  await ensureTestResultsSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT kind, title, summary, assessed_at FROM test_results WHERE user_id = ? ORDER BY assessed_at DESC LIMIT 10"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return "### Test results on file\nNone yet.";
+  const lines = (r.results || []).map((t) => {
+    const date = new Date(t.assessed_at * 1000).toISOString().slice(0, 10);
+    return `- ${date} ${t.kind.toUpperCase()} — ${t.title}: ${t.summary || ""}`;
+  }).join("\n");
+  return `### Test results on file\n${lines}`;
+}
+
+async function ctxAppointments(env, user, days) {
+  await ensureAppointmentSchema(env);
+  const since = nowSec() - 7 * 86400;
+  const until = nowSec() + days * 86400;
+  const r = await env.DB.prepare(
+    "SELECT title, kind, doctor, starts_at FROM appointments " +
+    "WHERE user_id = ? AND starts_at BETWEEN ? AND ? ORDER BY starts_at ASC LIMIT 30"
+  ).bind(user.id, since, until).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return `### Appointments (past week + next ${days} days)\nNone.`;
+  const lines = (r.results || []).map((a) => {
+    const date = new Date(a.starts_at * 1000).toISOString().slice(0, 10);
+    return `- ${date} ${a.kind || "general"} — ${a.title}${a.doctor ? " (" + a.doctor + ")" : ""}`;
+  }).join("\n");
+  return `### Appointments (past week + next ${days} days)\n${lines}`;
+}
+
+// =============================================================================
+// INSIGHT ENDPOINTS
+// =============================================================================
+async function listInsights(env, user) {
+  await ensureInsightSchema(env);
+  const cfgs = await env.DB.prepare(
+    "SELECT slug, title, emoji, description, refresh_hours, sort_order, updated_at " +
+    "FROM insight_configs WHERE enabled = 1 ORDER BY sort_order ASC, slug ASC"
+  ).all().catch(() => ({ results: [] }));
+  const slugs = (cfgs.results || []).map((c) => c.slug);
+  let runs = { results: [] };
+  if (slugs.length) {
+    const ph = slugs.map(() => "?").join(",");
+    try {
+      runs = await env.DB.prepare(
+        `SELECT r.* FROM insight_runs r
+         JOIN (
+           SELECT slug, MAX(generated_at) AS g FROM insight_runs
+           WHERE user_id = ? AND slug IN (${ph}) GROUP BY slug
+         ) latest ON r.slug = latest.slug AND r.generated_at = latest.g
+         WHERE r.user_id = ?`
+      ).bind(user.id, ...slugs, user.id).all();
+    } catch {}
+  }
+  const runMap = new Map();
+  for (const r of (runs.results || [])) runMap.set(r.slug, r);
+
+  const aiConfigured = !!(env.AWS_ACCESS_KEY_ID || env.ANTHROPIC_API_KEY);
+
+  return json({
+    aiConfigured,
+    aiBackend: env.AWS_ACCESS_KEY_ID && env.AWS_BEDROCK_REGION ? "bedrock"
+             : env.ANTHROPIC_API_KEY ? "anthropic" : null,
+    insights: (cfgs.results || []).map((c) => {
+      const run = runMap.get(c.slug);
+      return {
+        slug: c.slug, title: c.title, emoji: c.emoji || "✨",
+        description: c.description, refreshHours: c.refresh_hours,
+        latest: run ? {
+          status: run.status, outputMd: run.output_md || null,
+          error: run.error || null, generatedAt: run.generated_at,
+          inputTokens: run.input_tokens, outputTokens: run.output_tokens,
+        } : null,
+      };
+    }),
+  });
+}
+
+async function runInsight(env, user, slug, ctx) {
+  await ensureInsightSchema(env);
+  const cfg = await env.DB.prepare(
+    "SELECT * FROM insight_configs WHERE slug = ? AND enabled = 1"
+  ).bind(slug).first().catch(() => null);
+  if (!cfg) return json({ error: "Insight not found" }, 404);
+
+  const scope = (() => { try { return JSON.parse(cfg.data_scope_json); } catch { return []; } })();
+  const context = await buildInsightContext(env, user, scope);
+  const prompt = String(cfg.prompt_template || "").replace(/\{context\}/g, context);
+
+  // Insert a "running" row immediately so the UI can show progress; we replace
+  // it with the final row after the AI call completes.
+  const now = nowSec();
+  let runId = null;
+  try {
+    const r = await env.DB.prepare(
+      "INSERT INTO insight_runs (user_id, slug, output_md, status, generated_at) " +
+      "VALUES (?, ?, NULL, 'running', ?)"
+    ).bind(user.id, slug, now).run();
+    runId = r.meta?.last_row_id;
+  } catch {}
+
+  const job = (async () => {
+    const res = await invokeClaude(env, prompt, cfg.model);
+    try {
+      await env.DB.prepare(
+        "UPDATE insight_runs SET output_md = ?, status = ?, error = ?, input_tokens = ?, output_tokens = ?, generated_at = ? WHERE id = ?"
+      ).bind(
+        res.text || null,
+        res.ok ? "ok" : "error",
+        res.error || null,
+        res.inputTokens || null,
+        res.outputTokens || null,
+        nowSec(),
+        runId
+      ).run();
+    } catch {}
+  })();
+  if (ctx?.waitUntil) ctx.waitUntil(job); else await job;
+  return json({ ok: true, runId });
+}
+
+async function listInsightConfigs(env) {
+  await ensureInsightSchema(env);
+  const rows = await env.DB.prepare(
+    "SELECT * FROM insight_configs ORDER BY sort_order ASC, slug ASC"
+  ).all().catch(() => ({ results: [] }));
+  return json({
+    configs: (rows.results || []).map((c) => ({
+      slug: c.slug, title: c.title, emoji: c.emoji, description: c.description,
+      promptTemplate: c.prompt_template,
+      dataScope: (() => { try { return JSON.parse(c.data_scope_json); } catch { return []; } })(),
+      refreshHours: c.refresh_hours, model: c.model, sortOrder: c.sort_order,
+      enabled: !!c.enabled, updatedAt: c.updated_at,
+    })),
+  });
+}
+
+async function updateInsightConfig(request, env, slug) {
+  await ensureInsightSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const sets = []; const binds = [];
+  if ("title" in body)        { sets.push("title = ?");        binds.push(String(body.title).slice(0,140)); }
+  if ("emoji" in body)        { sets.push("emoji = ?");        binds.push(String(body.emoji || "").slice(0,8)); }
+  if ("description" in body)  { sets.push("description = ?");  binds.push(sanitizeText(body.description, 400)); }
+  if ("promptTemplate" in body){ sets.push("prompt_template = ?"); binds.push(String(body.promptTemplate).slice(0,8000)); }
+  if ("dataScope" in body)    { sets.push("data_scope_json = ?"); binds.push(JSON.stringify(body.dataScope || [])); }
+  if ("refreshHours" in body) { sets.push("refresh_hours = ?"); binds.push(Math.max(1, Math.min(720, +body.refreshHours || 24))); }
+  if ("model" in body)        { sets.push("model = ?");        binds.push(body.model ? String(body.model).slice(0,200) : null); }
+  if ("sortOrder" in body)    { sets.push("sort_order = ?");   binds.push(+body.sortOrder || 100); }
+  if ("enabled" in body)      { sets.push("enabled = ?");      binds.push(body.enabled ? 1 : 0); }
+  if (!sets.length) return json({ error: "Nothing to update" }, 400);
+  sets.push("updated_at = ?"); binds.push(nowSec(), slug);
+  await env.DB.prepare(
+    `UPDATE insight_configs SET ${sets.join(", ")} WHERE slug = ?`
+  ).bind(...binds).run();
+  return json({ ok: true });
 }

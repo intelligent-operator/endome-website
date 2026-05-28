@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <title>Insights – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=1779934116" />
+  <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
+  <link rel="stylesheet" href="/my-insights.css?v=1779934116" />
+  <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
+</head>
+<body class="dash-body">
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-content">
+      <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
+      <div class="page-loader-bar"></div>
+      <p class="page-loader-text">Loading your insights…</p>
+    </div>
+  </div>
+
+  <header class="dash-topbar">
+    <div class="dash-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <div class="dash-spacer"></div>
+      <div class="account-menu">
+        <button class="account-toggle" id="account-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+          <div class="avatar"><svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/><circle cx="20" cy="16" r="7" fill="#8a4a2a"/><path d="M6 36c2-8 8-12 14-12s12 4 14 12" fill="#f5c69b"/><circle cx="20" cy="16" r="6" fill="#f5c69b"/></svg></div>
+          <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
+          <svg class="account-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M6 9l6 6 6-6" stroke="#3a2330" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="account-dropdown" id="account-dropdown" hidden role="menu">
+          <a href="/profile" role="menuitem"><span class="acm-ico">👤</span> Profile</a>
+          <a href="/security" role="menuitem"><span class="acm-ico">🔒</span> Security &amp; password</a>
+          <a href="/documents" role="menuitem"><span class="acm-ico">📁</span> My documents</a>
+          <a href="/meds" role="menuitem"><span class="acm-ico">💊</span> My medications</a>
+          <div class="account-divider"></div>
+          <a href="/api/logout" role="menuitem"><span class="acm-ico">↪</span> Sign out</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-layout">
+    <aside class="dash-sidebar">
+      <nav class="side-nav">
+        <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
+        <a href="/story"><span class="ico">📖</span> Your Story</a>
+        <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/results"><span class="ico">📊</span> Results</a>
+        <a class="active" href="/my-insights"><span class="ico">✨</span> Insights</a>
+        <a href="/meds"><span class="ico">💊</span> Medications</a>
+        <a href="/appointments"><span class="ico">📅</span> Appointments</a>
+        <a href="/documents"><span class="ico">📁</span> Documents</a>
+        <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
+        <a href="/community"><span class="ico">💬</span> Community</a>
+        <a href="/recipes"><span class="ico">🍳</span> Recipes</a>
+        <a href="/explore"><span class="ico">🌌</span> Research</a>
+        <a href="/research"><span class="ico">🎗</span> Donations</a>
+      </nav>
+    </aside>
+
+    <main class="dash-main community-main">
+      <header class="community-hero soft">
+        <div>
+          <p class="hero-eyebrow">Your AI insights</p>
+          <h1>What your data is telling you.</h1>
+          <p class="hero-lead">Everything you've logged — symptoms, daily check-ins, medications, test results, appointments — flows into a set of Claude-powered prompts that spot the patterns you might miss and suggest the next move.</p>
+        </div>
+        <div class="ai-status" id="ai-status"></div>
+      </header>
+
+      <section class="community-section">
+        <ul class="insights-list" id="insights-list">
+          <li class="empty-state">Loading…</li>
+        </ul>
+      </section>
+
+      <!-- Admin-only insight config panel — hidden until /api/acp/me confirms admin. -->
+      <section class="community-section admin-only" id="admin-config-section" hidden>
+        <div class="section-head">
+          <h2>🛠 Prompt configuration <span class="badge">admin</span></h2>
+          <span class="section-hint">Edit the prompts, data scope and refresh cadence for every insight. Changes apply on next run.</span>
+        </div>
+        <ul class="insight-config-list" id="insight-config-list"></ul>
+      </section>
+    </main>
+  </div>
+
+  <!-- Insight config edit modal -->
+  <div class="modal" id="cfg-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-cfg></div>
+    <div class="modal-card modal-xl cfg-modal-card">
+      <button class="modal-close" type="button" data-close-cfg aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🛠</span>
+        <h3 id="cfg-title">Edit insight</h3>
+        <p>Tune the Claude prompt, change which data slices it sees, and decide how often it refreshes.</p>
+      </header>
+      <form id="cfg-form" novalidate>
+        <input type="hidden" name="slug" />
+        <div class="field-grid-2">
+          <label class="field"><span>Title</span>
+            <input type="text" name="title" maxlength="140" required />
+          </label>
+          <label class="field"><span>Emoji</span>
+            <input type="text" name="emoji" maxlength="4" />
+          </label>
+        </div>
+        <label class="field"><span>Description</span>
+          <textarea name="description" rows="2" maxlength="400"></textarea>
+        </label>
+        <label class="field"><span>Prompt template <em>(use <code>{context}</code> as the placeholder for the user's data)</em></span>
+          <textarea name="promptTemplate" rows="10" maxlength="8000" required></textarea>
+        </label>
+        <div class="field">
+          <span>Data scope <em>(tick what gets bundled into <code>{context}</code>)</em></span>
+          <div class="scope-grid" id="scope-grid">
+            <label class="scope-chip"><input type="checkbox" value="symptoms_30d"> Symptoms (30d)</label>
+            <label class="scope-chip"><input type="checkbox" value="daily_logs_30d"> Daily check-ins (30d)</label>
+            <label class="scope-chip"><input type="checkbox" value="medications"> Current medications</label>
+            <label class="scope-chip"><input type="checkbox" value="medication_logs_30d"> Dose adherence (30d)</label>
+            <label class="scope-chip"><input type="checkbox" value="test_results"> Test results</label>
+            <label class="scope-chip"><input type="checkbox" value="appointments_60d"> Appointments (±60d)</label>
+          </div>
+        </div>
+        <div class="field-grid-2">
+          <label class="field"><span>Refresh every</span>
+            <select name="refreshHours">
+              <option value="1">1 hour</option>
+              <option value="6">6 hours</option>
+              <option value="24" selected>24 hours</option>
+              <option value="72">3 days</option>
+              <option value="168">7 days</option>
+            </select>
+          </label>
+          <label class="field"><span>Model override <em>(blank = default)</em></span>
+            <input type="text" name="model" maxlength="200" placeholder="anthropic.claude-3-5-sonnet-20241022-v2:0" />
+          </label>
+        </div>
+        <label class="ios-row">
+          <span class="ios-row-text"><strong>Enabled</strong><em>Disabled insights are hidden from users.</em></span>
+          <span class="ios-switch">
+            <input type="checkbox" name="enabled" checked />
+            <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
+          </span>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save changes</button>
+          <button type="button" class="btn-ghost-pink" data-close-cfg>Cancel</button>
+          <p class="form-status" id="cfg-status"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  <script src="/account-menu.js?v=1779934116" defer></script>
+  <script src="/my-insights.js?v=1779934116" defer></script>
+</body>
+</html>
