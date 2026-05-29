@@ -6000,6 +6000,10 @@ async function handleAcp(request, env, url) {
     return await listRecentInsightRuns(env);
   }
 
+  if (path === "/dashboard" && request.method === "GET") {
+    return await getAdminDashboard(env);
+  }
+
   if (path === "/users" && request.method === "GET") {
     return await acpListUsers(env, url);
   }
@@ -7511,6 +7515,115 @@ async function listRecentInsightRuns(env) {
       inputTokens: x.input_tokens || null, outputTokens: x.output_tokens || null,
       generatedAt: x.generated_at,
     })),
+  });
+}
+
+// Aggregate "how is the whole app doing" snapshot for /acp Overview.
+// Cheap to compute — small COUNT(*) queries against existing tables — so
+// the dashboard can fetch this on every page view without paginating or
+// caching. Returns:
+//   counts: totals + windowed (24h, 7d, 30d) for users, posts, symptoms,
+//           daily logs, insight runs
+//   ai:     run status breakdown for the last 24h + 7d + 30d, token totals
+//   recentUsers:  last 10 sign-ups
+//   recentErrors: last 10 insight runs with status='error'
+//   aiCallsDaily: 14-day series — { date, ok, error } per day
+async function getAdminDashboard(env) {
+  await bootstrapSchema(env);
+  const now = nowSec();
+  const d1 = now - 86400;     // 24h
+  const d7 = now - 7 * 86400;
+  const d30 = now - 30 * 86400;
+
+  const safe = async (q, ...binds) => {
+    try { return (await env.DB.prepare(q).bind(...binds).first()) || {}; }
+    catch (err) { return { _err: err?.message || String(err) }; }
+  };
+  const safeAll = async (q, ...binds) => {
+    try { return (await env.DB.prepare(q).bind(...binds).all()).results || []; }
+    catch (err) { return []; }
+  };
+
+  // --- Headline counts -------------------------------------------------
+  const [
+    uTotal, uNew24, uNew7d, uNew30d,
+    sCount7d, dCount7d, pCount7d,
+    rTotal30d, rOk30d, rErr30d, rOk24h, rErr24h, rOk7d, rErr7d,
+    tokens30d,
+  ] = await Promise.all([
+    safe("SELECT COUNT(*) AS n FROM users"),
+    safe("SELECT COUNT(*) AS n FROM users WHERE created_at >= ?", d1),
+    safe("SELECT COUNT(*) AS n FROM users WHERE created_at >= ?", d7),
+    safe("SELECT COUNT(*) AS n FROM users WHERE created_at >= ?", d30),
+    safe("SELECT COUNT(*) AS n FROM symptoms WHERE logged_at >= ?", d7),
+    safe("SELECT COUNT(*) AS n FROM daily_logs WHERE log_date >= ?",
+         new Date(d7 * 1000).toISOString().slice(0, 10)),
+    safe("SELECT COUNT(*) AS n FROM posts WHERE created_at >= ?", d7),
+    safe("SELECT COUNT(*) AS n FROM insight_runs WHERE generated_at >= ?", d30),
+    safe("SELECT COUNT(*) AS n FROM insight_runs WHERE status = 'ok'    AND generated_at >= ?", d30),
+    safe("SELECT COUNT(*) AS n FROM insight_runs WHERE status = 'error' AND generated_at >= ?", d30),
+    safe("SELECT COUNT(*) AS n FROM insight_runs WHERE status = 'ok'    AND generated_at >= ?", d1),
+    safe("SELECT COUNT(*) AS n FROM insight_runs WHERE status = 'error' AND generated_at >= ?", d1),
+    safe("SELECT COUNT(*) AS n FROM insight_runs WHERE status = 'ok'    AND generated_at >= ?", d7),
+    safe("SELECT COUNT(*) AS n FROM insight_runs WHERE status = 'error' AND generated_at >= ?", d7),
+    safe("SELECT SUM(input_tokens) AS i, SUM(output_tokens) AS o FROM insight_runs WHERE generated_at >= ?", d30),
+  ]);
+
+  // --- Recent activity feeds ------------------------------------------
+  const [recentUsers, recentErrors] = await Promise.all([
+    safeAll(
+      "SELECT id, username, display_name, email, created_at " +
+      "FROM users ORDER BY created_at DESC LIMIT 10"
+    ),
+    safeAll(
+      "SELECT r.id, r.slug, r.error, r.generated_at, r.user_id, u.username, u.display_name " +
+      "FROM insight_runs r LEFT JOIN users u ON u.id = r.user_id " +
+      "WHERE r.status = 'error' ORDER BY r.generated_at DESC LIMIT 10"
+    ),
+  ]);
+
+  // --- 14-day AI call series ------------------------------------------
+  const since14d = now - 14 * 86400;
+  const series = await safeAll(
+    "SELECT " +
+    "  CAST((generated_at - ?) / 86400 AS INTEGER) AS bucket, " +
+    "  SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) AS ok, " +
+    "  SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS err " +
+    "FROM insight_runs WHERE generated_at >= ? GROUP BY bucket",
+    since14d, since14d,
+  );
+  const seriesByBucket = new Map(series.map((r) => [r.bucket, r]));
+  const aiCallsDaily = [];
+  for (let i = 0; i < 14; i++) {
+    const r = seriesByBucket.get(i) || { ok: 0, err: 0 };
+    const date = new Date((since14d + i * 86400) * 1000).toISOString().slice(0, 10);
+    aiCallsDaily.push({ date, ok: r.ok || 0, error: r.err || 0 });
+  }
+
+  return json({
+    generatedAt: now,
+    counts: {
+      users:        { total: uTotal.n || 0, new24h: uNew24.n || 0, new7d: uNew7d.n || 0, new30d: uNew30d.n || 0 },
+      symptoms7d:   sCount7d.n || 0,
+      dailyLogs7d:  dCount7d.n || 0,
+      posts7d:      pCount7d.n || 0,
+    },
+    ai: {
+      runs:    { total30d: rTotal30d.n || 0, ok30d: rOk30d.n || 0, err30d: rErr30d.n || 0,
+                 ok24h:    rOk24h.n || 0,    err24h: rErr24h.n || 0,
+                 ok7d:     rOk7d.n || 0,     err7d: rErr7d.n || 0 },
+      tokens:  { input30d: tokens30d.i || 0, output30d: tokens30d.o || 0 },
+    },
+    recentUsers: recentUsers.map((u) => ({
+      id: u.id, username: u.username, displayName: u.display_name,
+      email: u.email, createdAt: u.created_at,
+    })),
+    recentErrors: recentErrors.map((r) => ({
+      id: r.id, slug: r.slug, userId: r.user_id,
+      username: r.username, displayName: r.display_name,
+      error: r.error, generatedAt: r.generated_at,
+    })),
+    aiCallsDaily,
   });
 }
 

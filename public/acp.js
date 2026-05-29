@@ -2,6 +2,7 @@
 // Server already blocks non-admins from this page; the JS just talks to /api/acp/*.
 (() => {
   const views = {
+    overview: document.getElementById("view-overview"),
     users:    document.getElementById("view-users"),
     circles:  document.getElementById("view-circles"),
     circle:   document.getElementById("view-circle"),
@@ -17,18 +18,131 @@
       const name = tab.dataset.tab;
       document.querySelectorAll(".acp-tab").forEach((t) => t.classList.toggle("active", t === tab));
       showView(name);
+      if (name === "overview") loadOverview();
       if (name === "users") loadUsers();
       if (name === "circles") loadCircles();
       if (name === "insights") loadInsightsTab();
     });
   });
   function showView(name) {
+    if (views.overview) views.overview.hidden = name !== "overview";
     views.users.hidden    = name !== "users";
     views.circles.hidden  = name !== "circles";
     views.circle.hidden   = name !== "circle";
     if (views.insights) views.insights.hidden = name !== "insights";
     if (views.system)   views.system.hidden   = name !== "system";
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // --- Overview --------------------------------------------------------
+  async function loadOverview() {
+    try {
+      const data = await fetchJson("/api/acp/dashboard");
+      paintOverview(data);
+      paintRightRail(data);
+    } catch (err) {
+      document.getElementById("overview-refreshed").textContent =
+        "Couldn't load: " + (err.message || "failed");
+    }
+  }
+
+  function paintOverview(d) {
+    const fmt = (n) => (n ?? 0).toLocaleString();
+    const tiles = document.getElementById("overview-stats");
+    tiles.innerHTML = [
+      tile("Total users",         fmt(d.counts.users.total)),
+      tile("New (24h)",           fmt(d.counts.users.new24h)),
+      tile("New (7d)",            fmt(d.counts.users.new7d)),
+      tile("New (30d)",           fmt(d.counts.users.new30d)),
+      tile("Insights ok (30d)",   fmt(d.ai.runs.ok30d)),
+      tile("Insights errored (30d)", fmt(d.ai.runs.err30d), "danger"),
+      tile("Tokens in (30d)",     fmt(d.ai.tokens.input30d)),
+      tile("Tokens out (30d)",    fmt(d.ai.tokens.output30d)),
+    ].join("");
+
+    const act = document.getElementById("overview-activity");
+    act.innerHTML = [
+      miniStat("Symptoms logged",  fmt(d.counts.symptoms7d)),
+      miniStat("Daily check-ins",  fmt(d.counts.dailyLogs7d)),
+      miniStat("Community posts",  fmt(d.counts.posts7d)),
+    ].join("");
+
+    paintChart(d.aiCallsDaily || []);
+    document.getElementById("overview-refreshed").textContent =
+      "Refreshed " + new Date(d.generatedAt * 1000).toLocaleTimeString();
+  }
+  function tile(label, value, cls = "") {
+    return `<div class="acp-stat-tile ${cls}">
+      <span class="acp-stat-label">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>`;
+  }
+  function miniStat(label, value) {
+    return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+  }
+  function paintChart(series) {
+    const wrap = document.getElementById("ai-chart");
+    if (!series.length) { wrap.innerHTML = `<p class="acp-empty">No calls yet.</p>`; return; }
+    // Scale by the busiest day so the tallest bar fills the 160px chart.
+    const max = Math.max(1, ...series.map((d) => (d.ok || 0) + (d.error || 0)));
+    const cols = series.map((d) => {
+      const total = (d.ok || 0) + (d.error || 0);
+      const heightPct = (total / max) * 100;
+      const okPct  = total ? (d.ok    / total) * heightPct : 0;
+      const errPct = total ? (d.error / total) * heightPct : 0;
+      const date = d.date.slice(5); // MM-DD
+      const tip = `${d.date}: ${d.ok} ok, ${d.error} err`;
+      return `<div class="acp-chart-col" data-tip="${escapeHtml(tip)}" style="height:${heightPct.toFixed(1)}%">
+        <div class="ok"  style="height:${(total ? okPct  / heightPct * 100 : 0).toFixed(1)}%"></div>
+        <div class="err" style="height:${(total ? errPct / heightPct * 100 : 0).toFixed(1)}%"></div>
+      </div>`;
+    }).join("");
+    const axis = series.map((d) => `<span>${escapeHtml(d.date.slice(5))}</span>`).join("");
+    wrap.innerHTML = `<div class="acp-chart" style="display:flex;gap:6px;align-items:flex-end;height:160px">${cols}</div>
+      <div class="acp-chart-axis">${axis}</div>`;
+  }
+
+  function paintRightRail(d) {
+    // Recent registrations
+    const su = document.getElementById("side-users");
+    if (!d.recentUsers.length) {
+      su.innerHTML = `<li class="acp-side-empty">No sign-ups yet.</li>`;
+    } else {
+      su.innerHTML = d.recentUsers.map((u) => `<li>
+        <span class="strong">${escapeHtml(u.displayName || u.username || u.id.slice(0,8))}</span>
+        <span class="meta">${escapeHtml(u.email || u.username || "—")} · ${escapeHtml(timeAgo(u.createdAt))}</span>
+      </li>`).join("");
+    }
+
+    // Recent engine errors
+    const se = document.getElementById("side-errors");
+    if (!d.recentErrors.length) {
+      se.innerHTML = `<li class="acp-side-empty">No engine errors. 🎉</li>`;
+    } else {
+      se.innerHTML = d.recentErrors.map((r) => `<li>
+        <span class="strong">${escapeHtml(r.displayName || r.username || r.userId.slice(0,8))}</span>
+        <span class="meta">${escapeHtml(r.slug)} · ${escapeHtml(timeAgo(r.generatedAt))}</span>
+        <span class="err-snippet" title="${escapeHtml(r.error || "")}">${escapeHtml((r.error || "").slice(0, 90))}</span>
+      </li>`).join("");
+    }
+
+    // Bedrock counts
+    const sb = document.getElementById("side-bedrock");
+    sb.innerHTML = [
+      `<div><span>OK (24h)</span><strong>${d.ai.runs.ok24h}</strong></div>`,
+      `<div><span>Errors (24h)</span><strong>${d.ai.runs.err24h}</strong></div>`,
+      `<div><span>OK (7d)</span><strong>${d.ai.runs.ok7d}</strong></div>`,
+      `<div><span>Errors (7d)</span><strong>${d.ai.runs.err7d}</strong></div>`,
+    ].join("");
+  }
+
+  function timeAgo(secs) {
+    if (!secs) return "—";
+    const diff = Math.max(0, Math.floor(Date.now() / 1000) - secs);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
   }
 
   // --- Users -----------------------------------------------------------
@@ -497,18 +611,19 @@
   });
 
   // --- Bootstrap -------------------------------------------------------
-  // Honour `#insights`, `#system`, etc. in the URL so deep-links from
-  // /my-insights ("→ Admin Control Panel → Insights") land on the right tab.
+  // Default to Overview, but honour `#insights`/`#users`/etc. URL hash so
+  // deep-links from /my-insights ("→ Admin → Insights") land on the right tab.
   const hashTab = (location.hash || "").replace(/^#/, "").toLowerCase();
-  if (hashTab && views[hashTab]) {
-    document.querySelectorAll(".acp-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === hashTab));
-    showView(hashTab);
-    if (hashTab === "users") loadUsers();
-    if (hashTab === "circles") loadCircles();
-    if (hashTab === "insights") loadInsightsTab();
-  } else {
-    loadUsers();
-  }
+  const startTab = hashTab && views[hashTab] ? hashTab : "overview";
+  document.querySelectorAll(".acp-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === startTab));
+  showView(startTab);
+  if (startTab === "overview") loadOverview();
+  if (startTab === "users") loadUsers();
+  if (startTab === "circles") loadCircles();
+  if (startTab === "insights") loadInsightsTab();
+  // Always populate the right rail on first load so it has data immediately,
+  // even if the admin starts on a non-Overview tab.
+  if (startTab !== "overview") loadOverview();
 
   // --- Helpers ---------------------------------------------------------
   async function fetchJson(url, init = {}) {
