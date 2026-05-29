@@ -119,24 +119,24 @@ function render() {
 // --- Doses due banner ----------------------------------------------------
 // Pulls today's scheduled doses + their current status. Renders a card
 // for every dose that's pending now (or recently overdue). Includes
-// Taken / Missed buttons that post back and re-render.
+// Taken / Missed buttons that post back and re-render. Pending doses are
+// also pushed into pendingDosesCache so the notif bell counts them and
+// the dropdown lists them alongside the built-in check-in nudges.
+let pendingDosesCache = [];
 async function renderDosesDue() {
   const slot = document.getElementById("doses-due-slot");
-  if (!slot) return;
   let data;
   try {
     const r = await fetch("/api/me/doses-due", { credentials: "same-origin" });
-    if (!r.ok) { slot.innerHTML = ""; return; }
+    if (!r.ok) { if (slot) slot.innerHTML = ""; pendingDosesCache = []; renderNotifBadge(); return; }
     data = await r.json();
-  } catch { slot.innerHTML = ""; return; }
+  } catch { if (slot) slot.innerHTML = ""; pendingDosesCache = []; renderNotifBadge(); return; }
 
   const pending = (data.doses || []).filter((d) => d.status === "pending");
-  // Bell badge — show the pending count if any.
-  const badge = document.querySelector("[data-bind='notifCount']");
-  if (badge) {
-    if (pending.length) { badge.textContent = String(pending.length); badge.hidden = false; }
-    else { badge.hidden = true; }
-  }
+  pendingDosesCache = pending;
+  // Recompute the badge + dropdown so the count now includes pending doses.
+  renderNotifBadge();
+  if (!slot) return;
   if (!pending.length) { slot.innerHTML = ""; return; }
 
   const KIND_ICO = { medication: "💊", supplement: "🌿", vitamin: "💚", hormone: "🌸", herb: "🍃", other: "💊" };
@@ -987,6 +987,19 @@ function computeNotifications() {
       read: !!n.read_at,
     });
   }
+  // Pending doses fetched by renderDosesDue — surface them in the bell
+  // so the badge count and the dropdown actually match.
+  for (const d of pendingDosesCache || []) {
+    const key = `dose:${d.medicationId}:${d.scheduledFor}`;
+    items.push({
+      key, icon: "💊",
+      title: `${d.name} · ${d.timeOfDay}`,
+      body: d.dose ? `Dose due — ${d.dose}` : "Dose due — tap below to confirm",
+      modal: null, local: true,
+      dose: { medicationId: d.medicationId, scheduledFor: d.scheduledFor },
+      read: localReadKeys.has(key),
+    });
+  }
   return items;
 }
 
@@ -1033,15 +1046,34 @@ function closeAllModals() {
   document.body.classList.remove("modal-open");
 }
 function prefillModal(name) {
-  // If the user has already logged this slot today, pre-select their values.
+  const modal = document.getElementById(`modal-${name}`);
+  if (!modal) return;
+  // 1) If the user already logged this slot today, pre-select their values.
   const map = { morning: state?.morning, evening: state?.evening };
   const data = map[name];
-  if (!data) return;
-  const modal = document.getElementById(`modal-${name}`);
-  for (const grp of modal.querySelectorAll("[data-scale]")) {
-    const key = grp.dataset.scale;
-    const val = data[key === "overall" ? "overall" : key];
-    if (val) selectScale(grp, val);
+  if (data) {
+    for (const grp of modal.querySelectorAll("[data-scale]")) {
+      const key = grp.dataset.scale;
+      const val = data[key === "overall" ? "overall" : key];
+      if (val) selectScale(grp, val);
+    }
+  }
+  // 2) Cycle day + phase: prefer today's saved cycle, else use the
+  //    server-suggested value (yesterday + 1) so users don't keep
+  //    re-typing the same day.
+  if (name === "morning" || name === "evening" || name === "symptom" || name === "afternoon") {
+    const cycle = state?.cycle;
+    const suggested = state?.cycleSuggested;
+    const dayInput = modal.querySelector("input[name='cycleDay']");
+    const phaseGroup = modal.querySelector("[data-chip='cyclePhase']");
+    if (dayInput && !dayInput.value) {
+      const v = cycle?.day || suggested?.day;
+      if (v) dayInput.value = String(v);
+    }
+    if (phaseGroup && !phaseGroup.dataset.value) {
+      const v = cycle?.phase || suggested?.phase;
+      if (v) selectChip(phaseGroup, v);
+    }
   }
 }
 

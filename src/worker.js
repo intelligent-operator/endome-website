@@ -1540,6 +1540,9 @@ async function getMeToday(request, env, user, ctx) {
       cervicalMucus: daily.cervical_mucus,
       breastTenderness: daily.breast_tenderness,
     } : null,
+    // Suggested values for the morning check-in when the user hasn't
+    // logged today yet — keeps cycle day rolling without re-entry.
+    cycleSuggested: await suggestCycleForDate(env, user.id, date).catch(() => null),
     symptoms: symptoms.results || [],
     pointsToday: daily?.points_total || 0,
     pet: petResponse(pet),
@@ -1550,6 +1553,27 @@ async function getMeToday(request, env, user, ctx) {
       ...(await computeAppointmentReminders(env, user).catch(() => [])),
     ],
   });
+}
+
+// Suggest a cycle day + phase for `date` based on the most recent past
+// daily log that has a cycle_day. We carry yesterday's value forward by
+// the number of elapsed days (capped at 60 to avoid silly numbers if the
+// last entry was months ago). Phase is suggested only if the inferred
+// day still falls in a plausible window for the last logged phase.
+async function suggestCycleForDate(env, userId, date) {
+  const prior = await env.DB.prepare(
+    "SELECT log_date, cycle_day, cycle_phase FROM daily_logs " +
+    "WHERE user_id = ? AND log_date < ? AND cycle_day IS NOT NULL " +
+    "ORDER BY log_date DESC LIMIT 1"
+  ).bind(userId, date).first().catch(() => null);
+  if (!prior || !prior.cycle_day) return null;
+  // Days elapsed between prior log and target date (UTC, no DST math needed).
+  const ms = Date.UTC(...date.split("-").map((s, i) => i === 1 ? +s - 1 : +s))
+           - Date.UTC(...prior.log_date.split("-").map((s, i) => i === 1 ? +s - 1 : +s));
+  const elapsed = Math.round(ms / 86400000);
+  if (elapsed < 1 || elapsed > 60) return null;
+  const day = Math.min(60, prior.cycle_day + elapsed);
+  return { day, phase: prior.cycle_phase || null };
 }
 
 // Virtual reminders synthesised from medication_schedules. Returns notification
@@ -2148,8 +2172,18 @@ async function postPetPat(env, user) {
 }
 
 // Apply time-based decay so hunger/happiness reflect how long it's been.
+// While the user has put the pet into rest mode, stats are FROZEN — no
+// hunger, no happiness loss. The rest START + END endpoints both bump
+// last_fed_at / last_played_at to nowSec() so decay doesn't immediately
+// "catch up" on the elapsed rest period when the pet wakes.
 function liveStats(pet) {
   const now = nowSec();
+  if (pet.rest_mode_until && pet.rest_mode_until > now) {
+    return {
+      hunger: pet.hunger || 0,
+      happiness: pet.happiness == null ? 100 : pet.happiness,
+    };
+  }
   const hoursFed   = pet.last_fed_at    ? Math.max(0, (now - pet.last_fed_at)    / 3600) : 0;
   const hoursPlay  = pet.last_played_at ? Math.max(0, (now - pet.last_played_at) / 3600) : 0;
   const hunger     = Math.max(0, Math.min(100, (pet.hunger || 0)    + Math.floor(hoursFed  * HUNGER_PER_HOUR)));
@@ -3122,11 +3156,15 @@ async function postEndopetUse(request, env, user) {
 async function postEndopetRest(request, env, user) {
   const body = await readJsonSafe(request);
   const days = clampInt(body?.days, 1, 7) || 1;
-  const until = nowSec() + days * 86400;
+  const now = nowSec();
+  const until = now + days * 86400;
   try {
+    // Bump last_fed_at + last_played_at to NOW alongside enabling rest.
+    // liveStats() freezes decay during rest mode, so without this the
+    // moment rest ends decay would catch up on every elapsed hour.
     await env.DB.prepare(
-      "UPDATE pets SET rest_mode_until = ?, updated_at = ? WHERE user_id = ?"
-    ).bind(until, nowSec(), user.id).run();
+      "UPDATE pets SET rest_mode_until = ?, last_fed_at = ?, last_played_at = ?, updated_at = ? WHERE user_id = ?"
+    ).bind(until, now, now, now, user.id).run();
   } catch (err) {
     console.error("endopet rest failed:", err?.message || err);
     return json({ error: "Couldn't activate Rest Mode." }, 500);
@@ -3136,8 +3174,14 @@ async function postEndopetRest(request, env, user) {
 }
 
 async function postEndopetRestEnd(_request, env, user) {
+  const now = nowSec();
   try {
-    await env.DB.prepare("UPDATE pets SET rest_mode_until = NULL WHERE user_id = ?").bind(user.id).run();
+    // Bumping last_fed_at + last_played_at on the way out of rest means
+    // decay restarts from "now", not from before rest began — pet wakes
+    // refreshed rather than instantly hungry from elapsed rest time.
+    await env.DB.prepare(
+      "UPDATE pets SET rest_mode_until = NULL, last_fed_at = ?, last_played_at = ?, updated_at = ? WHERE user_id = ?"
+    ).bind(now, now, now, user.id).run();
   } catch {}
   return getEndopetState(env, user);
 }
