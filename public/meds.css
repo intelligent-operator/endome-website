@@ -293,8 +293,12 @@
   transition:transform .12s, border-color .12s, box-shadow .12s, background .12s;
 }
 .slot:hover{transform:translateY(-1px);border-color:#ffd6e0;box-shadow:0 6px 14px rgba(255,77,138,.10)}
-.slot.taken{background:linear-gradient(135deg,#e8f8e0,#d1f0c2);border-color:#9bd97a;cursor:default}
-.slot.missed{opacity:.55;border-style:dashed;border-color:#cdb9c4}
+.slot.taken{background:linear-gradient(135deg,#e8f8e0,#d1f0c2);border-color:#5fbf7a}
+.slot.taken .slot-name{color:#1f6a3c;font-weight:600}
+.slot.missed{background:linear-gradient(135deg,#ffe6e6,#ffcfd0);border-color:#e85c6c}
+.slot.missed .slot-name{color:#a3243a;font-weight:600;text-decoration:line-through}
+.slot.stale{background:#f7f0f3;border-color:#e3d2db;color:#9a8090}
+.slot.stale .slot-name{color:#9a8090}
 .slot-time{font-size:11px;font-weight:700;color:#ff4e8a;letter-spacing:.04em}
 .slot.taken .slot-time{color:#3a9b4b}
 .slot-name{font-size:12px;font-weight:600;color:#2b1922}
@@ -394,3 +398,21 @@
 .med-prefs-form .prefs-row-text{display:flex;flex-direction:column;gap:4px}
 .med-prefs-form .prefs-row-text strong{font-size:14px;color:#2b1922}
 .med-prefs-form .prefs-row-text em{font-size:12px;color:#7a5f6c;font-style:normal;line-height:1.45}
+
+/* Slot-click modal (Taken / Missed) */
+.slot-modal-card{
+  max-width:380px;width:100%;background:#fff;border-radius:20px;
+  padding:28px 26px;box-shadow:0 30px 70px rgba(58,29,43,.35);
+  position:relative;z-index:1;
+}
+.slot-modal-card h3{margin:0 0 6px;font-size:18px;color:#2b1922;font-weight:700}
+.slot-modal-sub{margin:0 0 18px;font-size:13px;color:#7a5f6c}
+.slot-modal-actions{display:flex;flex-direction:column;gap:8px}
+.slot-modal-actions .btn,
+.slot-modal-actions .btn-soft{width:100%;justify-content:center}
+
+/* Disable state on '+ Add slot' */
+#sched-add:disabled{
+  opacity:.45;cursor:not-allowed;background:#ffd6e0;
+  box-shadow:none;
+}

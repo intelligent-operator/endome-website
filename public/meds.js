@@ -257,6 +257,19 @@ console.info("EndoMe meds build v3");
     for (const k of Object.keys(days)) days[k].sort((a, b) => a.timeOfDay.localeCompare(b.timeOfDay));
 
     const today = new Date().getDay();
+    // Build a Map<medication_id + dayIndex + time, log> for the week so each
+    // slot can colour itself based on whether the user actually logged it.
+    // Past days with no log -> grey (not 'missed' — user might not have set
+    // up auto-mark / might still tap it later). Only explicit miss rows go red.
+    const weekStart = startOfThisWeekSunday();
+    const logIndex = new Map();
+    for (const l of recent) {
+      if (!l.scheduledFor) continue;
+      const ts = l.scheduledFor;
+      const d = new Date(ts * 1000);
+      const key = `${l.medicationId}:${d.getDay()}:${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+      logIndex.set(key, l);
+    }
     let html = "<thead><tr>";
     for (const i of DAY_ORDER) {
       const isToday = i === today;
@@ -265,6 +278,7 @@ console.info("EndoMe meds build v3");
     html += "</tr></thead><tbody><tr>";
     for (const i of DAY_ORDER) {
       const isToday = i === today;
+      const isPastDay = dayOffsetFromToday(i) < 0;
       const dayBit = 1 << i;
       html += `<td class="${isToday ? "is-today" : ""}" data-daybit="${dayBit}">`;
       if (!days[i].length) {
@@ -274,13 +288,23 @@ console.info("EndoMe meds build v3");
         </button>`;
       } else {
         html += days[i].map((s) => {
-          const isPast = isToday && slotIsPastNow(s.timeOfDay);
-          const takenToday = isToday && recentLogHitsSlot(recent, s.medicationId, s.timeOfDay);
-          const cls = takenToday ? "taken" : (isPast ? "missed" : "");
-          const checkmark = takenToday ? "✓ " : "";
-          return `<div class="slot ${cls}" data-med="${s.medicationId}" data-time="${escapeHtml(s.timeOfDay)}" tabindex="0">
+          const [hh, mm] = s.timeOfDay.split(":");
+          const key = `${s.medicationId}:${i}:${pad2(+hh)}:${pad2(+mm)}`;
+          const log = logIndex.get(key);
+          const slotSec = slotUnixForDay(i, s.timeOfDay);
+          const isPastSlot = isPastDay || (isToday && slotSec < Math.floor(Date.now() / 1000));
+          let cls = "";
+          let badge = "";
+          if (log?.status === "taken" || log?.status === "auto_taken") {
+            cls = "taken"; badge = log.status === "auto_taken" ? "✓ auto" : "✓";
+          } else if (log?.status === "missed") {
+            cls = "missed"; badge = "✗";
+          } else if (isPastSlot) {
+            cls = "stale"; badge = "·";
+          }
+          return `<div class="slot ${cls}" data-med="${s.medicationId}" data-time="${escapeHtml(s.timeOfDay)}" data-day="${i}" data-slot-sec="${slotSec}" tabindex="0">
             <span class="slot-time">${escapeHtml(s.timeOfDay)}</span>
-            <span class="slot-name">${checkmark}${KIND_ICO[s.kind] || "💊"} ${escapeHtml(s.name)}</span>
+            <span class="slot-name">${badge ? badge + " " : ""}${KIND_ICO[s.kind] || "💊"} ${escapeHtml(s.name)}</span>
             ${s.dose ? `<span class="slot-dose">${escapeHtml(s.dose)}</span>` : ""}
           </div>`;
         }).join("");
@@ -382,29 +406,108 @@ console.info("EndoMe meds build v3");
     const slotSec = Math.floor(d.getTime() / 1000);
     return logs.some((l) => l.medicationId === medId && Math.abs(l.takenAt - slotSec) < 3600 * 2);
   }
+  // Helpers used by the weekly grid colouring.
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function dayOffsetFromToday(dayIndex) {
+    const today = new Date().getDay();
+    let diff = dayIndex - today;
+    if (diff > 3) diff -= 7;        // last week's Sat shouldn't count as +6
+    if (diff < -3) diff += 7;        // and vice-versa
+    return diff;
+  }
+  function startOfThisWeekSunday() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - d.getDay());
+    return Math.floor(d.getTime() / 1000);
+  }
+  function slotUnixForDay(dayIndex, timeOfDay) {
+    const [h, m] = timeOfDay.split(":").map(Number);
+    const d = new Date();
+    d.setDate(d.getDate() + dayOffsetFromToday(dayIndex));
+    d.setHours(h, m || 0, 0, 0);
+    return Math.floor(d.getTime() / 1000);
+  }
+
+  // --- Slot-click modal — replaces the native confirm() ---------------
   async function onSlotClick(sl) {
     const medId = +sl.dataset.med;
+    const time  = sl.dataset.time || "";
+    const slotSec = +sl.dataset.slotSec || null;
+    const name = sl.querySelector(".slot-name")?.textContent?.trim().replace(/^[✓✗·]+\s*/, "") || "this dose";
     if (sl.classList.contains("taken")) {
-      toast("Already logged for this slot", "ok");
+      // Tap an already-taken slot to undo, or just dismiss.
+      openSlotModal({ title: "Already taken", subtitle: `${name} at ${time}`, medId, slotSec, alreadyDone: true });
       return;
     }
-    const action = confirm("Did you take this dose?\n\nOK = Yes, log it.\nCancel = No, skip.");
-    if (!action) {
-      sl.classList.add("missed");
-      toast("Skipped", "ok");
-      return;
-    }
-    try {
-      await fetchJson(`/api/me/medications/${medId}/log`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ doseText: null, notes: "Scheduled dose" }),
+    openSlotModal({ title: "Mark this dose", subtitle: `${name} at ${time}`, medId, slotSec, alreadyDone: false });
+  }
+
+  function openSlotModal({ title, subtitle, medId, slotSec, alreadyDone }) {
+    let modal = document.getElementById("slot-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "slot-modal";
+      modal.className = "modal slot-modal";
+      modal.setAttribute("aria-hidden", "true");
+      modal.innerHTML = `
+        <div class="modal-backdrop" data-close-slot></div>
+        <div class="modal-card slot-modal-card">
+          <button class="modal-close" type="button" data-close-slot aria-label="Close">×</button>
+          <h3 id="slot-modal-title"></h3>
+          <p class="slot-modal-sub" id="slot-modal-sub"></p>
+          <div class="slot-modal-actions" id="slot-modal-actions"></div>
+          <p class="form-status" id="slot-modal-status"></p>
+        </div>`;
+      document.body.appendChild(modal);
+      modal.addEventListener("click", (e) => {
+        if (e.target.closest("[data-close-slot]")) {
+          modal.classList.remove("open");
+          modal.setAttribute("aria-hidden", "true");
+        }
       });
-      toast("Logged ✨", "ok");
-      await load();
-    } catch (err) {
-      toast(err.message || "Couldn't log", "err");
     }
+    document.getElementById("slot-modal-title").textContent = title;
+    document.getElementById("slot-modal-sub").textContent = subtitle;
+    const status = document.getElementById("slot-modal-status");
+    status.textContent = "";
+    const actions = document.getElementById("slot-modal-actions");
+    actions.innerHTML = alreadyDone
+      ? `<button type="button" class="btn-soft" data-close-slot>Close</button>`
+      : `<button type="button" class="btn btn-primary" data-slot-act="taken">✅ Taken</button>
+         <button type="button" class="btn-soft danger" data-slot-act="missed">✗ Missed</button>
+         <button type="button" class="btn-soft" data-close-slot>Cancel</button>`;
+    actions.querySelectorAll("[data-slot-act]").forEach((b) => {
+      b.addEventListener("click", async () => {
+        const act = b.dataset.slotAct;
+        b.disabled = true;
+        status.textContent = "Saving…"; status.className = "form-status";
+        try {
+          if (act === "taken") {
+            await fetchJson(`/api/me/medications/${medId}/log`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ doseText: null, notes: "Scheduled dose", scheduledFor: slotSec }),
+            });
+            toast("Logged ✨", "ok");
+          } else {
+            await fetchJson(`/api/me/medications/${medId}/miss`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ scheduledFor: slotSec }),
+            });
+            toast("Marked missed", "ok");
+          }
+          modal.classList.remove("open");
+          modal.setAttribute("aria-hidden", "true");
+          await load();
+        } catch (err) {
+          status.textContent = err.message || "Couldn't save."; status.className = "form-status err";
+          b.disabled = false;
+        }
+      });
+    });
+    modal.classList.add("open"); modal.setAttribute("aria-hidden", "false");
   }
 
   // --- Reaction helpers --------------------------------------------------
@@ -526,10 +629,8 @@ console.info("EndoMe meds build v3");
     const wrap = document.getElementById("med-schedule-editor");
     const list = document.getElementById("med-schedule-list");
     if (!wrap || !list) return;
-    if (!editingMedId) {
-      wrap.hidden = true;
-      return;
-    }
+    // Always show the schedule editor — even on the brand-new-med path.
+    // Slots added here get queued and POST'd after the med is saved.
     wrap.hidden = false;
     if (!editingSchedules.length) {
       list.innerHTML = `<li class="med-schedule-empty">No recurring schedule yet. Pick days + a time below to add one.</li>`;
@@ -546,6 +647,13 @@ console.info("EndoMe meds build v3");
   }
 
   // Day-of-week chip toggling
+  // Toggle day chips + keep '+ Add slot' enabled iff we have day(s) + time.
+  function refreshAddSlotEnabled() {
+    const btn = document.getElementById("sched-add");
+    const time = document.getElementById("sched-time")?.value;
+    if (!btn) return;
+    btn.disabled = !pendingDays || !time;
+  }
   document.querySelector("#dow-row").addEventListener("click", (e) => {
     const btn = e.target.closest(".dow-chip");
     if (!btn) return;
@@ -553,6 +661,15 @@ console.info("EndoMe meds build v3");
     const bit = +btn.dataset.day;
     pendingDays ^= bit;
     btn.classList.toggle("on", (pendingDays & bit) !== 0);
+    refreshAddSlotEnabled();
+  });
+  // Time input — don't let Enter submit the parent <form>, and refresh the
+  // disabled state so users can see whether '+ Add slot' is clickable.
+  const schedTimeEl = document.getElementById("sched-time");
+  schedTimeEl?.addEventListener("input", refreshAddSlotEnabled);
+  schedTimeEl?.addEventListener("change", refreshAddSlotEnabled);
+  schedTimeEl?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); document.getElementById("sched-add")?.click(); }
   });
 
   document.getElementById("sched-add").addEventListener("click", async () => {
@@ -572,6 +689,7 @@ console.info("EndoMe meds build v3");
       pendingDays = 0;
       document.getElementById("sched-time").value = "";
       document.querySelectorAll("#dow-row .dow-chip.on").forEach((b) => b.classList.remove("on"));
+      refreshAddSlotEnabled();
       paintScheduleEditor();
       toast("Slot queued — save medication to lock it in", "ok");
       return;
@@ -586,6 +704,7 @@ console.info("EndoMe meds build v3");
       pendingDays = 0;
       document.getElementById("sched-time").value = "";
       document.querySelectorAll("#dow-row .dow-chip.on").forEach((b) => b.classList.remove("on"));
+      refreshAddSlotEnabled();
       paintScheduleEditor();
       toast("Schedule added", "ok");
       await renderTimetable();

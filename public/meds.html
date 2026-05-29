@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/meds.css?v=1780052889" />
+  <link rel="stylesheet" href="/meds.css?v=1780055937" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -243,10 +243,11 @@
               <textarea name="notes" rows="3" maxlength="1000" placeholder="What it's for, when you take it, anything to remember."></textarea>
             </label>
 
-            <!-- Recurring schedule editor (only enabled when editing an existing med) -->
+            <!-- Recurring schedule editor — shown for both new + existing meds.
+                 Slots queued before save get persisted after the med is created. -->
             <fieldset class="med-schedule-editor" id="med-schedule-editor" hidden>
               <legend>Recurring schedule</legend>
-              <p class="med-schedule-hint">Pick the days and time you want to take this. We'll add it to your weekly timetable and remind you in the notifications bell when each dose is due.</p>
+              <p class="med-schedule-hint">Pick the days, set a time, then tap <strong>+ Add slot</strong> to queue it. You can add as many as you need. Slots fire in your dashboard as notifications when each dose is due.</p>
               <ul class="med-schedule-list" id="med-schedule-list"></ul>
               <div class="med-schedule-add">
                 <div class="dow-row" id="dow-row" role="group" aria-label="Days of the week">
@@ -260,7 +261,7 @@
                 </div>
                 <div class="med-schedule-time-row">
                   <input type="time" id="sched-time" />
-                  <button type="button" class="btn btn-primary small" id="sched-add">+ Add slot</button>
+                  <button type="button" class="btn btn-primary small" id="sched-add" disabled>+ Add slot</button>
                 </div>
                 <p class="form-status" id="sched-status" role="status"></p>
               </div>
@@ -361,6 +362,6 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
-  <script src="/meds.js?v=1780054696" defer></script>
+  <script src="/meds.js?v=1780055937" defer></script>
 </body>
 </html>

@@ -5280,13 +5280,15 @@ async function getMedicationTimetable(env, user) {
     "WHERE s.user_id = ? ORDER BY s.time_of_day ASC"
   ).bind(user.id).all().catch(() => ({ results: [] }));
 
-  // For each (medication_id, day), include the latest log within ±2 hours
-  // of the slot — so the UI can show whether it's been taken today.
-  const todayStart = Math.floor(Date.now() / 1000) - 14 * 86400;
+  // Pull every log in the last 14 days INCLUDING status + scheduled_for so
+  // the calendar can colour each weekly slot — taken/auto_taken = green,
+  // missed = red, future = uncoloured. We send the raw rows; the client
+  // pairs them to slots by (medication_id, scheduled_for).
+  const lookbackStart = Math.floor(Date.now() / 1000) - 14 * 86400;
   const logRows = await env.DB.prepare(
-    "SELECT medication_id, taken_at FROM medication_logs " +
+    "SELECT medication_id, taken_at, status, scheduled_for FROM medication_logs " +
     "WHERE user_id = ? AND taken_at >= ?"
-  ).bind(user.id, todayStart).all().catch(() => ({ results: [] }));
+  ).bind(user.id, lookbackStart).all().catch(() => ({ results: [] }));
 
   return json({
     slots: (rows.results || []).map((r) => ({
@@ -5300,6 +5302,7 @@ async function getMedicationTimetable(env, user) {
     })),
     recentLogs: (logRows.results || []).map((r) => ({
       medicationId: r.medication_id, takenAt: r.taken_at,
+      status: r.status || "taken", scheduledFor: r.scheduled_for || null,
     })),
   });
 }
