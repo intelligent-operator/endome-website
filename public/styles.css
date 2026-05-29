@@ -1093,3 +1093,41 @@ body.modal-open{overflow:hidden}
 [data-tip-pos="below"]::after,
 [data-tip-pos="below"]::before{bottom:auto;top:calc(100% + 8px)}
 [data-tip-pos="below"]::before{border-top-color:transparent;border-bottom-color:#2b1922;top:calc(100% + 2px)}
+
+/* Nicer scrollbars across the app — hide the chunky OS bar everywhere
+   the user scrolls inside a card/modal. Still works with touch & wheel. */
+.modal-card,
+.modal-xl,
+.acp-modal-card,
+.notif-list,
+.engine-test-out,
+pre{
+  scrollbar-width:thin;            /* Firefox */
+  scrollbar-color:#ffd6e0 transparent;
+}
+.modal-card::-webkit-scrollbar,
+.modal-xl::-webkit-scrollbar,
+.acp-modal-card::-webkit-scrollbar,
+.notif-list::-webkit-scrollbar,
+.engine-test-out::-webkit-scrollbar,
+pre::-webkit-scrollbar{
+  width:6px;height:6px;
+}
+.modal-card::-webkit-scrollbar-thumb,
+.modal-xl::-webkit-scrollbar-thumb,
+.acp-modal-card::-webkit-scrollbar-thumb,
+.notif-list::-webkit-scrollbar-thumb,
+.engine-test-out::-webkit-scrollbar-thumb,
+pre::-webkit-scrollbar-thumb{
+  background:#ffd6e0;border-radius:999px;
+}
+.modal-card::-webkit-scrollbar-thumb:hover,
+.modal-xl::-webkit-scrollbar-thumb:hover,
+.acp-modal-card::-webkit-scrollbar-thumb:hover{
+  background:#ff9bb3;
+}
+.modal-card::-webkit-scrollbar-track,
+.modal-xl::-webkit-scrollbar-track,
+.acp-modal-card::-webkit-scrollbar-track{
+  background:transparent;
+}

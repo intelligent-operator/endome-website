@@ -94,9 +94,15 @@ console.info("EndoMe meds build v3");
     // If the med has recurring schedules, the meta line should reflect that
     // ("Mon–Sun · 17:30") instead of the raw frequency enum ("As needed").
     // The 📅 pill below still shows the full schedule list for >1 entry.
-    const cadenceLabel = m.schedules && m.schedules.length
+    const hasSchedule = m.schedules && m.schedules.length;
+    const cadenceLabel = hasSchedule
       ? `${formatDays(m.schedules[0].daysMask)} · ${m.schedules[0].timeOfDay}${m.schedules.length > 1 ? ` +${m.schedules.length - 1} more` : ""}`
       : (FREQ_LABEL[m.frequency] || m.frequency);
+    // Replace the eligibility badge for scheduled meds — "Take whenever
+    // needed" makes no sense once a dose time is set. Show next pending
+    // slot today (or 'Tomorrow') and lean on the doses-due banner for
+    // actual taken/missed marking.
+    const scheduledBadge = hasSchedule ? nextScheduledLabel(m.schedules) : null;
     return `<li class="med-card">
       <div class="med-card-head">
         <div class="med-card-icon">${KIND_ICO[m.kind] || "💊"}</div>
@@ -104,7 +110,7 @@ console.info("EndoMe meds build v3");
           <strong>${escapeHtml(m.name)}</strong>
           <span class="med-card-meta">${escapeHtml(m.dose || "—")} · ${escapeHtml(cadenceLabel)}${m.brand ? " · " + escapeHtml(m.brand) : ""}</span>
         </div>
-        <div class="med-card-status ${okNow ? "ok" : "wait"}">${nextLabel}</div>
+        <div class="med-card-status ${scheduledBadge ? "ok" : (okNow ? "ok" : "wait")}">${scheduledBadge || nextLabel}</div>
       </div>
       ${m.notes ? `<p class="med-notes">${escapeHtml(m.notes)}</p>` : ""}
       ${m.schedules && m.schedules.length > 1 ? schedSummary(m.schedules) : ""}
@@ -148,6 +154,39 @@ console.info("EndoMe meds build v3");
     const parts = schedules.slice(0, 4).map((s) => `${formatDays(s.daysMask)} · ${s.timeOfDay}`);
     const more = schedules.length > 4 ? ` +${schedules.length - 4} more` : "";
     return `<div class="med-sched-pill">📅 ${escapeHtml(parts.join(" · "))}${more}</div>`;
+  }
+
+  // Walks the user's schedules and returns the label for the next slot —
+  // either "📅 Today at 17:30" or "📅 Tomorrow at 08:00". Used on the med
+  // card badge instead of the eligibility-only "Take whenever needed".
+  function nextScheduledLabel(schedules) {
+    if (!schedules?.length) return null;
+    const now = new Date();
+    const todayBit = 1 << now.getDay();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    // Today's remaining slots first.
+    let best = null;
+    for (const s of schedules) {
+      if (!(s.daysMask & todayBit)) continue;
+      const [h, m] = String(s.timeOfDay).split(":").map((n) => +n);
+      const slotMin = h * 60 + (m || 0);
+      if (slotMin >= nowMin && (best == null || slotMin < best)) best = slotMin;
+    }
+    if (best != null) {
+      const hh = String(Math.floor(best / 60)).padStart(2, "0");
+      const mm = String(best % 60).padStart(2, "0");
+      return `📅 Today at ${hh}:${mm}`;
+    }
+    // Otherwise look for the next day with a slot.
+    for (let i = 1; i <= 7; i++) {
+      const bit = 1 << ((now.getDay() + i) % 7);
+      const matches = schedules.filter((s) => s.daysMask & bit);
+      if (!matches.length) continue;
+      const earliest = matches.map((s) => s.timeOfDay).sort()[0];
+      const day = i === 1 ? "Tomorrow" : ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][(now.getDay() + i) % 7];
+      return `📅 ${day} at ${earliest}`;
+    }
+    return null;
   }
 
   function formatDays(mask) {
@@ -517,13 +556,26 @@ console.info("EndoMe meds build v3");
   });
 
   document.getElementById("sched-add").addEventListener("click", async () => {
-    if (!editingMedId) return;
     const status = document.getElementById("sched-status");
     const time = document.getElementById("sched-time").value;
     status.textContent = "";
     status.className = "form-status";
     if (!pendingDays) { status.textContent = "Pick at least one day."; status.className = "form-status err"; return; }
     if (!time) { status.textContent = "Pick a time."; status.className = "form-status err"; return; }
+    // Brand-new med, no id yet — stash the slot in editingSchedules with a
+    // negative placeholder id so paintScheduleEditor still renders it. The
+    // form-submit handler walks pending entries (id < 0) after creating the
+    // med and persists them via the schedules API.
+    if (!editingMedId) {
+      const placeholder = { id: -(editingSchedules.length + 1), daysMask: pendingDays, timeOfDay: time, pending: true };
+      editingSchedules.push(placeholder);
+      pendingDays = 0;
+      document.getElementById("sched-time").value = "";
+      document.querySelectorAll("#dow-row .dow-chip.on").forEach((b) => b.classList.remove("on"));
+      paintScheduleEditor();
+      toast("Slot queued — save medication to lock it in", "ok");
+      return;
+    }
     try {
       const res = await fetchJson(`/api/me/medications/${editingMedId}/schedules`, {
         method: "POST",
@@ -533,6 +585,7 @@ console.info("EndoMe meds build v3");
       editingSchedules.push({ id: res.id, daysMask: pendingDays, timeOfDay: time });
       pendingDays = 0;
       document.getElementById("sched-time").value = "";
+      document.querySelectorAll("#dow-row .dow-chip.on").forEach((b) => b.classList.remove("on"));
       paintScheduleEditor();
       toast("Schedule added", "ok");
       await renderTimetable();
@@ -544,8 +597,16 @@ console.info("EndoMe meds build v3");
 
   document.getElementById("med-schedule-list").addEventListener("click", async (e) => {
     const del = e.target.closest("[data-del-sched]");
-    if (!del || !editingMedId) return;
+    if (!del) return;
     const schedId = +del.dataset.delSched;
+    // Pending (not-yet-saved) entries have negative placeholder ids — just
+    // drop them from the local queue, no API call needed.
+    if (schedId < 0) {
+      editingSchedules = editingSchedules.filter((s) => s.id !== schedId);
+      paintScheduleEditor();
+      return;
+    }
+    if (!editingMedId) return;
     try {
       await fetchJson(`/api/me/medications/${editingMedId}/schedules/${schedId}`, { method: "DELETE" });
       editingSchedules = editingSchedules.filter((s) => s.id !== schedId);
@@ -578,14 +639,23 @@ console.info("EndoMe meds build v3");
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      toast(id ? "Medication updated" : "Medication added", "ok");
-      // If we just created a new med, swap into edit mode so the user can add a schedule.
-      if (!id && res.id) {
-        await load();
-        const created = meds.find((x) => x.id === res.id);
-        if (created) openMedModal(created);
-        return;
+      // If the user queued any schedule rows BEFORE the med was saved
+      // (negative placeholder ids), persist them now that we have a med id.
+      // Either path — newly created med or existing med being edited.
+      const newMedId = res.id || id;
+      const pending = editingSchedules.filter((s) => s.id < 0);
+      if (newMedId && pending.length) {
+        for (const s of pending) {
+          try {
+            await fetchJson(`/api/me/medications/${newMedId}/schedules`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ daysMask: s.daysMask, timeOfDay: s.timeOfDay }),
+            });
+          } catch (err) { /* swallow per-row, keep going */ }
+        }
       }
+      toast(id ? "Medication updated" : "Medication added", "ok");
       closeMedModal();
       await load();
     } catch (err) {
