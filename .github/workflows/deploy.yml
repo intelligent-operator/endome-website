@@ -37,6 +37,7 @@ jobs:
       # only runtime dep is wrangler, pinned by minor in package.json.
       - run: npm install --no-audit --no-fund
       - name: Apply D1 migrations
+        continue-on-error: true
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
