@@ -32,7 +32,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci
+      # `npm install` (not `npm ci`) — we don't commit a package-lock.json,
+      # and `npm ci` exits 1 without one, which blocks every deploy. The
+      # only runtime dep is wrangler, pinned by minor in package.json.
+      - run: npm install --no-audit --no-fund
       - name: Apply D1 migrations
         uses: cloudflare/wrangler-action@v3
         with:
