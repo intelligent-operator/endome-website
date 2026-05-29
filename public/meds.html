@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1779934116" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/meds.css?v=1779934116" />
+  <link rel="stylesheet" href="/meds.css?v=1780052889" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -93,6 +93,9 @@
         <button type="button" class="subnav-tab" role="tab" aria-selected="false" data-tab-target="glossary">
           <span class="subnav-emoji">📖</span> Glossary
         </button>
+        <button type="button" class="subnav-tab" role="tab" aria-selected="false" data-tab-target="settings">
+          <span class="subnav-emoji">⚙️</span> Settings
+        </button>
       </nav>
 
       <!-- ===== My routine tab — schedule + medications list ===== -->
@@ -142,6 +145,37 @@
             <div class="glossary-filters" id="glossary-filters"></div>
           </div>
           <ul class="glossary-list" id="glossary-list"></ul>
+        </section>
+      </div>
+
+      <!-- ===== Settings tab — per-user medication behaviour ===== -->
+      <div data-tab="settings" hidden>
+        <section class="community-section">
+          <div class="section-head">
+            <h2>Settings</h2>
+            <span class="section-hint">How EndoMe handles your scheduled doses</span>
+          </div>
+          <form id="med-prefs-form" class="med-prefs-form">
+            <p class="prefs-intro">Pick one — these settings apply to every medication with a recurring schedule.</p>
+            <label class="prefs-row">
+              <input type="radio" name="dosePolicy" value="notify" checked />
+              <div class="prefs-row-text">
+                <strong>🔔 Notify me at each scheduled time</strong>
+                <em>I'll tap <strong>Taken</strong> or <strong>Missed</strong> myself. Nothing is assumed.</em>
+              </div>
+            </label>
+            <label class="prefs-row">
+              <input type="radio" name="dosePolicy" value="auto" />
+              <div class="prefs-row-text">
+                <strong>✅ Auto-mark taken when the scheduled time passes</strong>
+                <em>EndoMe assumes I took it. I can still manually mark a dose missed.</em>
+              </div>
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save settings</button>
+              <p class="form-status" id="med-prefs-status" role="status"></p>
+            </div>
+          </form>
         </section>
       </div>
 
@@ -327,6 +361,6 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
-  <script src="/meds.js?v=1779934116" defer></script>
+  <script src="/meds.js?v=1780052889" defer></script>
 </body>
 </html>

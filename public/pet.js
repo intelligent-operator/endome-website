@@ -336,6 +336,9 @@
     stateTimer = setInterval(() => {
       const next = ambientState();
       applyState(next);
+      // While resting the pet should not move, play, or even shift state —
+      // the 💤 bubble + closed eyes do the talking. Skip every animation.
+      if (pet?.restActive) return;
       if (next === "walk") wander();
       else if (next === "play_with_toy") goPlayWithToy();
       else if (next === "sleep") {
@@ -352,6 +355,11 @@
   }
 
   function ambientState() {
+    // Rest mode wins everything — the user has explicitly asked the pet to
+    // rest with them. Pet stays put with the 💤 bubble until the user ends
+    // rest mode or interacts directly (touch resets lastUserTouchTs but
+    // restActive only flips via the API call).
+    if (pet?.restActive) return "sleep";
     const r = Math.random();
     // Need-driven states always win
     if (pet.happiness < 30) return r < 0.5 ? "sad" : "sleep";

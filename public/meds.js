@@ -91,17 +91,23 @@ console.info("EndoMe meds build v3");
       : "⚡ Take whenever needed";
     const c = m.community || { loves: 0, downs: 0, users: 0 };
     const mine = m.myReaction;
+    // If the med has recurring schedules, the meta line should reflect that
+    // ("Mon–Sun · 17:30") instead of the raw frequency enum ("As needed").
+    // The 📅 pill below still shows the full schedule list for >1 entry.
+    const cadenceLabel = m.schedules && m.schedules.length
+      ? `${formatDays(m.schedules[0].daysMask)} · ${m.schedules[0].timeOfDay}${m.schedules.length > 1 ? ` +${m.schedules.length - 1} more` : ""}`
+      : (FREQ_LABEL[m.frequency] || m.frequency);
     return `<li class="med-card">
       <div class="med-card-head">
         <div class="med-card-icon">${KIND_ICO[m.kind] || "💊"}</div>
         <div class="med-card-title">
           <strong>${escapeHtml(m.name)}</strong>
-          <span class="med-card-meta">${escapeHtml(m.dose || "—")} · ${escapeHtml(FREQ_LABEL[m.frequency] || m.frequency)}${m.brand ? " · " + escapeHtml(m.brand) : ""}</span>
+          <span class="med-card-meta">${escapeHtml(m.dose || "—")} · ${escapeHtml(cadenceLabel)}${m.brand ? " · " + escapeHtml(m.brand) : ""}</span>
         </div>
         <div class="med-card-status ${okNow ? "ok" : "wait"}">${nextLabel}</div>
       </div>
       ${m.notes ? `<p class="med-notes">${escapeHtml(m.notes)}</p>` : ""}
-      ${schedSummary(m.schedules)}
+      ${m.schedules && m.schedules.length > 1 ? schedSummary(m.schedules) : ""}
       ${m.insight ? `<div class="med-insight"><span class="med-insight-tag">ℹ️ Why this</span><p>${escapeHtml(m.insight)}</p>${m.link ? `<a href="${escapeHtml(m.link)}" target="_blank" rel="noopener">More info →</a>` : ""}</div>` : (m.link ? `<a class="med-link" href="${escapeHtml(m.link)}" target="_blank" rel="noopener">Reference →</a>` : "")}
       <div class="med-community" data-name="${escapeHtml(m.name)}">
         <span class="med-community-stat" data-tip="${c.users} ${c.users === 1 ? "person is" : "people are"} currently tracking this med on EndoMe">👥 ${c.users} ${c.users === 1 ? "person" : "people"} taking this</span>
@@ -114,7 +120,7 @@ console.info("EndoMe meds build v3");
       <div class="med-card-foot">
         <span class="med-last">Last taken: ${lastTaken}</span>
         <div class="med-card-actions">
-          <button class="btn btn-primary small" data-log="${m.id}" ${okNow ? "" : "disabled"}>Log dose</button>
+          <button class="btn btn-primary small" data-log="${m.id}" ${okNow || (m.schedules && m.schedules.length) ? "" : "disabled"}>Log dose</button>
           <button class="btn-soft small" data-edit="${m.id}">Edit</button>
           <button class="btn-soft small danger" data-delete="${m.id}">Remove</button>
         </div>
@@ -978,4 +984,39 @@ console.info("EndoMe meds build v3");
     requestAnimationFrame(() => t.classList.add("in"));
     setTimeout(() => { t.classList.remove("in"); setTimeout(() => t.remove(), 250); }, 2400);
   }
+
+  // --- Settings tab — dose policy preference --------------------------
+  async function loadMedPrefs() {
+    try {
+      const data = await fetchJson("/api/me/med-prefs");
+      const form = document.getElementById("med-prefs-form");
+      if (!form) return;
+      const policy = data.autoMarkTaken ? "auto" : "notify";
+      const radio = form.querySelector(`input[name="dosePolicy"][value="${policy}"]`);
+      if (radio) radio.checked = true;
+    } catch {}
+  }
+  document.getElementById("med-prefs-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const policy = form.querySelector("input[name='dosePolicy']:checked")?.value || "notify";
+    const status = document.getElementById("med-prefs-status");
+    status.textContent = "Saving…"; status.className = "form-status";
+    try {
+      await fetchJson("/api/me/med-prefs", {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          autoMarkTaken: policy === "auto" ? 1 : 0,
+          notifyAtDose:  policy === "notify" ? 1 : 0,
+        }),
+      });
+      status.textContent = "Saved."; status.className = "form-status ok";
+      toast("Settings saved", "ok");
+    } catch (err) {
+      status.textContent = err.message || "Couldn't save."; status.className = "form-status err";
+    }
+  });
+  // Wire on initial load + every time the user opens the Settings tab.
+  loadMedPrefs();
+  document.querySelectorAll("[data-tab-target='settings']").forEach((b) => b.addEventListener("click", loadMedPrefs));
 })();

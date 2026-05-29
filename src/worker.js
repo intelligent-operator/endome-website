@@ -143,6 +143,12 @@ export default {
           if (url.pathname === "/api/me/medications/timetable" && request.method === "GET") {
             return jsonHeaders(await getMedicationTimetable(env, user));
           }
+          if (url.pathname === "/api/me/med-prefs" && request.method === "GET") {
+            return jsonHeaders(await getMedPrefs(env, user));
+          }
+          if (url.pathname === "/api/me/med-prefs" && request.method === "PUT") {
+            return jsonHeaders(await updateMedPrefs(request, env, user));
+          }
           const medSchedMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)\/schedules(?:\/(\d+))?$/);
           if (medSchedMatch) {
             const medId = +medSchedMatch[1];
@@ -1320,6 +1326,8 @@ const ALLOWED_SYMPTOMS = new Set([
   // generic
   "pain", "fatigue", "bloating", "nausea", "cramps",
   "headache", "mood", "sleep", "other",
+  // specific moods (replaced the generic "mood" chip in 2026-05)
+  "mood_happy", "mood_sad", "mood_angry", "mood_anxious", "mood_irritable", "mood_numb",
   // female-health / endo-aware
   "pelvic_pain", "back_pain", "breast_tender", "hot_flash",
   "painful_urination", "painful_bowel", "painful_sex",
@@ -4632,8 +4640,43 @@ async function ensureMedSchema(env) {
     ")",
     "CREATE INDEX IF NOT EXISTS idx_medsched_user ON medication_schedules(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_medsched_med ON medication_schedules(medication_id)",
+    // Per-user behaviour: how should scheduled doses be handled when the
+    // user doesn't tap "taken" themselves? Two flags, mutually informative
+    // (the UI presents them as one of two policies).
+    "CREATE TABLE IF NOT EXISTS user_med_prefs (" +
+    "  user_id TEXT PRIMARY KEY," +
+    "  auto_mark_taken INTEGER NOT NULL DEFAULT 0," +   // 1 = assume taken once scheduled time passes
+    "  notify_at_dose  INTEGER NOT NULL DEFAULT 1," +   // 1 = surface a notification asking taken/missed
+    "  updated_at INTEGER NOT NULL" +
+    ")",
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+async function getMedPrefs(env, user) {
+  await ensureMedSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT auto_mark_taken, notify_at_dose FROM user_med_prefs WHERE user_id = ?"
+  ).bind(user.id).first().catch(() => null);
+  return json({
+    autoMarkTaken: r?.auto_mark_taken ? 1 : 0,
+    notifyAtDose:  r ? (r.notify_at_dose ? 1 : 0) : 1, // default ON
+  });
+}
+
+async function updateMedPrefs(request, env, user) {
+  await ensureMedSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const auto = body.autoMarkTaken ? 1 : 0;
+  const notify = body.notifyAtDose ? 1 : 0;
+  const now = nowSec();
+  await env.DB.prepare(
+    "INSERT INTO user_med_prefs (user_id, auto_mark_taken, notify_at_dose, updated_at) " +
+    "VALUES (?, ?, ?, ?) " +
+    "ON CONFLICT(user_id) DO UPDATE SET auto_mark_taken = ?, notify_at_dose = ?, updated_at = ?"
+  ).bind(user.id, auto, notify, now, auto, notify, now).run();
+  return json({ ok: true, autoMarkTaken: auto, notifyAtDose: notify });
 }
 
 function medRow(r, lastTakenAt = null) {
