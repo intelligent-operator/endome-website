@@ -149,6 +149,9 @@ export default {
           if (url.pathname === "/api/me/med-prefs" && request.method === "PUT") {
             return jsonHeaders(await updateMedPrefs(request, env, user));
           }
+          if (url.pathname === "/api/me/doses-due" && request.method === "GET") {
+            return jsonHeaders(await getDosesDue(env, user));
+          }
           const medSchedMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)\/schedules(?:\/(\d+))?$/);
           if (medSchedMatch) {
             const medId = +medSchedMatch[1];
@@ -164,6 +167,7 @@ export default {
             if (!action      && request.method === "PUT")    return jsonHeaders(await updateMedication(request, env, user, id));
             if (!action      && request.method === "DELETE") return jsonHeaders(await deleteMedication(env, user, id));
             if (action === "log"  && request.method === "POST") return jsonHeaders(await logMedicationDose(request, env, user, id));
+            if (action === "miss" && request.method === "POST") return jsonHeaders(await missMedicationDose(request, env, user, id));
             if (action === "logs" && request.method === "GET")  return jsonHeaders(await getMedicationLogs(env, user, id));
           }
 
@@ -487,11 +491,20 @@ export default {
   },
 
   // Cloudflare cron entrypoint — see [triggers] in wrangler.toml.
-  // Fires once a month and regenerates the "monthly-summary" insight for
-  // every active user so they have a fresh write-up waiting next time they
-  // open /my-insights.
+  // Two crons share this one handler; we dispatch on event.cron.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runMonthlyInsightsForAllUsers(env, ctx, event));
+    if (event.cron === "0 7 1 * *") {
+      // 1st of month, 07:00 UTC — regenerate the "monthly-summary" insight
+      // for every active user so it's fresh next time they open the page.
+      ctx.waitUntil(runMonthlyInsightsForAllUsers(env, ctx, event));
+      return;
+    }
+    if (event.cron === "*/15 * * * *") {
+      // Every 15 min — for users on the "assume taken" policy, log any
+      // scheduled doses whose time has passed within the last 15 min.
+      ctx.waitUntil(autoMarkScheduledDoses(env, ctx));
+      return;
+    }
   },
 };
 
@@ -4597,10 +4610,17 @@ async function ensureMedSchema(env) {
     "  medication_id INTEGER NOT NULL," +
     "  taken_at INTEGER NOT NULL," +
     "  dose_text TEXT," +
-    "  notes TEXT" +
+    "  notes TEXT," +
+    "  status TEXT NOT NULL DEFAULT 'taken'," +     // 'taken' | 'auto_taken' | 'missed'
+    "  scheduled_for INTEGER" +                     // unix sec of the scheduled slot, if any
     ")",
     "CREATE INDEX IF NOT EXISTS idx_medlogs_med ON medication_logs(medication_id, taken_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_medlogs_user ON medication_logs(user_id, taken_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_medlogs_slot ON medication_logs(medication_id, scheduled_for)",
+    // Existing installs need the new columns. SQLite errors silently if the
+    // column already exists, which the catch-block swallows.
+    "ALTER TABLE medication_logs ADD COLUMN status TEXT NOT NULL DEFAULT 'taken'",
+    "ALTER TABLE medication_logs ADD COLUMN scheduled_for INTEGER",
     // Community ratings: one row per (user, normalised med name).
     "CREATE TABLE IF NOT EXISTS med_reactions (" +
     "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -4845,10 +4865,112 @@ async function logMedicationDose(request, env, user, id) {
   }
   const doseText = sanitizeText(body.doseText, 60);
   const notes    = sanitizeText(body.notes, 500);
+  // Honour `scheduledFor` if the client knows which slot it's confirming —
+  // lets the doses-due UI mark the right slot taken without dupes.
+  const scheduledFor = Number.isFinite(+body.scheduledFor) ? +body.scheduledFor : null;
   await env.DB.prepare(
-    "INSERT INTO medication_logs (user_id, medication_id, taken_at, dose_text, notes) VALUES (?, ?, ?, ?, ?)"
-  ).bind(user.id, id, nowSec(), doseText, notes).run();
+    "INSERT INTO medication_logs (user_id, medication_id, taken_at, dose_text, notes, status, scheduled_for) " +
+    "VALUES (?, ?, ?, ?, ?, 'taken', ?)"
+  ).bind(user.id, id, nowSec(), doseText, notes, scheduledFor).run();
   return json({ ok: true, name: med.name });
+}
+
+// User explicitly marks a scheduled dose as missed. Writes a row with
+// status='missed' so adherence stats can distinguish "forgot" from
+// "haven't logged yet". Idempotent per scheduled slot — repeated calls
+// for the same scheduledFor are a no-op.
+async function missMedicationDose(request, env, user, id) {
+  await ensureMedSchema(env);
+  const body = await readJsonSafe(request) || {};
+  const med = await env.DB.prepare(
+    "SELECT id, name FROM medications WHERE id = ? AND user_id = ? AND is_active = 1"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!med) return json({ error: "Medication not found" }, 404);
+
+  const scheduledFor = Number.isFinite(+body.scheduledFor) ? +body.scheduledFor : null;
+  if (!scheduledFor) return json({ error: "scheduledFor required" }, 400);
+
+  // De-dupe: if a row already exists for this slot, leave it alone.
+  const existing = await env.DB.prepare(
+    "SELECT id, status FROM medication_logs WHERE medication_id = ? AND scheduled_for = ? LIMIT 1"
+  ).bind(id, scheduledFor).first().catch(() => null);
+  if (existing) return json({ ok: true, alreadyLogged: existing.status });
+
+  await env.DB.prepare(
+    "INSERT INTO medication_logs (user_id, medication_id, taken_at, status, scheduled_for) " +
+    "VALUES (?, ?, ?, 'missed', ?)"
+  ).bind(user.id, id, nowSec(), scheduledFor).run();
+  return json({ ok: true, name: med.name });
+}
+
+// Build today's dose roster for the signed-in user. Returns one entry per
+// scheduled slot today, each with its status (taken / auto_taken / missed /
+// pending / upcoming). The dashboard banner + bell rely on this.
+//
+// "Pending" = scheduled time has passed (or is within 30 min) but no log
+// row exists. These are the ones users need to act on.
+// "Upcoming" = later today; shown for context but not nagged about.
+async function getDosesDue(env, user) {
+  await ensureMedSchema(env);
+  const now = nowSec();
+  const today = new Date(now * 1000);
+  const todayStart = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() / 1000);
+  const todayEnd = todayStart + 86400;
+  const dayBit = 1 << today.getDay();
+
+  // Schedules that fire today (days_mask has today's bit set).
+  const slots = await env.DB.prepare(
+    "SELECT s.id AS sched_id, s.medication_id, s.time_of_day, " +
+    "       m.name, m.dose, m.kind " +
+    "FROM medication_schedules s JOIN medications m ON m.id = s.medication_id " +
+    "WHERE s.user_id = ? AND m.is_active = 1 AND (s.days_mask & ?) != 0"
+  ).bind(user.id, dayBit).all().catch(() => ({ results: [] }));
+
+  // Today's existing logs, keyed by scheduled_for so we can pair them up.
+  const logs = await env.DB.prepare(
+    "SELECT medication_id, scheduled_for, status, taken_at FROM medication_logs " +
+    "WHERE user_id = ? AND taken_at >= ? AND taken_at < ?"
+  ).bind(user.id, todayStart, todayEnd).all().catch(() => ({ results: [] }));
+  const logByKey = new Map();
+  for (const l of (logs.results || [])) {
+    if (l.scheduled_for) logByKey.set(`${l.medication_id}:${l.scheduled_for}`, l);
+  }
+
+  const out = [];
+  for (const s of (slots.results || [])) {
+    const [h, m] = String(s.time_of_day).split(":").map((n) => parseInt(n, 10));
+    const slotAt = todayStart + (h || 0) * 3600 + (m || 0) * 60;
+    const log = logByKey.get(`${s.medication_id}:${slotAt}`);
+    let status;
+    if (log) status = log.status;
+    else if (slotAt > now + 30 * 60) status = "upcoming";   // > 30 min away
+    else status = "pending";                                // due now or overdue
+    out.push({
+      medicationId: s.medication_id,
+      scheduleId: s.sched_id,
+      name: s.name,
+      kind: s.kind || "medication",
+      dose: s.dose || null,
+      timeOfDay: s.time_of_day,
+      scheduledFor: slotAt,
+      status,
+    });
+  }
+  out.sort((a, b) => a.scheduledFor - b.scheduledFor);
+
+  // Pull med-prefs so the UI knows the user's chosen policy.
+  const prefs = await env.DB.prepare(
+    "SELECT auto_mark_taken, notify_at_dose FROM user_med_prefs WHERE user_id = ?"
+  ).bind(user.id).first().catch(() => null);
+
+  return json({
+    doses: out,
+    pendingCount: out.filter((d) => d.status === "pending").length,
+    prefs: {
+      autoMarkTaken: prefs?.auto_mark_taken ? 1 : 0,
+      notifyAtDose:  prefs ? (prefs.notify_at_dose ? 1 : 0) : 1,
+    },
+  });
 }
 
 async function getMedicationLogs(env, user, id) {
@@ -8048,6 +8170,55 @@ async function listInsightConfigs(env) {
 // Anything that fails for a single user is swallowed so one bad row doesn't
 // poison the rest of the batch.
 // =============================================================================
+// 15-minute cron — for every user with `auto_mark_taken = 1`, walk their
+// recurring schedules and insert a `status='auto_taken'` log row for any
+// slot whose scheduled time has passed in the last hour and that doesn't
+// already have a log. Bounded lookback so a long outage doesn't backfill
+// the entire week.
+async function autoMarkScheduledDoses(env, ctx) {
+  if (!env.DB) return;
+  try { await ensureMedSchema(env); } catch {}
+  const now = nowSec();
+  const lookbackSec = 60 * 60; // 1 hour
+  const since = now - lookbackSec;
+
+  // Today's bit (Sun=1 ... Sat=64).
+  const today = new Date(now * 1000);
+  const dayBit = 1 << today.getDay();
+  const todayStart = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() / 1000);
+
+  const candidates = await env.DB.prepare(
+    "SELECT s.user_id, s.medication_id, s.time_of_day, m.name " +
+    "FROM medication_schedules s " +
+    "JOIN medications m ON m.id = s.medication_id AND m.is_active = 1 " +
+    "JOIN user_med_prefs p ON p.user_id = s.user_id " +
+    "WHERE (s.days_mask & ?) != 0 AND p.auto_mark_taken = 1"
+  ).bind(dayBit).all().catch(() => ({ results: [] }));
+
+  let inserted = 0;
+  for (const c of (candidates.results || [])) {
+    const [h, m] = String(c.time_of_day).split(":").map((n) => parseInt(n, 10));
+    const slotAt = todayStart + (h || 0) * 3600 + (m || 0) * 60;
+    // Only act on slots inside our look-back window (past hour, not future).
+    if (slotAt > now || slotAt < since) continue;
+
+    // Already logged? Skip.
+    const existing = await env.DB.prepare(
+      "SELECT 1 FROM medication_logs WHERE medication_id = ? AND scheduled_for = ? LIMIT 1"
+    ).bind(c.medication_id, slotAt).first().catch(() => null);
+    if (existing) continue;
+
+    try {
+      await env.DB.prepare(
+        "INSERT INTO medication_logs (user_id, medication_id, taken_at, status, scheduled_for) " +
+        "VALUES (?, ?, ?, 'auto_taken', ?)"
+      ).bind(c.user_id, c.medication_id, now, slotAt).run();
+      inserted++;
+    } catch {}
+  }
+  if (inserted) console.log(`[auto-mark doses] inserted ${inserted} auto_taken rows`);
+}
+
 async function runMonthlyInsightsForAllUsers(env, ctx, event) {
   if (!env.DB) return;
   await ensureInsightSchema(env);

@@ -56,7 +56,11 @@ enabled = true
 # window for the EndoMe insight engine to refresh every user's monthly summary
 # (~5pm AEST / 6pm AEDT — done well before anyone opens the app for the day).
 [triggers]
-crons = ["0 7 1 * *"]
+# 1st of month 07:00 UTC: monthly insight write-ups for every active user.
+# Every 15 min: auto-mark scheduled doses taken for users on the
+#               "assume taken" policy. 15-min granularity is fine — a med
+#               set for 17:30 gets logged between 17:30 and 17:44.
+crons = ["0 7 1 * *", "*/15 * * * *"]
 
 # ----------------------------------------------------------------------
 # D1 — relational storage for users, daily logs, symptoms, pets, notifs.

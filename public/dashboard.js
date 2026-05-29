@@ -113,6 +113,87 @@ function render() {
   renderTodaySymptoms();
   renderStreakWeek();
   renderStoryMini();
+  renderDosesDue();
+}
+
+// --- Doses due banner ----------------------------------------------------
+// Pulls today's scheduled doses + their current status. Renders a card
+// for every dose that's pending now (or recently overdue). Includes
+// Taken / Missed buttons that post back and re-render.
+async function renderDosesDue() {
+  const slot = document.getElementById("doses-due-slot");
+  if (!slot) return;
+  let data;
+  try {
+    const r = await fetch("/api/me/doses-due", { credentials: "same-origin" });
+    if (!r.ok) { slot.innerHTML = ""; return; }
+    data = await r.json();
+  } catch { slot.innerHTML = ""; return; }
+
+  const pending = (data.doses || []).filter((d) => d.status === "pending");
+  // Bell badge — show the pending count if any.
+  const badge = document.querySelector("[data-bind='notifCount']");
+  if (badge) {
+    if (pending.length) { badge.textContent = String(pending.length); badge.hidden = false; }
+    else { badge.hidden = true; }
+  }
+  if (!pending.length) { slot.innerHTML = ""; return; }
+
+  const KIND_ICO = { medication: "💊", supplement: "🌿", vitamin: "💚", hormone: "🌸", herb: "🍃", other: "💊" };
+  slot.innerHTML = `
+    <section class="doses-due-card">
+      <header class="doses-due-head">
+        <h3>🔔 Doses due today</h3>
+        <span class="doses-due-sub">${pending.length} waiting · tap to confirm</span>
+      </header>
+      <ul class="doses-due-list">
+        ${pending.map((d) => `
+          <li class="doses-due-row" data-med="${d.medicationId}" data-slot="${d.scheduledFor}">
+            <span class="doses-due-ico">${KIND_ICO[d.kind] || "💊"}</span>
+            <div class="doses-due-info">
+              <strong>${escapeHtml(d.name)}</strong>
+              <span>${escapeHtml(d.timeOfDay)}${d.dose ? " · " + escapeHtml(d.dose) : ""}</span>
+            </div>
+            <div class="doses-due-actions">
+              <button type="button" class="btn-soft small" data-dose-taken>✅ Taken</button>
+              <button type="button" class="btn-soft small danger" data-dose-missed>✗ Missed</button>
+            </div>
+          </li>`).join("")}
+      </ul>
+    </section>`;
+
+  slot.querySelectorAll(".doses-due-row").forEach((row) => {
+    const medId = row.dataset.med;
+    const scheduledFor = +row.dataset.slot;
+    const taken  = row.querySelector("[data-dose-taken]");
+    const missed = row.querySelector("[data-dose-missed]");
+    const act = async (url, body, label) => {
+      taken.disabled = missed.disabled = true;
+      const me = label === "Taken" ? taken : missed;
+      me.textContent = "Saving…";
+      try {
+        const r = await fetch(url, {
+          method: "POST", credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error("save failed");
+        row.classList.add("done");
+        row.querySelector(".doses-due-actions").innerHTML =
+          `<span class="dose-confirmed">${label === "Taken" ? "✅ Logged" : "✗ Missed"}</span>`;
+        setTimeout(renderDosesDue, 600);
+      } catch {
+        taken.disabled = missed.disabled = false;
+        me.textContent = label === "Taken" ? "✅ Taken" : "✗ Missed";
+      }
+    };
+    taken.addEventListener("click", () => act(
+      `/api/me/medications/${medId}/log`, { scheduledFor }, "Taken"
+    ));
+    missed.addEventListener("click", () => act(
+      `/api/me/medications/${medId}/miss`, { scheduledFor }, "Missed"
+    ));
+  });
 }
 
 // --- Pet art (matches /pet page) -----------------------------------------
