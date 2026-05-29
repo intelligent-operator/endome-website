@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1779934116" />
-  <link rel="stylesheet" href="/acp.css?v=1779969382" />
+  <link rel="stylesheet" href="/acp.css?v=1780049142" />
 </head>
 <body class="acp-body">
   <header class="acp-topbar">
@@ -107,6 +107,17 @@
         <button class="acp-btn" id="btn-runs-refresh">Refresh</button>
         <div id="runs-out" style="margin-top:12px"></div>
       </div>
+
+      <div class="acp-card" style="padding:18px;margin-top:14px">
+        <p style="margin:0 0 8px;font-size:14px;color:#3a2330"><strong>Configure insight prompts</strong></p>
+        <p style="margin:0 0 12px;font-size:13px;color:#5a3a48;line-height:1.55">
+          Every card on <code>/my-insights</code> is driven by the prompt template + data scope you set here.
+          When a user clicks <strong>Refresh</strong> on a card, the worker gathers their data (the slices
+          you tick below), substitutes it into <code>{context}</code>, sends the whole thing to the engine,
+          and writes the response back as markdown. Changes take effect on the next run.
+        </p>
+        <ul class="insight-config-list" id="insight-config-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px"></ul>
+      </div>
     </section>
 
     <!-- SYSTEM -->
@@ -164,8 +175,68 @@
     </div>
   </div>
 
+  <!-- Insight prompt editor -->
+  <div class="acp-modal" id="cfg-modal" aria-hidden="true">
+    <div class="acp-modal-backdrop" data-close-cfg></div>
+    <div class="acp-modal-card" style="max-width:760px">
+      <button class="acp-modal-close" data-close-cfg>×</button>
+      <h3 id="cfg-title">Edit insight</h3>
+      <p class="acp-modal-sub">Tune the prompt, change which data slices it sees, and decide how often it refreshes.</p>
+      <form id="cfg-form" novalidate>
+        <input type="hidden" name="slug" />
+        <div style="display:grid;grid-template-columns:1fr 110px;gap:12px">
+          <label class="acp-field"><span>Title</span>
+            <input type="text" name="title" maxlength="140" required />
+          </label>
+          <label class="acp-field"><span>Emoji</span>
+            <input type="text" name="emoji" maxlength="4" />
+          </label>
+        </div>
+        <label class="acp-field"><span>Description <em style="color:#7a5f6c;font-weight:400">(short subtitle shown on the user's card)</em></span>
+          <textarea name="description" rows="2" maxlength="400"></textarea>
+        </label>
+        <label class="acp-field">
+          <span>Prompt template <em style="color:#7a5f6c;font-weight:400">(use <code>{context}</code> as the placeholder for the user's data)</em></span>
+          <textarea name="promptTemplate" rows="12" maxlength="8000" required style="font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5"></textarea>
+        </label>
+        <div class="acp-field">
+          <span>Data scope <em style="color:#7a5f6c;font-weight:400">(tick what gets bundled into <code>{context}</code>)</em></span>
+          <div id="cfg-scope-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-top:6px">
+            <label class="acp-scope-chip"><input type="checkbox" value="symptoms_30d"> Symptoms (30d)</label>
+            <label class="acp-scope-chip"><input type="checkbox" value="daily_logs_30d"> Daily check-ins (30d)</label>
+            <label class="acp-scope-chip"><input type="checkbox" value="medications"> Current medications</label>
+            <label class="acp-scope-chip"><input type="checkbox" value="medication_logs_30d"> Dose adherence (30d)</label>
+            <label class="acp-scope-chip"><input type="checkbox" value="test_results"> Test results</label>
+            <label class="acp-scope-chip"><input type="checkbox" value="appointments_60d"> Appointments (±60d)</label>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <label class="acp-field"><span>Refresh every</span>
+            <select name="refreshHours">
+              <option value="1">1 hour</option>
+              <option value="6">6 hours</option>
+              <option value="24" selected>24 hours</option>
+              <option value="72">3 days</option>
+              <option value="168">7 days</option>
+              <option value="720">30 days (monthly)</option>
+            </select>
+          </label>
+          <label class="acp-field"><span>Model override <em style="color:#7a5f6c;font-weight:400">(blank = use BEDROCK_MODEL_ID)</em></span>
+            <input type="text" name="model" maxlength="200" placeholder="e.g. au.anthropic.claude-opus-4-8" />
+          </label>
+        </div>
+        <label class="acp-field" style="display:flex;align-items:center;gap:10px;flex-direction:row">
+          <input type="checkbox" name="enabled" checked />
+          <span><strong>Enabled</strong> <em style="color:#7a5f6c;font-weight:400">— disabled insights are hidden from users</em></span>
+        </label>
+        <button type="submit" class="acp-btn primary full">Save changes</button>
+        <p class="acp-form-status" id="cfg-status"></p>
+      </form>
+    </div>
+  </div>
+
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/acp.js?v=1779969382" defer></script>
+  <script src="/acp.js?v=1780049142" defer></script>
 </body>
 </html>

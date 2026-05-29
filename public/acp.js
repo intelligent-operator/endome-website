@@ -278,7 +278,7 @@
 
   // --- Insights tab ----------------------------------------------------
   async function loadInsightsTab() {
-    await Promise.all([paintEngineStatus(), loadRecentRuns()]);
+    await Promise.all([paintEngineStatus(), loadRecentRuns(), loadInsightConfigs()]);
   }
 
   async function paintEngineStatus() {
@@ -391,8 +391,124 @@
   }
   document.getElementById("btn-runs-refresh")?.addEventListener("click", loadRecentRuns);
 
+  // --- Insight config editor (the prompt admin) ------------------------
+  let insightConfigs = [];
+  async function loadInsightConfigs() {
+    const list = document.getElementById("insight-config-list");
+    if (!list) return;
+    list.innerHTML = `<li style="color:#7a5f6c;font-size:13px">Loading…</li>`;
+    try {
+      const data = await fetchJson("/api/acp/insights");
+      insightConfigs = data.configs || [];
+      if (!insightConfigs.length) {
+        list.innerHTML = `<li style="color:#7a5f6c;font-size:13px">No insights configured.</li>`;
+        return;
+      }
+      list.innerHTML = insightConfigs.map(insightConfigRow).join("");
+      list.querySelectorAll("[data-edit-cfg]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const cfg = insightConfigs.find((c) => c.slug === btn.dataset.editCfg);
+          if (cfg) openCfgModal(cfg);
+        });
+      });
+    } catch (err) {
+      list.innerHTML = `<li style="color:#c4344b;font-size:13px">${escapeHtml(err.message || "Couldn't load configs")}</li>`;
+    }
+  }
+
+  function insightConfigRow(c) {
+    const scope = (c.dataScope || []).join(", ") || "—";
+    const refresh = c.refreshHours >= 720 ? "30 days"
+                  : c.refreshHours >= 168 ? "7 days"
+                  : c.refreshHours >= 72 ? "3 days"
+                  : c.refreshHours >= 24 ? "24 hours"
+                  : c.refreshHours + "h";
+    return `<li style="background:#fff5f9;border:1px solid #ffe2eb;border-radius:14px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start">
+      <span style="font-size:28px;line-height:1">${escapeHtml(c.emoji || "✨")}</span>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <strong style="font-size:15px;color:#3a2330">${escapeHtml(c.title)}</strong>
+          <span style="font-size:11px;font-weight:700;color:${c.enabled ? "#2b9b48" : "#a63a3a"};background:${c.enabled ? "#dff5e0" : "#ffe0e0"};padding:3px 8px;border-radius:999px">${c.enabled ? "ENABLED" : "DISABLED"}</span>
+        </div>
+        <p style="margin:4px 0 6px;font-size:12px;color:#7a5f6c">slug <code>${escapeHtml(c.slug)}</code> · refresh ${escapeHtml(refresh)} · model ${c.model ? `<code>${escapeHtml(c.model)}</code>` : "default"}</p>
+        <p style="margin:0 0 6px;font-size:12px;color:#7a5f6c">scope: ${escapeHtml(scope)}</p>
+        <p style="margin:0 0 10px;font-size:12px;color:#5a3a48;line-height:1.5;font-family:ui-monospace,Menlo,monospace;background:#fff;border:1px solid #ffe2eb;padding:8px 10px;border-radius:8px;max-height:84px;overflow:hidden">${escapeHtml(String(c.promptTemplate || "").slice(0, 320))}${c.promptTemplate?.length > 320 ? "…" : ""}</p>
+        <button type="button" class="acp-btn" data-edit-cfg="${escapeHtml(c.slug)}">Edit prompt</button>
+      </div>
+    </li>`;
+  }
+
+  const cfgModal = document.getElementById("cfg-modal");
+  function openCfgModal(cfg) {
+    const form = document.getElementById("cfg-form");
+    form.reset();
+    form.slug.value = cfg.slug;
+    form.title.value = cfg.title || "";
+    form.emoji.value = cfg.emoji || "";
+    form.description.value = cfg.description || "";
+    form.promptTemplate.value = cfg.promptTemplate || "";
+    form.refreshHours.value = String(cfg.refreshHours || 24);
+    form.model.value = cfg.model || "";
+    form.enabled.checked = !!cfg.enabled;
+    document.querySelectorAll("#cfg-scope-grid input[type='checkbox']").forEach((cb) => {
+      cb.checked = (cfg.dataScope || []).includes(cb.value);
+    });
+    document.getElementById("cfg-title").textContent = `Edit insight — ${cfg.title}`;
+    document.getElementById("cfg-status").textContent = "";
+    cfgModal.classList.add("open");
+    cfgModal.setAttribute("aria-hidden", "false");
+  }
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-close-cfg]")) {
+      cfgModal.classList.remove("open");
+      cfgModal.setAttribute("aria-hidden", "true");
+    }
+  });
+  document.getElementById("cfg-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const slug = form.slug.value;
+    const scope = Array.from(document.querySelectorAll("#cfg-scope-grid input:checked")).map((c) => c.value);
+    const body = {
+      title: form.title.value.trim(),
+      emoji: form.emoji.value.trim() || null,
+      description: form.description.value.trim() || null,
+      promptTemplate: form.promptTemplate.value,
+      dataScope: scope,
+      refreshHours: +form.refreshHours.value,
+      model: form.model.value.trim() || null,
+      enabled: form.enabled.checked,
+    };
+    const status = document.getElementById("cfg-status");
+    status.textContent = "Saving…"; status.style.color = "#7a5f6c";
+    try {
+      await fetchJson(`/api/acp/insights/${encodeURIComponent(slug)}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      toast("Prompt saved. Users see it on their next refresh.", "ok");
+      cfgModal.classList.remove("open");
+      cfgModal.setAttribute("aria-hidden", "true");
+      await loadInsightConfigs();
+    } catch (err) {
+      status.textContent = err.message || "Couldn't save."; status.style.color = "#c4344b";
+    }
+  });
+
   // --- Bootstrap -------------------------------------------------------
-  loadUsers();
+  // Honour `#insights`, `#system`, etc. in the URL so deep-links from
+  // /my-insights ("→ Admin Control Panel → Insights") land on the right tab.
+  const hashTab = (location.hash || "").replace(/^#/, "").toLowerCase();
+  if (hashTab && views[hashTab]) {
+    document.querySelectorAll(".acp-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === hashTab));
+    showView(hashTab);
+    if (hashTab === "users") loadUsers();
+    if (hashTab === "circles") loadCircles();
+    if (hashTab === "insights") loadInsightsTab();
+  } else {
+    loadUsers();
+  }
 
   // --- Helpers ---------------------------------------------------------
   async function fetchJson(url, init = {}) {

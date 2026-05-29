@@ -128,11 +128,25 @@
 }
 .acp-field{display:block;margin-bottom:14px}
 .acp-field > span{display:block;font-size:13px;font-weight:600;color:#3a2330;margin-bottom:6px}
-.acp-field select{
+.acp-field select,
+.acp-field input[type="text"],
+.acp-field textarea{
   width:100%;padding:11px 14px;border:1px solid #ffd6e0;border-radius:12px;
   font-family:inherit;font-size:14px;background:#fff5f8;outline:none;box-sizing:border-box;
 }
-.acp-field select:focus{border-color:#ff4e8a;background:#fff}
+.acp-field textarea{resize:vertical;line-height:1.55}
+.acp-field select:focus,
+.acp-field input:focus,
+.acp-field textarea:focus{border-color:#ff4e8a;background:#fff}
+
+/* Data-scope checkbox chips inside the insight-config modal */
+.acp-scope-chip{
+  display:flex;align-items:center;gap:8px;padding:9px 12px;
+  background:#fff5f8;border:1px solid #ffd6e0;border-radius:10px;
+  font-size:13px;color:#3a2330;cursor:pointer;user-select:none;
+}
+.acp-scope-chip:has(input:checked){background:#ffe6ef;border-color:#ff4e8a;color:#a3174f;font-weight:600}
+.acp-scope-chip input{margin:0;accent-color:#ff4e8a}
 .acp-form-status{margin:10px 0 0;font-size:12px;color:#7a5f6c;text-align:center;min-height:1em}
 .acp-form-status.err{color:#c4344b}
 

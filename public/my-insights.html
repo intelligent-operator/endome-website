@@ -85,87 +85,18 @@
         </ul>
       </section>
 
-      <!-- Admin-only insight config panel — hidden until /api/acp/me confirms admin. -->
+      <!-- Admin-only callout: full prompt editor + engine diagnostics live on /acp. -->
       <section class="community-section admin-only" id="admin-config-section" hidden>
         <div class="section-head">
-          <h2>🛠 Insight configuration <span class="badge">admin</span></h2>
-          <span class="section-hint">Edit the prompts, data scope and refresh cadence for every insight. Changes apply on the next run.</span>
+          <h2>🛠 Admin</h2>
         </div>
-        <p class="section-hint" style="margin:0 0 14px">Engine status, connection tests and recent runs live on the <a href="/acp" style="color:#ff4e8a;font-weight:700">Admin Control Panel → Insights</a>.</p>
-        <ul class="insight-config-list" id="insight-config-list"></ul>
+        <p class="section-hint" style="margin:0">Tune prompts, change data scope, watch engine health and recent runs on the <a href="/acp#insights" style="color:#ff4e8a;font-weight:700">Admin Control Panel → Insights</a>.</p>
       </section>
     </main>
   </div>
 
-  <!-- Insight config edit modal -->
-  <div class="modal" id="cfg-modal" aria-hidden="true" role="dialog">
-    <div class="modal-backdrop" data-close-cfg></div>
-    <div class="modal-card modal-xl cfg-modal-card">
-      <button class="modal-close" type="button" data-close-cfg aria-label="Close">×</button>
-      <header class="modal-h">
-        <span class="modal-emoji">🛠</span>
-        <h3 id="cfg-title">Edit insight</h3>
-        <p>Tune the prompt, change which data slices it sees, and decide how often it refreshes.</p>
-      </header>
-      <form id="cfg-form" novalidate>
-        <input type="hidden" name="slug" />
-        <div class="field-grid-2">
-          <label class="field"><span>Title</span>
-            <input type="text" name="title" maxlength="140" required />
-          </label>
-          <label class="field"><span>Emoji</span>
-            <input type="text" name="emoji" maxlength="4" />
-          </label>
-        </div>
-        <label class="field"><span>Description</span>
-          <textarea name="description" rows="2" maxlength="400"></textarea>
-        </label>
-        <label class="field"><span>Prompt template <em>(use <code>{context}</code> as the placeholder for the user's data)</em></span>
-          <textarea name="promptTemplate" rows="10" maxlength="8000" required></textarea>
-        </label>
-        <div class="field">
-          <span>Data scope <em>(tick what gets bundled into <code>{context}</code>)</em></span>
-          <div class="scope-grid" id="scope-grid">
-            <label class="scope-chip"><input type="checkbox" value="symptoms_30d"> Symptoms (30d)</label>
-            <label class="scope-chip"><input type="checkbox" value="daily_logs_30d"> Daily check-ins (30d)</label>
-            <label class="scope-chip"><input type="checkbox" value="medications"> Current medications</label>
-            <label class="scope-chip"><input type="checkbox" value="medication_logs_30d"> Dose adherence (30d)</label>
-            <label class="scope-chip"><input type="checkbox" value="test_results"> Test results</label>
-            <label class="scope-chip"><input type="checkbox" value="appointments_60d"> Appointments (±60d)</label>
-          </div>
-        </div>
-        <div class="field-grid-2">
-          <label class="field"><span>Refresh every</span>
-            <select name="refreshHours">
-              <option value="1">1 hour</option>
-              <option value="6">6 hours</option>
-              <option value="24" selected>24 hours</option>
-              <option value="72">3 days</option>
-              <option value="168">7 days</option>
-            </select>
-          </label>
-          <label class="field"><span>Model override <em>(blank = default)</em></span>
-            <input type="text" name="model" maxlength="200" placeholder="anthropic.claude-3-5-sonnet-20241022-v2:0" />
-          </label>
-        </div>
-        <label class="ios-row">
-          <span class="ios-row-text"><strong>Enabled</strong><em>Disabled insights are hidden from users.</em></span>
-          <span class="ios-switch">
-            <input type="checkbox" name="enabled" checked />
-            <span class="ios-switch-track"><span class="ios-switch-thumb"></span></span>
-          </span>
-        </label>
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Save changes</button>
-          <button type="button" class="btn-ghost-pink" data-close-cfg>Cancel</button>
-          <p class="form-status" id="cfg-status"></p>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/my-insights.js?v=1779969382" defer></script>
+  <script src="/my-insights.js?v=1780049142" defer></script>
 </body>
 </html>
