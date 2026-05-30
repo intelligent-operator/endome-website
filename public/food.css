@@ -150,3 +150,28 @@
 
 .flog-overrides{margin:4px 0 10px;padding:8px 10px;background:#fff5f8;border-radius:10px;font-size:12px}
 .flog-overrides summary{cursor:pointer;font-weight:600;color:#7a5f6c}
+
+/* Cravings — fast log card */
+.cravings-card{background:#fff;border:1px solid #ffeaf2;border-radius:18px;padding:14px;
+  box-shadow:0 4px 16px rgba(255,77,138,.04)}
+.cravings-chips{display:flex;flex-wrap:wrap;gap:8px}
+.cravings-chips button{
+  background:#fff5f8;border:1px solid #ffd6e0;color:#3a2330;
+  padding:9px 14px;border-radius:999px;font-family:inherit;font-size:13px;cursor:pointer;font-weight:600;
+  transition:transform .12s,background .12s,border-color .12s;
+}
+.cravings-chips button:hover{background:#ffeaf2;border-color:#ff4e8a}
+.cravings-chips button.logged{
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border-color:transparent;
+  transform:scale(.96);
+}
+.cravings-recent{list-style:none;padding:0;margin:12px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+.cravings-empty{font-size:12px;color:#a08596;padding:6px 0}
+.cravings-chip-log{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#fff5f8;border:1px solid #ffeaf2;border-radius:999px;padding:4px 10px;font-size:12px;color:#5a3a48;
+}
+.cravings-chip-log .cravings-meta{color:#a08596;font-size:11px}
+.cravings-chip-log button{background:transparent;border:none;color:#cdb9c4;cursor:pointer;
+  font-size:14px;line-height:1;padding:0 2px;font-family:inherit}
+.cravings-chip-log button:hover{color:#c4344b}

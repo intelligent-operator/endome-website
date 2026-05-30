@@ -175,6 +175,10 @@ export default {
           if (fplanMatch && request.method === "DELETE") return jsonHeaders(await deleteFoodPlan(env, user, +fplanMatch[1]));
           if (url.pathname === "/api/me/food-prefs" && request.method === "GET") return jsonHeaders(await getFoodPrefs(env, user));
           if (url.pathname === "/api/me/food-prefs" && request.method === "PUT") return jsonHeaders(await updateFoodPrefs(request, env, user));
+          if (url.pathname === "/api/me/cravings" && request.method === "GET")  return jsonHeaders(await listCravings(env, user));
+          if (url.pathname === "/api/me/cravings" && request.method === "POST") return jsonHeaders(await logCraving(request, env, user));
+          const cravingMatch = url.pathname.match(/^\/api\/me\/cravings\/(\d+)$/);
+          if (cravingMatch && request.method === "DELETE") return jsonHeaders(await deleteCraving(env, user, +cravingMatch[1]));
           const medSchedMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)\/schedules(?:\/(\d+))?$/);
           if (medSchedMatch) {
             const medId = +medSchedMatch[1];
@@ -4958,7 +4962,7 @@ async function sendBuddyMessage(request, env, user, id) {
   const sys = await buddyGetSystemPrompt(env);
   const dataContext = await buildInsightContext(env, user, [
     "symptoms_30d", "daily_logs_30d", "medications",
-    "medication_logs_30d", "food_logs_30d", "test_results", "appointments_60d",
+    "medication_logs_30d", "food_logs_30d", "cravings_30d", "test_results", "appointments_60d",
   ]).catch(() => "(data lookup failed)");
 
   // The companion speaks AS the user's EndoPet — using the name they chose
@@ -6342,8 +6346,55 @@ async function ensureFoodSchema(env) {
     "  fat_target_g INTEGER," +
     "  updated_at INTEGER NOT NULL" +
     ")",
+    // Fast cravings log — semantically distinct from food eaten, captured
+    // in one tap. Luteal-phase cravings (salty, fatty, carbs) are a strong
+    // endo-adjacent signal; Buddy + insights can correlate to cycle day.
+    "CREATE TABLE IF NOT EXISTS cravings (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  craving TEXT NOT NULL," +              // salty | sweet | fatty | carbs | chocolate | spicy | protein | cold | other
+    "  intensity INTEGER NOT NULL DEFAULT 3," + // 1-5
+    "  satisfied INTEGER," +                  // 0/1 nullable
+    "  notes TEXT," +
+    "  log_date TEXT NOT NULL," +             // YYYY-MM-DD
+    "  logged_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_cravings_user_date ON cravings(user_id, log_date)",
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+const CRAVINGS_ALLOWED = new Set([
+  "salty","sweet","fatty","carbs","chocolate","spicy","protein","cold","sour","other",
+]);
+async function logCraving(request, env, user) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  const craving = String(body?.craving || "").toLowerCase();
+  if (!CRAVINGS_ALLOWED.has(craving)) return json({ error: "Invalid craving" }, 400);
+  const intensity = Math.max(1, Math.min(5, +(body?.intensity || 3) | 0));
+  const satisfied = body?.satisfied == null ? null : (body.satisfied ? 1 : 0);
+  const notes = sanitizeText(body?.notes, 300);
+  const now = nowSec();
+  const date = new Date(now * 1000).toISOString().slice(0, 10);
+  const r = await env.DB.prepare(
+    "INSERT INTO cravings (user_id, craving, intensity, satisfied, notes, log_date, logged_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).bind(user.id, craving, intensity, satisfied, notes, date, now).run();
+  return json({ id: r.meta?.last_row_id, ok: true });
+}
+async function listCravings(env, user) {
+  await ensureFoodSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT id, craving, intensity, satisfied, notes, log_date, logged_at FROM cravings " +
+    "WHERE user_id = ? ORDER BY logged_at DESC LIMIT 60"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  return json({ cravings: r.results || [] });
+}
+async function deleteCraving(env, user, id) {
+  await ensureFoodSchema(env);
+  await env.DB.prepare("DELETE FROM cravings WHERE id = ? AND user_id = ?").bind(id, user.id).run();
+  return json({ ok: true });
 }
 
 function foodRow(r) {
@@ -8682,7 +8733,7 @@ async function seedInsightDefaults(env) {
       slug: "food-flares", emoji: "🍽", sort_order: 35,
       title: "What's on your plate",
       description: "Pairs your food log with your symptoms to spot which foods seem to precede flare days.",
-      data_scope: ["symptoms_30d", "food_logs_30d", "daily_logs_30d"],
+      data_scope: ["symptoms_30d", "food_logs_30d", "cravings_30d", "daily_logs_30d"],
       prompt_template:
         "You are reviewing the user's food log alongside their symptoms and daily check-ins for the past 30 days. " +
         "Endo flares are often driven by inflammatory + FODMAP-style food triggers — common offenders include " +
@@ -9187,6 +9238,7 @@ async function buildInsightContext(env, user, scope) {
       else if (s === "test_results")   chunk = await ctxTestResults(env, user);
       else if (s === "appointments_60d") chunk = await ctxAppointments(env, user, 60);
       else if (s === "food_logs_30d")  chunk = await ctxFoodLogs(env, user, 30);
+      else if (s === "cravings_30d")   chunk = await ctxCravings(env, user, 30);
     } catch (err) {
       chunk = `(${s}: read failed — ${err?.message || "unknown"})`;
     }
@@ -9298,6 +9350,23 @@ async function ctxFoodLogs(env, user, days) {
   const target = prefs?.daily_calorie_target || 2000;
   return `### Food logs (last ${days} days, ${r.results.length} entries across ${byDate.size} days)\n` +
          `Daily average ~${days7avg}kcal (target ${target}kcal).\n${lines}`;
+}
+
+async function ctxCravings(env, user, days) {
+  await ensureFoodSchema(env);
+  const sinceDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const r = await env.DB.prepare(
+    "SELECT log_date, craving, intensity, satisfied, notes FROM cravings " +
+    "WHERE user_id = ? AND log_date >= ? ORDER BY logged_at DESC LIMIT 100"
+  ).bind(user.id, sinceDate).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return `### Cravings (last ${days} days)\nNothing logged.`;
+  const lines = (r.results || []).map((c) =>
+    `- ${c.log_date}: ${c.craving} (intensity ${c.intensity}/5)` +
+    (c.satisfied != null ? ` · ${c.satisfied ? "gave in" : "didn't"}` : "") +
+    (c.notes ? ` · "${String(c.notes).slice(0, 80)}"` : "")
+  ).join("\n");
+  return `### Cravings (last ${days} days, ${r.results.length} entries)\n` +
+         `Worth pairing with cycle phase: cravings cluster in the luteal phase due to higher progesterone + slightly higher energy needs.\n${lines}`;
 }
 
 async function ctxTestResults(env, user) {

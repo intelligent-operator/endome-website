@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/styles.css?v=1780100000" />
   <link rel="stylesheet" href="/dashboard.css?v=1780100000" />
   <link rel="stylesheet" href="/meds.css?v=1780100000" />
-  <link rel="stylesheet" href="/food.css?v=1780100000" />
+  <link rel="stylesheet" href="/food.css?v=1780121793" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -131,6 +131,31 @@
               <div class="macro-bar" data-macro="fat"><span>Fat</span><div class="macro-track"><div class="macro-fill"></div></div><span class="macro-val">0g</span></div>
               <div class="macro-bar" data-macro="fiber"><span>Fiber</span><div class="macro-track"><div class="macro-fill"></div></div><span class="macro-val">0g</span></div>
             </div>
+          </div>
+        </section>
+
+        <!-- Cravings — one-tap log. Luteal-phase cravings (salty / fatty /
+             carbs) are common around higher progesterone; tracking them lets
+             Buddy and the insights correlate cravings with cycle phase. -->
+        <section class="community-section">
+          <div class="section-head">
+            <h2>🌙 Cravings</h2>
+            <span class="section-hint">One tap. We'll pair these with your cycle.</span>
+          </div>
+          <div class="cravings-card">
+            <div class="cravings-chips" id="cravings-chips">
+              <button type="button" data-craving="salty">🧂 Salty</button>
+              <button type="button" data-craving="sweet">🍬 Sweet</button>
+              <button type="button" data-craving="fatty">🥑 Fatty</button>
+              <button type="button" data-craving="carbs">🍞 Carbs</button>
+              <button type="button" data-craving="chocolate">🍫 Chocolate</button>
+              <button type="button" data-craving="spicy">🌶 Spicy</button>
+              <button type="button" data-craving="protein">🥩 Protein</button>
+              <button type="button" data-craving="cold">🍦 Cold</button>
+              <button type="button" data-craving="sour">🍋 Sour</button>
+              <button type="button" data-craving="other">＋ Other</button>
+            </div>
+            <ul class="cravings-recent" id="cravings-recent"></ul>
           </div>
         </section>
 
@@ -341,7 +366,7 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/food.js?v=1780100000" defer></script>
+  <script src="/food.js?v=1780121793" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780118228" defer></script>
 </body>

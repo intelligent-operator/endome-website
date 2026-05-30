@@ -49,7 +49,53 @@ console.info("EndoMe food build v1");
     paintRightRail(wk.days || []);
     paintFoodPicker();
     paintPrefsForm();
+    loadCravings();
   }
+
+  // --- Cravings (fast log) ---------------------------------------------
+  // One tap = logged. Recent ones appear below as removable chips.
+  async function loadCravings() {
+    const recent = document.getElementById("cravings-recent");
+    if (!recent) return;
+    try {
+      const data = await fetchJson("/api/me/cravings");
+      const items = (data.cravings || []).slice(0, 8);
+      if (!items.length) { recent.innerHTML = `<li class="cravings-empty">No cravings logged yet — they cluster in the luteal phase.</li>`; return; }
+      const LABEL = { salty:"🧂 Salty", sweet:"🍬 Sweet", fatty:"🥑 Fatty", carbs:"🍞 Carbs",
+        chocolate:"🍫 Chocolate", spicy:"🌶 Spicy", protein:"🥩 Protein", cold:"🍦 Cold",
+        sour:"🍋 Sour", other:"＋ Other" };
+      recent.innerHTML = items.map((c) => `<li class="cravings-chip-log" data-cid="${c.id}">
+        <span>${escapeHtml(LABEL[c.craving] || c.craving)}</span>
+        <span class="cravings-meta">${escapeHtml(c.log_date)}</span>
+        <button type="button" data-del-craving="${c.id}" aria-label="Remove">×</button>
+      </li>`).join("");
+      recent.querySelectorAll("[data-del-craving]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          try { await fetchJson(`/api/me/cravings/${b.dataset.delCraving}`, { method: "DELETE" }); loadCravings(); }
+          catch (err) { toast(err.message || "Couldn't remove", "err"); }
+        })
+      );
+    } catch {}
+  }
+  document.getElementById("cravings-chips")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-craving]");
+    if (!btn) return;
+    btn.disabled = true;
+    btn.classList.add("logged");
+    try {
+      await fetchJson("/api/me/cravings", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ craving: btn.dataset.craving, intensity: 3 }),
+      });
+      toast("Logged ✨", "ok");
+      loadCravings();
+    } catch (err) {
+      btn.classList.remove("logged");
+      toast(err.message || "Couldn't log", "err");
+    } finally {
+      setTimeout(() => { btn.disabled = false; btn.classList.remove("logged"); }, 800);
+    }
+  });
 
   // --- Sub-nav tabs ----------------------------------------------------
   document.querySelectorAll(".subnav-tab").forEach((tab) => {

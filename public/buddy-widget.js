@@ -110,7 +110,16 @@
   const petFace = () => PET_FACES[pet.type] || "💬";
 
   function wire() {
-    launcher.addEventListener("click", openPanel);
+    launcher.addEventListener("click", () => {
+      // On tablet + mobile send the user to the dedicated /buddy page
+      // (better UX than a popup with the keyboard taking over the screen).
+      // Desktop keeps the in-place Intercom-style popup.
+      if (matchMedia("(max-width: 820px)").matches) {
+        location.href = "/buddy";
+        return;
+      }
+      openPanel();
+    });
     panel.querySelectorAll("[data-bw-close]").forEach((b) => b.addEventListener("click", closePanel));
     panel.querySelectorAll("[data-bw-history]").forEach((b) => b.addEventListener("click", toggleDrawer));
     panel.querySelector("[data-bw-new]").addEventListener("click", startNewChat);
