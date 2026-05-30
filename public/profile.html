@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/profile.css?v=1779934116" />
+  <link rel="stylesheet" href="/profile.css?v=1780110562" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -133,6 +133,54 @@
         </form>
       </section>
 
+      <!-- Endometriosis status (set in onboarding, editable here any time) -->
+      <section class="community-section">
+        <div class="section-head">
+          <h2>Endometriosis</h2>
+          <span class="section-hint">Change your status, stage, or early-diagnosis preference at any time.</span>
+        </div>
+        <form id="endo-form" class="profile-form">
+          <fieldset class="ob-endo-pick">
+            <legend class="sr-only">Do you have an endometriosis diagnosis?</legend>
+            <label class="ob-endo-card">
+              <input type="radio" name="endoStatus" value="diagnosed" />
+              <div>
+                <strong>✅ Yes, I've been diagnosed</strong>
+                <em>Pick a stage so insights and resources are tuned to you.</em>
+              </div>
+            </label>
+            <label class="ob-endo-card">
+              <input type="radio" name="endoStatus" value="unknown" />
+              <div>
+                <strong>🔍 Not sure / not yet</strong>
+                <em>Opt in to automated early-diagnosis support that watches your logs for endo patterns.</em>
+              </div>
+            </label>
+          </fieldset>
+          <div class="ob-endo-stage" id="endo-stage-block" hidden>
+            <label for="endo-stage">What stage?</label>
+            <select id="endo-stage" name="endoStage">
+              <option value="unsure">I don't know my stage</option>
+              <option value="stage_1">Stage 1 (minimal)</option>
+              <option value="stage_2">Stage 2 (mild)</option>
+              <option value="stage_3">Stage 3 (moderate)</option>
+              <option value="stage_4">Stage 4 (severe)</option>
+            </select>
+          </div>
+          <label class="ob-endo-optin" id="endo-optin-block">
+            <input type="checkbox" id="endo-wants-dx" />
+            <span>
+              <strong>Automated early-diagnosis support</strong>
+              <em>Watch my daily logs for endo-matching symptom clusters and flag patterns worth raising with my clinician.</em>
+            </span>
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <p class="form-status" id="endo-status" role="status"></p>
+          </div>
+        </form>
+      </section>
+
       <!-- Friend requests + friends -->
       <section class="community-section" id="incoming-section" hidden>
         <div class="section-head">
@@ -162,6 +210,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/profile.js?v=1779934116" defer></script>
+  <script src="/profile.js?v=1780110562" defer></script>
 </body>
 </html>

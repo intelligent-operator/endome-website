@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
-  <link rel="stylesheet" href="/onboarding.css?v=1779934116" />
+  <link rel="stylesheet" href="/onboarding.css?v=1780110562" />
 </head>
 <body class="ob-body">
   <div id="page-loader" class="page-loader">
@@ -34,6 +34,7 @@
         <span class="ob-dot on" data-dot="1"></span>
         <span class="ob-dot" data-dot="2"></span>
         <span class="ob-dot" data-dot="3"></span>
+        <span class="ob-dot" data-dot="4"></span>
       </div>
       <a href="/dashboard" class="ob-skip">Skip for now</a>
     </header>
@@ -55,8 +56,62 @@
       </div>
     </section>
 
-    <!-- STEP 2: pick a pet -->
+    <!-- STEP 2: endometriosis status -->
     <section class="ob-step" data-step="2" hidden>
+      <header class="ob-step-h">
+        <h1>About endometriosis</h1>
+        <p class="ob-lead">A condition where tissue similar to the uterine lining grows outside the uterus — causing pain, heavy periods, fatigue and (in some cases) fertility challenges. <strong>1 in 9</strong> women live with it, and the average time-to-diagnosis is still <strong>~7 years</strong>. EndoMe is built to shorten that.</p>
+      </header>
+
+      <fieldset class="ob-endo-pick" id="endo-status-pick">
+        <legend class="sr-only">Do you have an endometriosis diagnosis?</legend>
+        <label class="ob-endo-card">
+          <input type="radio" name="endoStatus" value="diagnosed" />
+          <div>
+            <strong>✅ Yes, I've been diagnosed</strong>
+            <em>Tell us your stage so we can tune the right insights and resources for you.</em>
+          </div>
+        </label>
+        <label class="ob-endo-card">
+          <input type="radio" name="endoStatus" value="unknown" checked />
+          <div>
+            <strong>🔍 Not sure / not yet</strong>
+            <em>EndoMe can watch your symptoms over time and flag patterns that match endo — early diagnosis support, opt-in.</em>
+          </div>
+        </label>
+      </fieldset>
+
+      <!-- Stage picker (only when "diagnosed") -->
+      <div class="ob-endo-stage" id="endo-stage-block" hidden>
+        <label for="endo-stage">What stage?</label>
+        <select id="endo-stage" name="endoStage">
+          <option value="unsure">I don't know my stage</option>
+          <option value="stage_1">Stage 1 (minimal)</option>
+          <option value="stage_2">Stage 2 (mild)</option>
+          <option value="stage_3">Stage 3 (moderate)</option>
+          <option value="stage_4">Stage 4 (severe)</option>
+        </select>
+      </div>
+
+      <!-- Early-diagnosis opt-in (only when "unknown") -->
+      <label class="ob-endo-optin" id="endo-optin-block">
+        <input type="checkbox" id="endo-wants-dx" checked />
+        <span>
+          <strong>Turn on automated early-diagnosis support</strong>
+          <em>We'll watch your daily logs for the symptom clusters most associated with endometriosis and flag patterns worth raising with your clinician. You can turn this off any time.</em>
+        </span>
+      </label>
+
+      <p class="ob-endo-foot">You can change any of this later in <strong>Profile → Endometriosis</strong>.</p>
+
+      <div class="ob-actions split">
+        <button class="btn btn-ghost" data-prev>← Back</button>
+        <button class="btn btn-primary" data-next id="endo-continue">Continue →</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: pick a pet -->
+    <section class="ob-step" data-step="3" hidden>
       <header class="ob-step-h">
         <h1>Pick your EndoPet</h1>
         <p class="ob-lead">Your little companion on this journey. They grow with every entry.</p>
@@ -118,8 +173,8 @@
       </div>
     </section>
 
-    <!-- STEP 3: EndoMe DNA pitch -->
-    <section class="ob-step" data-step="3" hidden>
+    <!-- STEP 4: EndoMe DNA pitch -->
+    <section class="ob-step" data-step="4" hidden>
       <header class="ob-step-h">
         <h1>Meet <span class="brand-em">EndoMe DNA</span></h1>
         <p class="ob-lead">A simple at-home DNA test that maps the markers most linked to endometriosis.</p>
@@ -172,6 +227,6 @@
   <!-- Toast for "coming soon" notice on Buy click -->
   <div id="ob-toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/onboarding.js?v=1779934116" defer></script>
+  <script src="/onboarding.js?v=1780110562" defer></script>
 </body>
 </html>

@@ -333,6 +333,8 @@ export default {
           if (url.pathname === "/api/me/profile" && request.method === "PUT") {
             return jsonHeaders(await putMyProfile(request, env, user));
           }
+          if (url.pathname === "/api/me/endo" && request.method === "GET")  return jsonHeaders(await getEndoStatus(env, user));
+          if (url.pathname === "/api/me/endo" && request.method === "PUT")  return jsonHeaders(await updateEndoStatus(request, env, user));
           if (url.pathname === "/api/me/avatar" && request.method === "POST") {
             return jsonHeaders(await uploadAvatar(request, env, user));
           }
@@ -4260,6 +4262,13 @@ async function ensureProfileSchema(env) {
     "ALTER TABLE users ADD COLUMN avatar TEXT",
     "ALTER TABLE users ADD COLUMN avatar_image_key TEXT",
     "ALTER TABLE users ADD COLUMN bio TEXT",
+    // Endometriosis status — captured during onboarding, editable in /profile.
+    // status: 'diagnosed' | 'unknown' (or NULL if user skipped onboarding)
+    // stage:  'stage_1' .. 'stage_4' | 'unsure' | NULL
+    // wants_early_dx_support: 1 = opt-in to the pattern-based early-flag flow
+    "ALTER TABLE users ADD COLUMN endo_status TEXT",
+    "ALTER TABLE users ADD COLUMN endo_stage TEXT",
+    "ALTER TABLE users ADD COLUMN wants_early_dx_support INTEGER NOT NULL DEFAULT 0",
     "CREATE TABLE IF NOT EXISTS friendships (" +
     "  user_id_a    TEXT    NOT NULL," +
     "  user_id_b    TEXT    NOT NULL," +
@@ -4389,6 +4398,34 @@ async function deleteMyAccount(request, env, user) {
   const headers = new Headers(JSON_HEADERS);
   headers.append("Set-Cookie", buildCookie(SESSION_COOKIE, "", request, 0));
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+}
+
+// --- Endometriosis status (set during onboarding, editable from /profile) ---
+const ENDO_STATUSES = new Set(["diagnosed", "unknown"]);
+const ENDO_STAGES = new Set(["stage_1", "stage_2", "stage_3", "stage_4", "unsure"]);
+
+async function getEndoStatus(env, user) {
+  await ensureProfileSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT endo_status, endo_stage, wants_early_dx_support FROM users WHERE id = ?"
+  ).bind(user.id).first().catch(() => null);
+  return json({
+    status:                row?.endo_status || null,
+    stage:                 row?.endo_stage  || null,
+    wantsEarlyDxSupport:   row?.wants_early_dx_support ? 1 : 0,
+  });
+}
+async function updateEndoStatus(request, env, user) {
+  await ensureProfileSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const status = body.status && ENDO_STATUSES.has(body.status) ? body.status : null;
+  const stage  = body.stage  && ENDO_STAGES.has(body.stage)   ? body.stage  : null;
+  const wants  = body.wantsEarlyDxSupport ? 1 : 0;
+  await env.DB.prepare(
+    "UPDATE users SET endo_status = ?, endo_stage = ?, wants_early_dx_support = ? WHERE id = ?"
+  ).bind(status, status === "diagnosed" ? stage : null, status === "unknown" ? wants : 0, user.id).run();
+  return json({ ok: true, status, stage: status === "diagnosed" ? stage : null, wantsEarlyDxSupport: status === "unknown" ? wants : 0 });
 }
 
 async function getMyProfile(env, user) {

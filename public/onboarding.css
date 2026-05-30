@@ -120,3 +120,35 @@
   .ob-actions.split .btn{width:100%}
   .ob-actions-right{width:100%;justify-content:space-between}
 }
+
+/* ----- Endo status step ----- */
+.ob-endo-pick{border:none;padding:0;margin:0 0 16px;display:flex;flex-direction:column;gap:10px}
+.ob-endo-card{
+  display:flex;gap:14px;align-items:flex-start;padding:14px 16px;cursor:pointer;
+  background:#fff;border:1px solid #ffeaf2;border-radius:14px;transition:border-color .15s,background .15s;
+}
+.ob-endo-card:hover{border-color:#ffd6e0;background:#fff5f8}
+.ob-endo-card:has(input:checked){border-color:#ff4e8a;background:#fff5f8;box-shadow:0 6px 18px rgba(255,77,138,.10)}
+.ob-endo-card input{margin-top:3px;width:18px;height:18px;accent-color:#ff4e8a;flex-shrink:0}
+.ob-endo-card div{display:flex;flex-direction:column;gap:4px}
+.ob-endo-card strong{font-size:14px;color:#2b1922;font-weight:700}
+.ob-endo-card em{font-style:normal;font-size:12px;color:#5a3a48;line-height:1.45}
+
+.ob-endo-stage{margin:0 0 14px;padding:12px 16px;background:#fff5f8;border-radius:12px}
+.ob-endo-stage label{display:block;font-size:13px;font-weight:600;color:#3a2330;margin-bottom:6px}
+.ob-endo-stage select{
+  width:100%;padding:10px 14px;border:1px solid #ffd6e0;border-radius:10px;
+  font-family:inherit;font-size:14px;background:#fff;outline:none;
+}
+.ob-endo-stage select:focus{border-color:#ff4e8a}
+
+.ob-endo-optin{
+  display:flex;gap:12px;align-items:flex-start;padding:12px 16px;margin:0 0 12px;
+  background:linear-gradient(135deg,#fff5f8,#fff);border:1px solid #ffeaf2;border-radius:12px;cursor:pointer;
+}
+.ob-endo-optin input{margin-top:3px;width:18px;height:18px;accent-color:#ff4e8a;flex-shrink:0}
+.ob-endo-optin span{display:flex;flex-direction:column;gap:4px}
+.ob-endo-optin strong{font-size:13px;color:#2b1922}
+.ob-endo-optin em{font-style:normal;font-size:11px;color:#5a3a48;line-height:1.45}
+
+.ob-endo-foot{margin:6px 0 18px;font-size:11px;color:#7a5f6c;text-align:center}

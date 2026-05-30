@@ -262,6 +262,50 @@ console.info("EndoMe profile build v1");
     }
   }
 
+  // --- Endometriosis status (status + stage + early-dx opt-in) ---------
+  function refreshEndoBlocks() {
+    const checked = document.querySelector("#endo-form input[name='endoStatus']:checked")?.value;
+    const stageBlock = document.getElementById("endo-stage-block");
+    const optInBlock = document.getElementById("endo-optin-block");
+    if (stageBlock) stageBlock.hidden = checked !== "diagnosed";
+    if (optInBlock) optInBlock.hidden = checked !== "unknown";
+  }
+  async function loadEndo() {
+    try {
+      const data = await fetchJson("/api/me/endo");
+      const statusRadios = document.querySelectorAll("#endo-form input[name='endoStatus']");
+      // Default to 'unknown' when nothing's been saved yet, so the early-dx
+      // opt-in is the visible choice.
+      const status = data.status || "unknown";
+      statusRadios.forEach((r) => r.checked = r.value === status);
+      if (data.stage) document.getElementById("endo-stage").value = data.stage;
+      document.getElementById("endo-wants-dx").checked = !!data.wantsEarlyDxSupport;
+      refreshEndoBlocks();
+    } catch {}
+  }
+  document.querySelectorAll("#endo-form input[name='endoStatus']").forEach((r) =>
+    r.addEventListener("change", refreshEndoBlocks));
+  document.getElementById("endo-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const status = document.querySelector("#endo-form input[name='endoStatus']:checked")?.value || "unknown";
+    const body = { status };
+    if (status === "diagnosed") body.stage = document.getElementById("endo-stage").value;
+    if (status === "unknown")   body.wantsEarlyDxSupport = document.getElementById("endo-wants-dx").checked ? 1 : 0;
+    const statusEl = document.getElementById("endo-status");
+    statusEl.textContent = "Saving…"; statusEl.className = "form-status";
+    try {
+      await fetchJson("/api/me/endo", {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      statusEl.textContent = "Saved."; statusEl.className = "form-status ok";
+      toast("Updated", "ok");
+    } catch (err) {
+      statusEl.textContent = err.message || "Couldn't save."; statusEl.className = "form-status err";
+    }
+  });
+  loadEndo();
+
   // --- Helpers ---------------------------------------------------------
   async function fetchJson(url, init = {}) {
     const res = await fetch(url, { credentials: "same-origin", ...init });

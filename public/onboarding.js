@@ -4,6 +4,18 @@
 
   let step = 1;
   let selectedPet = "luna";
+  const MAX_STEP = 4;
+
+  // --- Endo status step: toggle stage / opt-in blocks on radio change ---
+  function refreshEndoBlocks() {
+    const checked = document.querySelector("input[name='endoStatus']:checked")?.value;
+    const stageBlock = document.getElementById("endo-stage-block");
+    const optInBlock = document.getElementById("endo-optin-block");
+    if (stageBlock) stageBlock.hidden = checked !== "diagnosed";
+    if (optInBlock) optInBlock.hidden = checked !== "unknown";
+  }
+  document.querySelectorAll("input[name='endoStatus']").forEach((r) => r.addEventListener("change", refreshEndoBlocks));
+  setTimeout(refreshEndoBlocks, 0);
 
   // Bind display name from /api/me/today (no full state needed here).
   fetch("/api/me/today", { credentials: "same-origin" })
@@ -48,6 +60,32 @@
     if (e.target.closest("[data-next]")) {
       e.preventDefault();
       if (step === 2) {
+        // Persist endo answers before advancing.
+        const cont = $("endo-continue");
+        cont.disabled = true;
+        cont.textContent = "Saving…";
+        try {
+          const status = document.querySelector("input[name='endoStatus']:checked")?.value || "unknown";
+          const body = { status };
+          if (status === "diagnosed") body.stage = $("endo-stage").value;
+          if (status === "unknown")   body.wantsEarlyDxSupport = $("endo-wants-dx").checked ? 1 : 0;
+          const res = await fetch("/api/me/endo", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            credentials: "same-origin",
+          });
+          if (!res.ok) throw new Error("save failed");
+          showStep(3);
+        } catch {
+          alert("Could not save right now. Try again.");
+        } finally {
+          cont.disabled = false;
+          cont.textContent = "Continue →";
+        }
+        return;
+      }
+      if (step === 3) {
         // Persist pet selection before advancing.
         const cont = $("pet-continue");
         cont.disabled = true;
@@ -61,7 +99,7 @@
             credentials: "same-origin",
           });
           if (!res.ok) throw new Error("save failed");
-          showStep(3);
+          showStep(4);
         } catch {
           alert("Could not save your pet. Try again.");
         } finally {
@@ -70,7 +108,7 @@
         }
         return;
       }
-      showStep(Math.min(3, step + 1));
+      showStep(Math.min(MAX_STEP, step + 1));
     }
   });
 
