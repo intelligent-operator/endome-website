@@ -183,6 +183,11 @@ export default {
           if (url.pathname === "/api/me/cravings" && request.method === "POST") return jsonHeaders(await logCraving(request, env, user));
           const cravingMatch = url.pathname.match(/^\/api\/me\/cravings\/(\d+)$/);
           if (cravingMatch && request.method === "DELETE") return jsonHeaders(await deleteCraving(env, user, +cravingMatch[1]));
+          // --- Intimacy log -----------------------------------------------
+          if (url.pathname === "/api/me/intimacy" && request.method === "GET")  return jsonHeaders(await listIntimacy(env, user));
+          if (url.pathname === "/api/me/intimacy" && request.method === "POST") return jsonHeaders(await logIntimacy(request, env, user));
+          const intimacyMatch = url.pathname.match(/^\/api\/me\/intimacy\/(\d+)$/);
+          if (intimacyMatch && request.method === "DELETE") return jsonHeaders(await deleteIntimacy(env, user, +intimacyMatch[1]));
           const medSchedMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)\/schedules(?:\/(\d+))?$/);
           if (medSchedMatch) {
             const medId = +medSchedMatch[1];
@@ -1418,6 +1423,44 @@ function isEmail(s) {
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function nowSec() { return Math.floor(Date.now() / 1000); }
 
+// What day-of-week is "today" in the given IANA timezone (0 = Sun … 6 = Sat).
+// Used to match the days_mask flags on medication schedules.
+function localDayOfWeek(tz) {
+  try {
+    const wd = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(new Date());
+    return { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 }[wd] ?? new Date().getUTCDay();
+  } catch {
+    return new Date().getUTCDay();
+  }
+}
+
+// Given a tz + HH:MM, return the epoch seconds for that local time on
+// "today" in that tz. Uses Intl.DateTimeFormat with timeZoneName=longOffset
+// so we don't need a tz library — the offset is computed correctly for
+// any tz including those with DST.
+function localHHMMToEpochSec(tz, hh, mm) {
+  try {
+    // 1) Get today's Y/M/D in the user's tz.
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date());
+    const y = +parts.find((p) => p.type === "year").value;
+    const m = +parts.find((p) => p.type === "month").value;
+    const d = +parts.find((p) => p.type === "day").value;
+    // 2) Compute the tz offset (in minutes) at that local moment.
+    //    Approach: build the UTC equivalent of the wall-clock time, then
+    //    measure how Intl renders that instant for the same tz.
+    const tentativeUtc = Date.UTC(y, m - 1, d, hh, mm, 0);
+    const asInTz = new Date(tentativeUtc).toLocaleString("en-US", { timeZone: tz });
+    const asInUtc = new Date(tentativeUtc).toLocaleString("en-US", { timeZone: "UTC" });
+    const offsetMs = new Date(asInTz).getTime() - new Date(asInUtc).getTime();
+    return Math.floor((tentativeUtc - offsetMs) / 1000);
+  } catch {
+    // Fallback to treating tz as UTC.
+    return Math.floor(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate(), hh, mm, 0) / 1000);
+  }
+}
+
 async function mandrillSend(env, message) {
   if (!env.MANDRILL_API_KEY) throw new Error("MANDRILL_API_KEY not configured");
   const res = await fetch("https://mandrillapp.com/api/1.0/messages/send.json", {
@@ -1985,9 +2028,12 @@ async function computeCycleCorrelation(env, user) {
 // no I skipped" action linking back to /meds#timetable.
 async function computeMedReminders(env, user) {
   await ensureMedSchema(env);
-  // Pull all of today's slots + recent logs (past 6h).
-  const day = new Date(); // server UTC — best-effort until we honour user TZ.
-  const todayBit = 1 << day.getUTCDay();
+  // Use the user's stored timezone so a schedule of "08:00" means 8 am in
+  // their local time, not 8 am UTC (which previously made every reminder
+  // fire at the wrong hour — for AU users, every dose appeared at the
+  // start of their day).
+  const tz = user.timezone || "UTC";
+  const todayBit = 1 << localDayOfWeek(tz);
   const slots = await env.DB.prepare(
     "SELECT s.medication_id, s.time_of_day, m.name " +
     "FROM medication_schedules s JOIN medications m " +
@@ -2006,11 +2052,9 @@ async function computeMedReminders(env, user) {
   const now = nowSec();
   for (const s of (slots.results || [])) {
     const [hh, mm] = (s.time_of_day || "0:0").split(":").map(Number);
-    const slotDate = new Date(day);
-    slotDate.setUTCHours(hh, mm, 0, 0);
-    const slotSec = Math.floor(slotDate.getTime() / 1000);
-    // Active window: 15 minutes before until 2 hours after the scheduled time.
-    if (now < slotSec - 15 * 60) continue;
+    const slotSec = localHHMMToEpochSec(tz, hh, mm);
+    // Active window: 1 hour BEFORE until 2 hours after the scheduled time.
+    if (now < slotSec - 60 * 60) continue;
     if (now > slotSec + 2 * 3600) continue;
     const taken = (recentLogs.results || []).some(
       (l) => l.medication_id === s.medication_id && Math.abs(l.taken_at - slotSec) < 2 * 3600
@@ -5638,7 +5682,7 @@ async function sendBuddyMessage(request, env, user, id) {
   const sys = await buddyGetSystemPrompt(env);
   const dataContext = await buildInsightContext(env, user, [
     "symptoms_30d", "daily_logs_30d", "medications",
-    "medication_logs_30d", "food_logs_30d", "cravings_30d", "test_results", "appointments_60d",
+    "medication_logs_30d", "food_logs_30d", "cravings_30d", "intimacy_30d", "test_results", "appointments_60d",
     "cycles",
   ]).catch(() => "(data lookup failed)");
 
@@ -7268,6 +7312,23 @@ async function ensureFoodSchema(env) {
     "  logged_at INTEGER NOT NULL" +
     ")",
     "CREATE INDEX IF NOT EXISTS idx_cravings_user_date ON cravings(user_id, log_date)",
+
+    // Intimacy log — discreet, opt-in. Captured so the AI insights and
+    // correlation engines can spot patterns (e.g. dyspareunia clustering
+    // around the luteal phase, or pain spikes the day after).
+    "CREATE TABLE IF NOT EXISTS intimacy_logs (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  log_date TEXT NOT NULL," +              // YYYY-MM-DD local
+    "  logged_at INTEGER NOT NULL," +
+    "  kind TEXT NOT NULL DEFAULT 'partnered'," + // partnered | solo
+    "  pain_level INTEGER," +                  // 0-5, null = not asked
+    "  comfort INTEGER," +                     // 1-5 satisfaction/comfort
+    "  protected INTEGER," +                   // 0/1 optional
+    "  triggers TEXT," +                       // comma-sep tags
+    "  notes TEXT" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_intimacy_user_date ON intimacy_logs(user_id, log_date DESC)",
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
 }
@@ -7302,6 +7363,48 @@ async function listCravings(env, user) {
 async function deleteCraving(env, user, id) {
   await ensureFoodSchema(env);
   await env.DB.prepare("DELETE FROM cravings WHERE id = ? AND user_id = ?").bind(id, user.id).run();
+  return json({ ok: true });
+}
+
+// ---------- Intimacy log ----------
+// Captured discreetly so the AI insights and trigger-correlation can spot
+// patterns (dyspareunia in luteal phase, pain spikes 12-48h after, etc).
+const ALLOWED_INTIMACY_KIND = new Set(["partnered", "solo"]);
+async function logIntimacy(request, env, user) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const kind = ALLOWED_INTIMACY_KIND.has(body.kind) ? body.kind : "partnered";
+  const pain = clampInt(body.pain_level, 0, 5);
+  const comfort = clampInt(body.comfort, 1, 5);
+  const prot = body.protected == null ? null : (body.protected ? 1 : 0);
+  const triggers = sanitizeText(body.triggers, 240);
+  const notes = sanitizeText(body.notes, 500);
+  const date = parseDateParam(body.date) || normaliseDate(null);
+  const now = nowSec();
+  try {
+    const r = await env.DB.prepare(
+      "INSERT INTO intimacy_logs (user_id, log_date, logged_at, kind, pain_level, comfort, protected, triggers, notes) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+    ).bind(user.id, date, now, kind, pain, comfort, prot, triggers, notes).first();
+    return json({ ok: true, id: r?.id });
+  } catch (e) {
+    console.warn("logIntimacy:", e?.message);
+    return json({ error: "Could not save" }, 500);
+  }
+}
+async function listIntimacy(env, user) {
+  await ensureFoodSchema(env);
+  const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+  const r = await env.DB.prepare(
+    "SELECT id, log_date, logged_at, kind, pain_level, comfort, protected, triggers, notes " +
+    "FROM intimacy_logs WHERE user_id = ? AND log_date >= ? ORDER BY logged_at DESC LIMIT 100"
+  ).bind(user.id, since).all().catch(() => ({ results: [] }));
+  return json({ entries: r.results || [] });
+}
+async function deleteIntimacy(env, user, id) {
+  await ensureFoodSchema(env);
+  await env.DB.prepare("DELETE FROM intimacy_logs WHERE id = ? AND user_id = ?").bind(id, user.id).run();
   return json({ ok: true });
 }
 
@@ -11123,6 +11226,7 @@ async function buildInsightContext(env, user, scope) {
       else if (s === "appointments_60d") chunk = await ctxAppointments(env, user, 60);
       else if (s === "food_logs_30d")  chunk = await ctxFoodLogs(env, user, 30);
       else if (s === "cravings_30d")   chunk = await ctxCravings(env, user, 30);
+      else if (s === "intimacy_30d")   chunk = await ctxIntimacy(env, user, 30);
       else if (s === "cycles")         chunk = await ctxCycles(env, user);
     } catch (err) {
       chunk = `(${s}: read failed — ${err?.message || "unknown"})`;
@@ -11252,6 +11356,25 @@ async function ctxCravings(env, user, days) {
   ).join("\n");
   return `### Cravings (last ${days} days, ${r.results.length} entries)\n` +
          `Worth pairing with cycle phase: cravings cluster in the luteal phase due to higher progesterone + slightly higher energy needs.\n${lines}`;
+}
+
+async function ctxIntimacy(env, user, days) {
+  await ensureFoodSchema(env);
+  const sinceDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const r = await env.DB.prepare(
+    "SELECT log_date, kind, pain_level, comfort, triggers, notes FROM intimacy_logs " +
+    "WHERE user_id = ? AND log_date >= ? ORDER BY logged_at DESC LIMIT 60"
+  ).bind(user.id, sinceDate).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return `### Intimacy (last ${days} days)\nNothing logged.`;
+  const lines = (r.results || []).map((c) =>
+    `- ${c.log_date}: ${c.kind}` +
+    (c.pain_level != null ? ` · pain ${c.pain_level}/5` : "") +
+    (c.comfort != null ? ` · comfort ${c.comfort}/5` : "") +
+    (c.triggers ? ` · triggers: ${c.triggers}` : "") +
+    (c.notes ? ` · "${String(c.notes).slice(0, 80)}"` : "")
+  ).join("\n");
+  return `### Intimacy (last ${days} days, ${r.results.length} entries)\n` +
+         `Dyspareunia and post-coital pelvic pain are common endo markers — useful to correlate with cycle day and any pain logged 12-48 h afterwards.\n${lines}`;
 }
 
 async function ctxCycles(env, user) {

@@ -117,6 +117,7 @@ function render() {
   renderEndoWatch();
   renderBodyMap();
   renderCyclePrediction();
+  renderIntimacyList();
 }
 
 // --- Early-diagnosis pattern watch ---------------------------------------
@@ -1732,6 +1733,10 @@ function computeNotifications() {
   }
   for (const n of state.notifications || []) {
     const virtual = typeof n.id === "string" && !/^\d+$/.test(String(n.id));
+    // Honor client-side read tracking too — if Mark-all-read fired before
+    // the server's dismissal table propagated, the local set still hides
+    // these from the badge count.
+    const locallyRead = typeof n.id === "string" && localReadKeys.has(n.id);
     items.push({
       icon: virtual ? (String(n.id).startsWith("appt:") ? "📅" : "💊") : "🔔",
       title: n.title,
@@ -1739,7 +1744,7 @@ function computeNotifications() {
       server: n.id,
       actionUrl: n.action_url || "",
       virtual,
-      read: !!n.read_at,
+      read: !!n.read_at || locallyRead,
     });
   }
   // Pending doses fetched by renderDosesDue — surface them in the bell
@@ -2147,6 +2152,72 @@ submitForm(
   "Evening check-in logged"
 );
 
+// --- Intimacy log --------------------------------------------------------
+// Discreet quick-log on the dashboard. Feeds into the AI/insights
+// context via ctxIntimacy on the server.
+async function renderIntimacyList() {
+  const slot = document.getElementById("intimacy-list");
+  if (!slot) return;
+  let data;
+  try {
+    const r = await fetch("/api/me/intimacy", { credentials: "same-origin" });
+    if (!r.ok) return;
+    data = await r.json();
+  } catch { return; }
+  const entries = (data.entries || []).slice(0, 5);
+  if (!entries.length) {
+    slot.innerHTML = `<p class="empty-state small">Private log for pain &amp; comfort patterns. Tap + Log to record an entry — only you (and the EndoMe insights engine) ever see it.</p>`;
+    return;
+  }
+  slot.innerHTML = `<ul class="intimacy-rows">${entries.map((e) => `
+    <li class="intimacy-row" data-id="${e.id}">
+      <span class="intimacy-icon">${e.kind === "solo" ? "🌸" : "👫"}</span>
+      <span class="intimacy-date">${escapeHtml(e.log_date)}</span>
+      <span class="intimacy-meta">
+        ${e.pain_level != null ? `pain <strong>${e.pain_level}/5</strong>` : ""}
+        ${e.comfort != null ? ` · comfort <strong>${e.comfort}/5</strong>` : ""}
+      </span>
+      <button type="button" class="intimacy-del" data-del-intimacy="${e.id}" aria-label="Remove">×</button>
+    </li>`).join("")}</ul>`;
+  slot.querySelectorAll("[data-del-intimacy]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      try {
+        await fetch(`/api/me/intimacy/${b.dataset.delIntimacy}`, { method: "DELETE", credentials: "same-origin" });
+        renderIntimacyList();
+      } catch {}
+    })
+  );
+}
+
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "form-intimacy") return;
+  e.preventDefault();
+  const modal = document.getElementById("modal-intimacy");
+  const kind = modal.querySelector('[data-chip="intimacyKind"]')?.dataset.value || "partnered";
+  const pain = pickerVal(e.target, "intimacyPain");
+  const comfort = pickerVal(e.target, "intimacyComfort");
+  const notes = e.target.notes.value.trim() || null;
+  if (pain == null && comfort == null && !notes) { toast("Add at least one detail.", "error"); return; }
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    const r = await fetch("/api/me/intimacy", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind, pain_level: pain, comfort, notes }),
+    });
+    if (!r.ok) throw new Error(await safeError(r));
+    toast("Logged 🤍");
+    closeAllModals();
+    renderIntimacyList();
+  } catch (err) {
+    toast(`Couldn't save: ${err.message || err}`, "error");
+  } finally {
+    btn.disabled = false; btn.textContent = "Save";
+  }
+});
+
 // --- Bell dropdown --------------------------------------------------------
 const bell = document.querySelector(".bell");
 const dropdown = document.getElementById("notif-dropdown");
@@ -2170,9 +2241,20 @@ if (bell && dropdown) {
         await fetch("/api/me/notifications/read-all", {
           method: "POST", credentials: "same-origin",
         });
-        // Locally clear the in-session read set so the morning/evening pills
-        // also reset visually.
+        // Locally clear EVERY pending-dose / built-in key. The previous
+        // version only cleared morning/evening, so dose-due items kept
+        // showing as unread and the badge never went to zero. Mirror the
+        // server-side dismissal here so the UI matches immediately.
         for (const k of ["builtin:morning","builtin:evening"]) localReadKeys.add(k);
+        for (const d of pendingDosesCache || []) {
+          localReadKeys.add(`dose:${d.medicationId}:${d.scheduledFor}`);
+        }
+        // Also clear any server-virtual reminder ids currently in state —
+        // belt and braces in case the server's dismissed_reminders write
+        // didn't propagate by the time refresh() reads back.
+        for (const n of (state?.notifications || [])) {
+          if (typeof n.id === "string") localReadKeys.add(n.id);
+        }
         await refresh();
       } catch {}
       return;

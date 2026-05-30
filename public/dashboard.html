@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780146586" />
-  <link rel="stylesheet" href="/dashboard.css?v=1780147274" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780182192" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -264,6 +264,21 @@
 
       <!-- Cycle prediction (renders only when we have ≥1 closed cycle) -->
       <section id="cycle-predict-slot"></section>
+
+      <!-- Intimacy log — discreet, private. Click the button to open
+           a small modal that captures pain + comfort so AI insights can
+           correlate with cycle/symptoms. -->
+      <section>
+        <div class="card intimacy-card" id="intimacy-card">
+          <div class="card-head wide">
+            <span><span class="ico-tile pink">💕</span> Intimacy <span class="muted">private</span></span>
+            <button class="pill-btn small" data-modal="intimacy">+ Log</button>
+          </div>
+          <div id="intimacy-list">
+            <p class="empty-state small">Private log for pain &amp; comfort patterns. Tap + Log to record an entry — only you (and the EndoMe insights engine) ever see it.</p>
+          </div>
+        </div>
+      </section>
 
       <!-- Today's symptoms (real data from /api/me/today) -->
       <section>
@@ -760,6 +775,59 @@
   <!-- MODAL: Period calendar — pick the day a period started AND ended.
        Shows where you are in the cycle, your past logged periods (solid),
        and the next 1-2 predicted periods (striped) plus fertile window. -->
+  <!-- MODAL: Intimacy quick log -->
+  <div class="modal" id="modal-intimacy" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="intimacy-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">💕</span>
+        <h3 id="intimacy-title">Log intimacy</h3>
+        <p>Private — only you and the EndoMe insights engine see this. Helps spot pain &amp; cycle patterns.</p>
+      </header>
+      <form id="form-intimacy" novalidate>
+        <div class="modal-section">
+          <h4 class="section-title">Kind</h4>
+          <div class="chip-pick wrap" data-chip="intimacyKind">
+            <button type="button" data-val="partnered">👫 Partnered</button>
+            <button type="button" data-val="solo">🌸 Self-care</button>
+          </div>
+        </div>
+        <div class="modal-section">
+          <h4 class="section-title">Pain during <span class="sec-hint">0 = none, 5 = severe</span></h4>
+          <div class="seg-slider pain" data-scale="intimacyPain">
+            <button type="button" data-val="0"><span class="seg-label">0</span><span class="seg-sublabel">None</span></button>
+            <button type="button" data-val="1"><span class="seg-label">1</span><span class="seg-sublabel">Hint</span></button>
+            <button type="button" data-val="2"><span class="seg-label">2</span><span class="seg-sublabel">Mild</span></button>
+            <button type="button" data-val="3"><span class="seg-label">3</span><span class="seg-sublabel">Moderate</span></button>
+            <button type="button" data-val="4"><span class="seg-label">4</span><span class="seg-sublabel">Strong</span></button>
+            <button type="button" data-val="5"><span class="seg-label">5</span><span class="seg-sublabel">Severe</span></button>
+          </div>
+        </div>
+        <div class="modal-section">
+          <h4 class="section-title">How it felt overall</h4>
+          <div class="seg-slider" data-scale="intimacyComfort">
+            <button type="button" data-val="1"><span class="seg-icon">😣</span><span class="seg-label">Tough</span></button>
+            <button type="button" data-val="2"><span class="seg-icon">😟</span><span class="seg-label">Low</span></button>
+            <button type="button" data-val="3"><span class="seg-icon">😐</span><span class="seg-label">Okay</span></button>
+            <button type="button" data-val="4"><span class="seg-icon">🙂</span><span class="seg-label">Good</span></button>
+            <button type="button" data-val="5"><span class="seg-icon">😊</span><span class="seg-label">Great</span></button>
+          </div>
+        </div>
+        <div class="modal-section">
+          <label class="field">
+            <span>Anything to note? <em class="sec-hint">(optional, private)</em></span>
+            <textarea name="notes" rows="2" maxlength="500" placeholder="Position, timing, anything that helped or hurt…"></textarea>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal" id="modal-period" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="period-title">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card">
@@ -1151,7 +1219,7 @@
 
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
-  <script src="/dashboard.js?v=1780147274" defer></script>
+  <script src="/dashboard.js?v=1780182192" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780180907" defer></script>
 </body>
