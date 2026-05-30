@@ -77,23 +77,58 @@ console.info("EndoMe food build v1");
       );
     } catch {}
   }
-  document.getElementById("cravings-chips")?.addEventListener("click", async (e) => {
+  // Multi-select: tapping a chip toggles it. Nothing is logged until the
+  // user hits "Log cravings", so they can pick several at once.
+  const cravingChips = document.getElementById("cravings-chips");
+  const cravingLogBtn = document.getElementById("cravings-log-btn");
+  const cravingCount = document.getElementById("cravings-selected-count");
+
+  function selectedCravings() {
+    return [...(cravingChips?.querySelectorAll("button.selected") || [])].map((b) => b.dataset.craving);
+  }
+  function refreshCravingLogBtn() {
+    const n = selectedCravings().length;
+    if (cravingLogBtn) {
+      cravingLogBtn.disabled = n === 0;
+      cravingLogBtn.textContent = n > 1 ? `Log ${n} cravings` : "Log cravings";
+    }
+    if (cravingCount) cravingCount.textContent = n ? `${n} selected` : "";
+  }
+
+  cravingChips?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-craving]");
     if (!btn) return;
-    btn.disabled = true;
-    btn.classList.add("logged");
+    btn.classList.toggle("selected");
+    refreshCravingLogBtn();
+  });
+
+  cravingLogBtn?.addEventListener("click", async () => {
+    const picks = selectedCravings();
+    if (!picks.length) return;
+    cravingLogBtn.disabled = true;
+    const prev = cravingLogBtn.textContent;
+    cravingLogBtn.textContent = "Logging…";
     try {
-      await fetchJson("/api/me/cravings", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ craving: btn.dataset.craving, intensity: 3 }),
+      // Log each selected craving (the API takes one at a time).
+      await Promise.all(picks.map((craving) =>
+        fetchJson("/api/me/cravings", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ craving, intensity: 3 }),
+        })
+      ));
+      toast(picks.length > 1 ? `${picks.length} cravings logged ✨` : "Logged ✨", "ok");
+      // Clear selection + flash the logged state briefly.
+      cravingChips.querySelectorAll("button.selected").forEach((b) => {
+        b.classList.remove("selected");
+        b.classList.add("logged");
+        setTimeout(() => b.classList.remove("logged"), 800);
       });
-      toast("Logged ✨", "ok");
+      refreshCravingLogBtn();
       loadCravings();
     } catch (err) {
-      btn.classList.remove("logged");
       toast(err.message || "Couldn't log", "err");
-    } finally {
-      setTimeout(() => { btn.disabled = false; btn.classList.remove("logged"); }, 800);
+      cravingLogBtn.disabled = false;
+      cravingLogBtn.textContent = prev;
     }
   });
 

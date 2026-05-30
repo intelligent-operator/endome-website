@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780141851" />
-  <link rel="stylesheet" href="/dashboard.css?v=1780141851" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780142733" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -654,9 +654,20 @@
         <input type="hidden" name="region" id="pain-region-input" />
 
         <div class="modal-section">
-          <h4 class="section-title">Region <span class="sec-hint" id="pain-region-display">—</span></h4>
-          <!-- Sub-spot picker. Populated by JS based on region. e.g. for
-               "Ovaries" we offer left / right / both. -->
+          <h4 class="section-title">Where does it hurt?</h4>
+          <!-- Manual region selector — lets the user correct a mis-tap on
+               the body map, or pick a precise spot (e.g. Left/Right ovary)
+               that's hard to hit on the figure. -->
+          <label class="pain-region-select-wrap">
+            <select id="pain-region-select" class="pain-region-select" aria-label="Body region">
+              <!-- options filled in by JS from BODY_MAP_REGIONS -->
+            </select>
+          </label>
+        </div>
+
+        <div class="modal-section" id="pain-subspot-section">
+          <h4 class="section-title">Whereabouts <span class="sec-hint">tap any that fit</span></h4>
+          <!-- Sub-spot picker. Populated by JS based on region. -->
           <div class="chip-pick wrap multi" data-multi="subspot" id="pain-subspot-group">
             <!-- filled in by openPainModal() -->
           </div>
@@ -743,6 +754,45 @@
           <button type="submit" class="btn btn-primary">Save pain log</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Period calendar — pick the day a period started. Shows where
+       you are in the cycle + predicted period / fertile window. -->
+  <div class="modal" id="modal-period" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="period-title">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🌸</span>
+        <h3 id="period-title">Log your period</h3>
+        <p>Tap the day your period started. Past or today.</p>
+      </header>
+
+      <div class="period-cal" id="period-cal">
+        <div class="period-cal-head">
+          <button type="button" class="period-cal-nav" id="period-prev" aria-label="Previous month">‹</button>
+          <strong id="period-cal-month">—</strong>
+          <button type="button" class="period-cal-nav" id="period-next" aria-label="Next month">›</button>
+        </div>
+        <div class="period-cal-dow">
+          <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+        </div>
+        <div class="period-cal-grid" id="period-cal-grid"></div>
+        <div class="period-cal-legend">
+          <span><i class="leg-dot leg-period"></i> Period</span>
+          <span><i class="leg-dot leg-fertile"></i> Fertile</span>
+          <span><i class="leg-dot leg-ovul"></i> Ovulation</span>
+          <span><i class="leg-dot leg-today"></i> Today</span>
+        </div>
+      </div>
+
+      <div class="period-selected" id="period-selected" hidden></div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button type="button" class="btn btn-primary" id="period-save-btn" disabled>Log period start</button>
+      </div>
     </div>
   </div>
 
@@ -1098,7 +1148,7 @@
 
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
-  <script src="/dashboard.js?v=1780141851" defer></script>
+  <script src="/dashboard.js?v=1780142733" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780118228" defer></script>
 </body>

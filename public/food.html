@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/styles.css?v=1780141851" />
   <link rel="stylesheet" href="/dashboard.css?v=1780100000" />
   <link rel="stylesheet" href="/meds.css?v=1780100000" />
-  <link rel="stylesheet" href="/food.css?v=1780121793" />
+  <link rel="stylesheet" href="/food.css?v=1780142733" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -141,7 +141,7 @@
         <section class="community-section">
           <div class="section-head">
             <h2>🌙 Cravings</h2>
-            <span class="section-hint">One tap. We'll pair these with your cycle.</span>
+            <span class="section-hint">Tap any that fit, then log them together.</span>
           </div>
           <div class="cravings-card">
             <div class="cravings-chips" id="cravings-chips">
@@ -155,6 +155,10 @@
               <button type="button" data-craving="cold">🍦 Cold</button>
               <button type="button" data-craving="sour">🍋 Sour</button>
               <button type="button" data-craving="other">＋ Other</button>
+            </div>
+            <div class="cravings-actions">
+              <button type="button" class="cravings-log-btn" id="cravings-log-btn" disabled>Log cravings</button>
+              <span class="cravings-selected-count" id="cravings-selected-count"></span>
             </div>
             <ul class="cravings-recent" id="cravings-recent"></ul>
           </div>
@@ -367,7 +371,7 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/food.js?v=1780121793" defer></script>
+  <script src="/food.js?v=1780142733" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780118228" defer></script>
 </body>

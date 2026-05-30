@@ -223,7 +223,11 @@ async function renderBodyMap() {
   } catch { /* fall through with empty data */ }
 
   // Build hotspots (always present, even with no logs).
-  hotG.innerHTML = BODY_MAP_REGIONS.map(([key, cx, cy, hr, _gr, label]) =>
+  // Render LARGEST radius first so the small precise targets (left/right
+  // ovary, uterus, bladder) paint last and sit on top — otherwise the big
+  // Pelvis circle would swallow taps meant for the ovaries.
+  const sortedHotspots = [...BODY_MAP_REGIONS].sort((a, b) => b[3] - a[3]);
+  hotG.innerHTML = sortedHotspots.map(([key, cx, cy, hr, _gr, label]) =>
     `<circle data-region="${escapeHtml(key)}" cx="${cx}" cy="${cy}" r="${hr}" tabindex="0" role="button" aria-label="Log pain — ${escapeHtml(label)}"><title>Tap to log: ${escapeHtml(label)}</title></circle>`
   ).join("");
 
@@ -352,15 +356,43 @@ function openPainModal(region) {
   }
   const noteField = modal.querySelector('textarea[name="notes"]');
   if (noteField) noteField.value = "";
-  // Region
-  modal.querySelector("#pain-region-input").value = region;
-  modal.querySelector("#pain-region-display").textContent = region;
-  // Sub-spot chips for this region. Hide the whole section if the
-  // region is a specific pinpoint (Left ovary, Uterus, etc.) — the
-  // user already named the exact spot by tapping it.
+
+  // Populate the manual region dropdown (once) and select the tapped region.
+  const select = modal.querySelector("#pain-region-select");
+  if (select && !select.options.length) {
+    // Group the regions for an easier-to-scan dropdown.
+    select.innerHTML = BODY_MAP_REGIONS
+      .map(([key, , , , , label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`)
+      .join("");
+  }
+  // Default to the tapped region; if it's not in the list, fall back to first.
+  const known = BODY_MAP_REGIONS.some(([k]) => k === region);
+  const chosen = known ? region : BODY_MAP_REGIONS[0][0];
+  if (select) select.value = chosen;
+  modal.querySelector("#pain-region-input").value = chosen;
+
+  // Render the sub-spots for the chosen region.
+  paintPainSubspots(modal, chosen);
+
+  // Wire up the new chips
+  wireMultiButtons(modal);
+  // Open
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  // Scroll the modal back to top so the user starts at the region picker.
+  const card = modal.querySelector(".modal-card");
+  if (card) card.scrollTop = 0;
+}
+
+// Render sub-spot chips for a region (and hide the section when the region
+// is already a pinpoint like Left ovary / Uterus).
+function paintPainSubspots(modal, region) {
   const subGroup = modal.querySelector("#pain-subspot-group");
-  const subSection = subGroup.closest(".modal-section");
+  const subSection = modal.querySelector("#pain-subspot-section");
   const subs = PAIN_SUBSPOTS[region] || [];
+  // Clear any previous selection state.
+  subGroup.dataset.value = "";
   if (!subs.length) {
     subSection.hidden = true;
     subGroup.innerHTML = "";
@@ -368,14 +400,18 @@ function openPainModal(region) {
     subSection.hidden = false;
     subGroup.innerHTML = subs.map((s) => `<button type="button" data-val="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("");
   }
-  subGroup.dataset.value = "";
-  // Wire up the new chips
   wireMultiButtons(modal);
-  // Open
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
 }
+
+// Manual region change inside the modal → re-render the sub-spots and
+// update the hidden region input. Lets the user correct a mis-tap.
+document.addEventListener("change", (e) => {
+  if (e.target.id !== "pain-region-select") return;
+  const modal = document.getElementById("modal-pain");
+  const region = e.target.value;
+  modal.querySelector("#pain-region-input").value = region;
+  paintPainSubspots(modal, region);
+});
 
 // Click on the silhouette or legend → open the pain-only modal.
 document.addEventListener("click", (e) => {
@@ -461,9 +497,9 @@ async function renderCyclePrediction() {
           <span><span class="ico-tile pink">🌸</span> Cycle prediction</span>
         </div>
         <p class="cp-empty">${msg}</p>
-        <button type="button" class="pill-btn full" id="cp-log-btn">+ Log period start today</button>
+        <button type="button" class="pill-btn full" id="cp-log-btn">📅 Log a period</button>
       </div>`;
-    document.getElementById("cp-log-btn")?.addEventListener("click", logPeriodStartToday);
+    document.getElementById("cp-log-btn")?.addEventListener("click", () => openPeriodCalendar(data));
     return;
   }
 
@@ -504,9 +540,9 @@ async function renderCyclePrediction() {
           <em>±${p.stddev}d over last ${p.sampleCycles}</em>
         </div>
       </div>
-      <button type="button" class="pill-btn full" id="cp-log-btn">+ Log period start today</button>
+      <button type="button" class="pill-btn full" id="cp-log-btn">📅 Log a period</button>
     </div>`;
-  document.getElementById("cp-log-btn")?.addEventListener("click", logPeriodStartToday);
+  document.getElementById("cp-log-btn")?.addEventListener("click", () => openPeriodCalendar(data));
 }
 
 function formatPrettyDate(iso) {
@@ -520,22 +556,170 @@ function shortDate(iso) {
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-async function logPeriodStartToday() {
+// --- Period calendar ------------------------------------------------------
+// A proper month-grid date picker. Highlights today, the predicted next
+// period window, fertile window + ovulation, and overlays the cycle-day
+// number on each cell relative to the most-recent logged period start.
+let _periodCalState = {
+  viewYear: 0, viewMonth: 0, // currently-displayed month
+  selected: null,            // chosen YYYY-MM-DD
+  cycleData: null,           // /api/me/cycles payload
+};
+
+function isoFromYMD(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+function addDaysIso(iso, n) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function daysBetweenIso(a, b) {
+  return Math.round((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
+}
+
+function openPeriodCalendar(cycleData) {
+  const modal = document.getElementById("modal-period");
+  if (!modal) return;
+  _periodCalState.cycleData = cycleData || null;
+  _periodCalState.selected = null;
   const today = todayLocalDate();
+  const td = new Date(today + "T00:00:00");
+  _periodCalState.viewYear = td.getFullYear();
+  _periodCalState.viewMonth = td.getMonth();
+
+  document.getElementById("period-selected").hidden = true;
+  document.getElementById("period-save-btn").disabled = true;
+  renderPeriodCalendar();
+
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function renderPeriodCalendar() {
+  const grid = document.getElementById("period-cal-grid");
+  const monthLabel = document.getElementById("period-cal-month");
+  if (!grid) return;
+  const { viewYear, viewMonth, cycleData } = _periodCalState;
+  const today = todayLocalDate();
+
+  monthLabel.textContent = new Date(viewYear, viewMonth, 1)
+    .toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+  // Prediction-derived markers.
+  const pred = cycleData?.prediction || null;
+  const cycles = cycleData?.cycles || [];
+  const lastStart = cycles[0]?.start_date || pred?.lastStart || null;
+  const avgLen = pred?.avgCycleLength || 28;
+
+  // Build a set of period days (predicted next period ≈ avg period length),
+  // fertile window, and ovulation day.
+  const periodDays = new Set();
+  const fertileDays = new Set();
+  let ovulationDay = null;
+  if (pred?.nextStart) {
+    const periodLen = cycleData?.summary?.avgPeriodLength || 5;
+    for (let i = 0; i < periodLen; i++) periodDays.add(addDaysIso(pred.nextStart, i));
+    // Also project the period after next so the calendar stays useful forward.
+    const next2 = addDaysIso(pred.nextStart, avgLen);
+    for (let i = 0; i < periodLen; i++) periodDays.add(addDaysIso(next2, i));
+  }
+  if (pred?.fertileStart && pred?.fertileEnd) {
+    let d = pred.fertileStart;
+    while (daysBetweenIso(d, pred.fertileEnd) >= 0) { fertileDays.add(d); d = addDaysIso(d, 1); }
+  }
+  if (pred?.ovulation) ovulationDay = pred.ovulation;
+
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  let cells = "";
+  // Leading blanks
+  for (let i = 0; i < firstDow; i++) cells += `<span class="pc-cell pc-empty"></span>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = isoFromYMD(viewYear, viewMonth, d);
+    const isFuture = iso > today;
+    const classes = ["pc-cell"];
+    if (iso === today) classes.push("pc-today");
+    if (iso === _periodCalState.selected) classes.push("pc-selected");
+    if (periodDays.has(iso)) classes.push("pc-period");
+    if (fertileDays.has(iso)) classes.push("pc-fertile");
+    if (iso === ovulationDay) classes.push("pc-ovul");
+    if (isFuture) classes.push("pc-future");
+
+    // Cycle-day overlay (relative to last logged start), only for days
+    // from the last start up to a sensible window.
+    let cycleDayBadge = "";
+    if (lastStart && iso >= lastStart) {
+      const cd = daysBetweenIso(lastStart, iso) + 1;
+      if (cd >= 1 && cd <= 45) cycleDayBadge = `<em class="pc-cd">${cd}</em>`;
+    }
+    // Period start dates that are already logged get a marker dot.
+    const isLoggedStart = cycles.some((c) => c.start_date === iso);
+    cells += `<button type="button" class="${classes.join(" ")}" data-date="${iso}" ${isFuture ? "disabled" : ""}>
+      <span class="pc-num">${d}</span>${cycleDayBadge}${isLoggedStart ? '<i class="pc-logged"></i>' : ""}
+    </button>`;
+  }
+  grid.innerHTML = cells;
+}
+
+// Calendar interactions
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#period-prev")) {
+    _periodCalState.viewMonth--;
+    if (_periodCalState.viewMonth < 0) { _periodCalState.viewMonth = 11; _periodCalState.viewYear--; }
+    renderPeriodCalendar();
+    return;
+  }
+  if (e.target.closest("#period-next")) {
+    _periodCalState.viewMonth++;
+    if (_periodCalState.viewMonth > 11) { _periodCalState.viewMonth = 0; _periodCalState.viewYear++; }
+    renderPeriodCalendar();
+    return;
+  }
+  const cell = e.target.closest(".pc-cell[data-date]");
+  if (cell && !cell.disabled) {
+    _periodCalState.selected = cell.dataset.date;
+    renderPeriodCalendar();
+    // Show the cycle-day context for the chosen date.
+    const sel = document.getElementById("period-selected");
+    const cycles = _periodCalState.cycleData?.cycles || [];
+    const lastStart = cycles[0]?.start_date || null;
+    const pretty = new Date(cell.dataset.date + "T00:00:00")
+      .toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+    let context = "";
+    if (lastStart && cell.dataset.date > lastStart) {
+      const cd = daysBetweenIso(lastStart, cell.dataset.date) + 1;
+      context = ` · that's <strong>day ${cd}</strong> of your current cycle`;
+    }
+    sel.innerHTML = `Starting your period on <strong>${pretty}</strong>${context}.`;
+    sel.hidden = false;
+    document.getElementById("period-save-btn").disabled = false;
+  }
+});
+
+document.getElementById("period-save-btn")?.addEventListener("click", async () => {
+  const start = _periodCalState.selected;
+  if (!start) return;
+  const btn = document.getElementById("period-save-btn");
+  btn.disabled = true; btn.textContent = "Logging…";
   try {
     const r = await fetch("/api/me/cycles", {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ start_date: today }),
+      body: JSON.stringify({ start_date: start }),
     });
     if (!r.ok) throw new Error(await r.text());
-    toast("Period start logged");
+    toast("Period logged 🌸");
+    closeAllModals();
     renderCyclePrediction();
   } catch (err) {
     toast(`Couldn't log: ${err.message || err}`, "error");
+    btn.disabled = false; btn.textContent = "Log period start";
   }
-}
+});
 
 // --- Doses due banner ----------------------------------------------------
 // Pulls today's scheduled doses + their current status. Renders a card

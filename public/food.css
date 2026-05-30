@@ -161,11 +161,24 @@
   transition:transform .12s,background .12s,border-color .12s;
 }
 .cravings-chips button:hover{background:#ffeaf2;border-color:#ff4e8a}
-.cravings-chips button.logged{
+.cravings-chips button.selected{
   background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border-color:transparent;
+}
+.cravings-chips button.logged{
+  background:linear-gradient(135deg,#9bd97a,#cdebb8);color:#1f3c10;border-color:transparent;
   transform:scale(.96);
 }
-.cravings-recent{list-style:none;padding:0;margin:12px 0 0;display:flex;flex-wrap:wrap;gap:6px}
+/* Log action row */
+.cravings-actions{display:flex;align-items:center;gap:12px;margin-top:12px}
+.cravings-log-btn{
+  background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border:none;
+  padding:10px 20px;border-radius:999px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;
+  transition:opacity .12s,transform .12s;
+}
+.cravings-log-btn:hover:not(:disabled){transform:translateY(-1px)}
+.cravings-log-btn:disabled{opacity:.4;cursor:default}
+.cravings-selected-count{font-size:12px;color:#7a5f6c;font-weight:600}
+.cravings-recent{list-style:none;padding:0;margin:14px 0 0;display:flex;flex-wrap:wrap;gap:6px}
 .cravings-empty{font-size:12px;color:#a08596;padding:6px 0}
 .cravings-chip-log{
   display:inline-flex;align-items:center;gap:6px;
