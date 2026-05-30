@@ -1,15 +1,45 @@
 /* =====================================================================
    /buddy — focused health chatbot. 3-col layout: nav | history | chat.
    ===================================================================== */
-.buddy-layout{display:grid;grid-template-columns:220px 260px minmax(0,1fr);gap:18px;max-width:1480px;margin:0 auto;padding:18px;height:calc(100vh - 74px);}
+.buddy-layout{display:grid;grid-template-columns:220px 260px minmax(0,1fr);gap:18px;max-width:1480px;margin:0 auto;padding:18px;height:calc(100dvh - 74px);}
 .buddy-layout .dash-sidebar{position:sticky;top:74px;align-self:start}
+
+/* Tablet — drop the dedicated history column. History becomes a
+   collapsible drawer triggered from the chat header (added on mobile
+   too). The chat area takes the full row. */
 @media (max-width:1080px){
-  .buddy-layout{grid-template-columns:220px minmax(0,1fr);height:auto}
-  .buddy-history{grid-column:1/-1;height:auto;max-height:none}
+  .buddy-layout{grid-template-columns:200px minmax(0,1fr);height:auto;min-height:calc(100dvh - 74px)}
+  .buddy-history{
+    display:none;
+  }
+  .buddy-history.is-open{
+    display:flex;position:fixed;inset:0;z-index:80;background:#fff;
+    border-radius:0;border:none;max-height:none;height:100dvh;padding:18px;
+    box-shadow:none;
+  }
+  .buddy-main{position:relative}
+  .buddy-main::before{
+    content:"💬 Chats";
+    position:sticky;top:0;z-index:2;display:flex;align-items:center;
+    background:#fff;border:1px solid #ffeaf2;border-radius:14px;
+    padding:8px 14px;margin-bottom:10px;font-size:13px;font-weight:700;color:#7a5f6c;cursor:pointer;
+  }
 }
+
+/* Mobile — single column, chat is full-screen content. */
 @media (max-width:760px){
-  .buddy-layout{grid-template-columns:1fr;padding:14px}
-  .buddy-layout .dash-sidebar{position:static}
+  .buddy-layout{grid-template-columns:1fr;padding:10px;gap:10px}
+  .buddy-layout .dash-sidebar{display:none}
+  .buddy-main{height:calc(100dvh - 100px)}
+  .buddy-chat{padding:14px 14px;border-radius:14px}
+  .buddy-input-row{padding:8px;border-radius:14px}
+  #buddy-input{font-size:16px;min-height:42px}  /* 16px stops iOS zoom */
+  #buddy-send{padding:10px 16px;font-size:14px;min-height:42px}
+  .buddy-msg .bubble{font-size:14px;padding:9px 13px;max-width:80%}
+  .buddy-msg .avatar{width:30px;height:30px}
+  .buddy-welcome h1{font-size:22px}
+  .buddy-welcome p{font-size:13px}
+  .buddy-suggestions button{font-size:13px;padding:9px 13px}
 }
 
 /* History column */

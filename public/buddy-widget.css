@@ -20,7 +20,8 @@
 /* Popup panel */
 .bw-panel{
   position:fixed;right:24px;bottom:24px;z-index:70;
-  width:380px;max-width:calc(100vw - 32px);height:560px;max-height:calc(100vh - 96px);
+  width:380px;max-width:calc(100vw - 32px);
+  height:min(620px, calc(100dvh - 96px));
   background:#fff;border:1px solid #ffd6e0;border-radius:20px;
   box-shadow:0 30px 70px rgba(58,29,43,.35);
   display:flex;flex-direction:column;overflow:hidden;
@@ -28,12 +29,36 @@
   animation:bw-pop .18s ease-out;
 }
 .bw-panel[hidden]{display:none}
-@media (max-width:520px){
-  .bw-panel{right:8px;left:8px;bottom:8px;width:auto;height:calc(100vh - 16px);max-height:none;border-radius:18px}
+/* Tablet — comfortable size, still floats over content. */
+@media (max-width:820px){
+  .bw-panel{
+    width:min(420px, calc(100vw - 32px));
+    height:min(640px, calc(100dvh - 96px));
+  }
+}
+/* Mobile — full-screen sheet that respects the iOS safe area. Uses
+   dvh (dynamic viewport height) so the layout updates as the iOS
+   address bar / keyboard come and go, instead of overflowing. */
+@media (max-width:560px){
+  .bw-launcher{
+    right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0));
+    padding:11px 16px;font-size:13px;
+  }
+  .bw-panel{
+    inset:0;width:auto;max-width:none;height:100dvh;max-height:none;
+    border-radius:0;border:none;
+    padding-bottom:env(safe-area-inset-bottom,0);
+    padding-top:env(safe-area-inset-top,0);
+    animation:bw-slide-up .2s ease-out;
+  }
 }
 @keyframes bw-pop{
   from{opacity:0;transform:scale(.95) translateY(8px)}
   to  {opacity:1;transform:scale(1) translateY(0)}
+}
+@keyframes bw-slide-up{
+  from{opacity:0;transform:translateY(20px)}
+  to  {opacity:1;transform:translateY(0)}
 }
 
 .bw-head{
@@ -92,8 +117,9 @@
 .bw-msg.user .av{background:linear-gradient(135deg,#ff4e8a,#ffb380);color:#fff}
 .bw-msg .bb{
   background:#fff;border:1px solid #ffeaf2;border-radius:12px;
-  padding:8px 12px;font-size:13px;color:#2b1922;line-height:1.5;max-width:260px;
-  white-space:pre-wrap;word-wrap:break-word;
+  padding:8px 12px;font-size:13px;color:#2b1922;line-height:1.5;
+  max-width:min(78%, 360px);
+  white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere;
 }
 .bw-msg.user .bb{background:linear-gradient(135deg,#ffe6ef,#fff5f8);border-color:#ffd6e0}
 .bw-msg .bb strong{font-weight:700}
@@ -211,3 +237,48 @@
 .bw-launch-face{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center}
 .bw-launch-face svg{width:22px;height:22px;display:block}
 .bw-launch-face .bw-pet-face{width:22px;height:22px}
+
+/* ------ Mobile / tablet polish ------ */
+@media (max-width:560px){
+  /* Compact head — let the title shrink so the icon row never wraps. */
+  .bw-head{padding:12px 12px;gap:8px}
+  .bw-head-avatar{width:30px;height:30px;font-size:14px}
+  .bw-head-title strong{font-size:13px}
+  .bw-head-title span{font-size:10.5px}
+  .bw-head-actions{gap:3px}
+  .bw-head-actions a,
+  .bw-head-actions button,
+  .bw-head-icon{width:32px;height:32px;font-size:14px}
+
+  /* Body — give it real room. font-size 16px on the textarea stops
+     iOS Safari from zooming in when it gains focus, which on shorter
+     phones was hiding the chat area entirely. */
+  .bw-body{padding:14px 12px;gap:10px}
+  .bw-input-row{padding:10px 10px env(safe-area-inset-bottom,0) calc(10px + env(safe-area-inset-left,0))}
+  .bw-input-row textarea{font-size:16px;line-height:1.45;padding:10px 12px;min-height:42px}
+  .bw-input-row button{padding:10px 16px;font-size:14px;min-height:42px}
+
+  /* Bigger touch targets for message bubbles, full-width window. */
+  .bw-msg{gap:6px}
+  .bw-msg .bb{font-size:14px;padding:9px 13px;max-width:78%}
+  .bw-msg .av{width:30px;height:30px;font-size:15px}
+
+  /* Drawer covers the body fully on mobile — height was inheriting 0
+     from the absolutely-positioned chain in some cases. */
+  .bw-drawer{height:100%}
+  .bw-drawer-item .t{font-size:13px}
+
+  /* Footer link a bit larger so it's tappable. */
+  .bw-foot{font-size:11px;padding:8px 12px max(8px, env(safe-area-inset-bottom,0))}
+
+  /* Welcome chips wrap to two columns on slightly bigger phones. */
+  .bw-welcome-chips{gap:8px}
+  .bw-welcome-chips button{font-size:13px;padding:10px 12px}
+}
+
+/* Tablet specifics — a comfortable middle ground. */
+@media (min-width:561px) and (max-width:820px){
+  .bw-msg .bb{font-size:14px;max-width:75%}
+  .bw-input-row textarea{font-size:14.5px;min-height:40px}
+  .bw-body{padding:18px 16px}
+}

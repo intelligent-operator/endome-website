@@ -236,7 +236,37 @@ console.info("EndoMe buddy build v1");
       await loadConversations();
       showWelcome();
       input.focus();
+      closeHistoryDrawer();
     } catch (err) { toast(err.message || "Couldn't start", "err"); }
+  });
+
+  // --- Mobile / tablet history drawer toggle --------------------------
+  // On screens narrower than 1080px the history column is hidden by
+  // default. The chat-area header (rendered via CSS ::before) is
+  // clickable and opens the history as a full-screen drawer. Clicking a
+  // chat (or X anywhere) closes it. Reuses the existing markup — no DOM
+  // changes needed.
+  const historyEl = document.querySelector(".buddy-history");
+  const mainEl = document.querySelector(".buddy-main");
+  function openHistoryDrawer()  { historyEl?.classList.add("is-open"); document.body.style.overflow = "hidden"; }
+  function closeHistoryDrawer() { historyEl?.classList.remove("is-open"); document.body.style.overflow = ""; }
+  mainEl?.addEventListener("click", (e) => {
+    // Only fire when tapping the CSS pseudo "💬 Chats" header strip,
+    // which sits at y < ~40 within main.
+    const r = mainEl.getBoundingClientRect();
+    if (e.clientY - r.top < 44 && !e.target.closest(".buddy-chat,.buddy-input-row,form,button")) {
+      openHistoryDrawer();
+    }
+  });
+  // Tapping any chat tile (delegated handler) closes the drawer too.
+  document.getElementById("buddy-history-list")?.addEventListener("click", (e) => {
+    if (e.target.closest("[data-conv]") && !e.target.closest("[data-del-conv]")) {
+      setTimeout(closeHistoryDrawer, 50);
+    }
+  });
+  // Esc closes the drawer.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && historyEl?.classList.contains("is-open")) closeHistoryDrawer();
   });
 
   // --- Confirmation modal (replaces native confirm) -------------------
