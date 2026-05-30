@@ -116,6 +116,7 @@ function render() {
   renderDosesDue();
   renderEndoWatch();
   renderBodyMap();
+  renderCyclePrediction();
 }
 
 // --- Early-diagnosis pattern watch ---------------------------------------
@@ -253,6 +254,114 @@ document.addEventListener("click", (e) => {
     wrap?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, 120);
 });
+
+// --- Cycle prediction card -----------------------------------------------
+// Renders below the body map once we have any cycle history. Shows
+// predicted next period, day-in-cycle, estimated phase, fertile window,
+// and a confidence pill driven by stddev of recent cycle lengths.
+async function renderCyclePrediction() {
+  const slot = document.getElementById("cycle-predict-slot");
+  if (!slot) return;
+  let data;
+  try {
+    const r = await fetch("/api/me/cycles", { credentials: "same-origin" });
+    if (!r.ok) { slot.innerHTML = ""; return; }
+    data = await r.json();
+  } catch { slot.innerHTML = ""; return; }
+
+  const p = data.prediction;
+  // No prediction yet — prompt to log a period start so we can start.
+  if (!p) {
+    if (!data.cycles?.length) {
+      slot.innerHTML = `
+        <div class="card cycle-predict-card cycle-empty">
+          <div class="card-head wide">
+            <span><span class="ico-tile pink">🌸</span> Cycle prediction</span>
+          </div>
+          <p class="cp-empty">Log when your period starts and ends — after one cycle I can start predicting your next one.</p>
+          <a class="pill-btn full" href="/dashboard#cycle">Log period start</a>
+        </div>`;
+    } else {
+      slot.innerHTML = `
+        <div class="card cycle-predict-card cycle-empty">
+          <div class="card-head wide">
+            <span><span class="ico-tile pink">🌸</span> Cycle prediction</span>
+          </div>
+          <p class="cp-empty">One cycle logged so far. Once you log your next period start, I'll start predicting forward.</p>
+        </div>`;
+    }
+    return;
+  }
+
+  const conf = p.confidence;
+  const confColor = conf === "high" ? "good" : conf === "medium" ? "okay" : "warn";
+  const phaseEmoji = { menstrual:"🌑", follicular:"🌒", ovulation:"☀️", luteal:"🌕" };
+  const phaseLabel = { menstrual:"Menstrual", follicular:"Follicular", ovulation:"Ovulatory", luteal:"Luteal" };
+  const daysUntilText = p.daysUntil >= 0
+    ? (p.daysUntil === 0 ? "Due today" : `In ${p.daysUntil} day${p.daysUntil === 1 ? "" : "s"}`)
+    : `${-p.daysUntil} day${-p.daysUntil === 1 ? "" : "s"} late`;
+  const overdue = p.daysUntil < -2;
+
+  slot.innerHTML = `
+    <div class="card cycle-predict-card ${overdue ? "is-overdue" : ""}">
+      <div class="card-head wide">
+        <span><span class="ico-tile pink">🌸</span> Cycle prediction</span>
+        <span class="cp-conf cp-conf-${confColor}">${escapeHtml(conf)} confidence</span>
+      </div>
+      <div class="cp-grid">
+        <div class="cp-tile cp-next">
+          <span class="cp-label">Next period</span>
+          <strong class="cp-big">${escapeHtml(daysUntilText)}</strong>
+          <em class="cp-sub">${escapeHtml(formatPrettyDate(p.nextStart))}</em>
+        </div>
+        <div class="cp-tile">
+          <span class="cp-label">Today</span>
+          <strong>${phaseEmoji[p.estimatedPhase] || "🌸"} ${escapeHtml(phaseLabel[p.estimatedPhase] || "—")}</strong>
+          <em>Day ${p.dayInCycle ?? "—"} of ${p.avgCycleLength}</em>
+        </div>
+        <div class="cp-tile">
+          <span class="cp-label">Fertile window</span>
+          <strong>${escapeHtml(shortDate(p.fertileStart))} → ${escapeHtml(shortDate(p.fertileEnd))}</strong>
+          <em>Ovulation ~${escapeHtml(shortDate(p.ovulation))}</em>
+        </div>
+        <div class="cp-tile">
+          <span class="cp-label">Avg cycle</span>
+          <strong>${p.avgCycleLength}<span class="cp-unit">d</span></strong>
+          <em>±${p.stddev}d over last ${p.sampleCycles}</em>
+        </div>
+      </div>
+      <button type="button" class="pill-btn full" id="cp-log-btn">+ Log period start today</button>
+    </div>`;
+  document.getElementById("cp-log-btn")?.addEventListener("click", logPeriodStartToday);
+}
+
+function formatPrettyDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
+function shortDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+async function logPeriodStartToday() {
+  const today = todayLocalDate();
+  try {
+    const r = await fetch("/api/me/cycles", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ start_date: today }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    toast("Period start logged");
+    renderCyclePrediction();
+  } catch (err) {
+    toast(`Couldn't log: ${err.message || err}`, "error");
+  }
+}
 
 // --- Doses due banner ----------------------------------------------------
 // Pulls today's scheduled doses + their current status. Renders a card

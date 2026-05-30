@@ -283,6 +283,17 @@ export default {
           if (url.pathname === "/api/me/body-pain-map" && request.method === "GET") {
             return jsonHeaders(await getBodyPainMap(env, user));
           }
+          if (url.pathname === "/api/me/cycles" && request.method === "GET") {
+            return jsonHeaders(await getCycles(env, user));
+          }
+          if (url.pathname === "/api/me/cycles" && request.method === "POST") {
+            return jsonHeaders(await postCycle(request, env, user));
+          }
+          {
+            const m = url.pathname.match(/^\/api\/me\/cycles\/(\d+)$/);
+            if (m && request.method === "PATCH")  return jsonHeaders(await patchCycle(request, env, user, +m[1]));
+            if (m && request.method === "DELETE") return jsonHeaders(await deleteCycle(env, user, +m[1]));
+          }
           if (url.pathname === "/api/me/report" && request.method === "GET") {
             return jsonHeaders(await getMedicalReport(request, env, user));
           }
@@ -1458,6 +1469,7 @@ async function bootstrapSchema(env) {
       ensureEmailLogSchema(env),
       ensureTestResultsSchema(env),
       ensureInsightSchema(env),
+      ensureCycleSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -2495,6 +2507,13 @@ async function getMedicalReport(request, env, user) {
     return r.results || [];
   });
 
+  // --- Cycles + prediction ---
+  let cyclesData = { cycles: [], prediction: null, summary: { total: 0, avgPeriodLength: null } };
+  try {
+    const cr = await getCycles(env, user); // returns Response
+    cyclesData = await cr.json();
+  } catch (_) {}
+
   // --- Pattern markers (early-dx-watch) ---
   let patternWatch = null;
   try { patternWatch = await computeEndoPatternWatch(env, user); } catch (_) {}
@@ -2521,6 +2540,7 @@ async function getMedicalReport(request, env, user) {
     cravings: { rows: cravings, byType: cravingSummary },
     appointments: appointments,
     testResults: testResults,
+    cyclesData,
     patternWatch,
   });
 }
@@ -2557,6 +2577,14 @@ async function getClinicalSummary(request, env, user) {
       phaseCounts: report.daily?.phaseCounts || {},
       bleedingDays: report.daily?.bleedingDays || 0,
       heaviestFlow: report.daily?.heaviestFlow || "none",
+      total: report.cyclesData?.summary?.total || 0,
+      avgPeriodLength: report.cyclesData?.summary?.avgPeriodLength || null,
+      prediction: report.cyclesData?.prediction || null,
+      recent: (report.cyclesData?.cycles || []).slice(0, 6).map((c) => ({
+        start: c.start_date, end: c.end_date,
+        cycleLength: c.cycle_length, periodLength: c.period_length,
+        heaviestFlow: c.heaviest_flow,
+      })),
     },
     symptoms: {
       total: report.symptoms?.total || 0,
@@ -5382,6 +5410,7 @@ async function sendBuddyMessage(request, env, user, id) {
   const dataContext = await buildInsightContext(env, user, [
     "symptoms_30d", "daily_logs_30d", "medications",
     "medication_logs_30d", "food_logs_30d", "cravings_30d", "test_results", "appointments_60d",
+    "cycles",
   ]).catch(() => "(data lookup failed)");
 
   // The companion speaks AS the user's EndoPet — using the name they chose
@@ -8847,6 +8876,262 @@ async function ensureTestResultsSchema(env) {
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
 }
 
+// =============================================================================
+// CYCLES — first-class period tracking + prediction.
+// daily_logs already captures `flow` per day. This table sits on top: each
+// row is a complete cycle (one period start → the next), so we can compute
+// average length, period length, and predict next start / fertile window
+// without re-scanning daily_logs every time.
+// =============================================================================
+let _cycleSchemaChecked = false;
+async function ensureCycleSchema(env) {
+  if (_cycleSchemaChecked) return;
+  _cycleSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS cycles (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  start_date TEXT NOT NULL," +              // YYYY-MM-DD — period start
+    "  end_date TEXT," +                          // last bleeding day (nullable for active)
+    "  cycle_length INTEGER," +                   // days from this start → next start
+    "  period_length INTEGER," +                  // bleeding days inclusive
+    "  heaviest_flow TEXT," +                     // light | medium | heavy
+    "  notes TEXT," +
+    "  source TEXT NOT NULL DEFAULT 'manual'," + // 'manual' | 'derived'
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL," +
+    "  UNIQUE(user_id, start_date)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_cycles_user_start ON cycles(user_id, start_date DESC)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+// Walk this user's daily_logs and derive any cycle rows that aren't there
+// yet. A "period start" is a day where flow ∈ {light, medium, heavy} AND
+// the previous day had no flow (or no log). A period ends at the last
+// consecutive bleeding day before a 2+ day gap.
+// Cheap, idempotent — UNIQUE(user_id, start_date) prevents duplicates.
+async function reconcileCyclesFromLogs(env, user) {
+  await ensureCycleSchema(env);
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT log_date, flow FROM daily_logs " +
+      "WHERE user_id = ? AND flow IS NOT NULL AND flow <> '' " +
+      "ORDER BY log_date ASC"
+    ).bind(user.id).all();
+  } catch { return; }
+  const days = (rows.results || []).map((r) => ({
+    date: r.log_date,
+    bleeding: r.flow && r.flow !== "none",
+    flow: r.flow,
+  }));
+  if (!days.length) return;
+
+  const FLOW_RANK = { spotting: 1, light: 2, medium: 3, heavy: 4 };
+  const derived = [];
+  let current = null;
+  let lastDate = null;
+  for (const d of days) {
+    const dt = new Date(`${d.date}T00:00:00Z`);
+    const gap = lastDate ? Math.round((dt - lastDate) / 86400000) : 999;
+    if (d.bleeding && d.flow !== "spotting") {
+      // New period if no current OR > 2 day gap since last bleeding day
+      if (!current || gap > 2) {
+        if (current) derived.push(current);
+        current = { start: d.date, end: d.date, heaviest: d.flow };
+      } else {
+        current.end = d.date;
+        if ((FLOW_RANK[d.flow] || 0) > (FLOW_RANK[current.heaviest] || 0)) current.heaviest = d.flow;
+      }
+      lastDate = dt;
+    } else if (d.bleeding && current && gap <= 2) {
+      // Spotting at the tail extends the period
+      current.end = d.date;
+      lastDate = dt;
+    }
+  }
+  if (current) derived.push(current);
+  if (!derived.length) return;
+
+  // Compute cycle length (this start → next start)
+  for (let i = 0; i < derived.length; i++) {
+    const periodDays = Math.round(
+      (new Date(`${derived[i].end}T00:00:00Z`) - new Date(`${derived[i].start}T00:00:00Z`)) / 86400000
+    ) + 1;
+    derived[i].period_length = periodDays;
+    derived[i].cycle_length = (i < derived.length - 1)
+      ? Math.round(
+          (new Date(`${derived[i + 1].start}T00:00:00Z`) - new Date(`${derived[i].start}T00:00:00Z`)) / 86400000
+        )
+      : null;
+  }
+
+  const now = nowSec();
+  const stmts = derived.map((c) => env.DB.prepare(
+    "INSERT INTO cycles (user_id, start_date, end_date, cycle_length, period_length, heaviest_flow, source, created_at, updated_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, 'derived', ?, ?) " +
+    "ON CONFLICT(user_id, start_date) DO UPDATE SET " +
+    "  end_date = COALESCE(cycles.end_date, excluded.end_date), " +
+    "  cycle_length = COALESCE(cycles.cycle_length, excluded.cycle_length), " +
+    "  period_length = COALESCE(cycles.period_length, excluded.period_length), " +
+    "  heaviest_flow = COALESCE(cycles.heaviest_flow, excluded.heaviest_flow), " +
+    "  updated_at = excluded.updated_at"
+  ).bind(user.id, c.start, c.end, c.cycle_length, c.period_length, c.heaviest, now, now));
+  try { await env.DB.batch(stmts); } catch {}
+}
+
+// Prediction. Take the last 6 closed cycles (cycle_length not null),
+// average them, and project forward. Confidence = inverse of stddev:
+// regular ≤ 2 days → high, ≤ 5 → medium, otherwise low.
+function predictNextCycle(cycles) {
+  const closed = cycles.filter((c) => c.cycle_length && c.cycle_length >= 18 && c.cycle_length <= 60)
+                       .slice(0, 6);
+  if (!closed.length) return null;
+  const lens = closed.map((c) => c.cycle_length);
+  const avg = Math.round(lens.reduce((a, b) => a + b, 0) / lens.length);
+  const variance = lens.reduce((s, n) => s + (n - avg) ** 2, 0) / lens.length;
+  const stddev = Math.sqrt(variance);
+  const confidence = stddev <= 2 ? "high" : stddev <= 5 ? "medium" : "low";
+
+  const lastStart = cycles[0]?.start_date; // cycles ordered DESC
+  if (!lastStart) return null;
+  const lastStartD = new Date(`${lastStart}T00:00:00Z`);
+
+  const addDays = (n) => {
+    const d = new Date(lastStartD); d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  const todayD = new Date(`${today}T00:00:00Z`);
+  const nextStart = addDays(avg);
+  const daysUntil = Math.round((new Date(`${nextStart}T00:00:00Z`) - todayD) / 86400000);
+
+  // Standard luteal phase ≈ 14 days, so ovulation ≈ next_start − 14.
+  // Fertile window: ovulation − 5 → ovulation + 1.
+  const ovulation = addDays(avg - 14);
+  const fertileStart = addDays(avg - 19);
+  const fertileEnd = addDays(avg - 13);
+
+  // Current cycle day relative to last start
+  const dayInCycle = Math.round((todayD - lastStartD) / 86400000) + 1;
+  // Map to phase (simple bands)
+  let phase = null;
+  if (dayInCycle >= 1 && dayInCycle <= 5) phase = "menstrual";
+  else if (dayInCycle <= avg - 14) phase = "follicular";
+  else if (dayInCycle <= avg - 13) phase = "ovulation";
+  else if (dayInCycle <= avg) phase = "luteal";
+
+  return {
+    avgCycleLength: avg, stddev: +stddev.toFixed(1), confidence,
+    sampleCycles: closed.length,
+    lastStart,
+    nextStart, daysUntil,
+    ovulation, fertileStart, fertileEnd,
+    today, dayInCycle: dayInCycle > 0 ? dayInCycle : null,
+    estimatedPhase: phase,
+  };
+}
+
+// GET /api/me/cycles
+async function getCycles(env, user) {
+  await ensureCycleSchema(env);
+  await reconcileCyclesFromLogs(env, user);
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT id, start_date, end_date, cycle_length, period_length, heaviest_flow, notes, source " +
+      "FROM cycles WHERE user_id = ? ORDER BY start_date DESC LIMIT 36"
+    ).bind(user.id).all();
+  } catch {}
+  const cycles = rows.results || [];
+  // Period-length and cycle-length averages across the last 6 closed cycles.
+  const periodLens = cycles.filter((c) => c.period_length).slice(0, 6).map((c) => c.period_length);
+  const avgPeriod = periodLens.length ? Math.round(periodLens.reduce((a, b) => a + b, 0) / periodLens.length) : null;
+  return json({
+    cycles,
+    summary: {
+      total: cycles.length,
+      avgPeriodLength: avgPeriod,
+    },
+    prediction: predictNextCycle(cycles),
+  });
+}
+
+// POST /api/me/cycles  — manually log a new period start
+async function postCycle(request, env, user) {
+  await ensureCycleSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const start = parseDateParam(body.start_date);
+  if (!start) return json({ error: "start_date (YYYY-MM-DD) required" }, 400);
+  const end = parseDateParam(body.end_date);
+  const heaviest = ["spotting","light","medium","heavy"].includes(body.heaviest_flow) ? body.heaviest_flow : null;
+  const notes = sanitizeText(body.notes, 500);
+  const now = nowSec();
+  const periodLen = (start && end)
+    ? Math.round((new Date(`${end}T00:00:00Z`) - new Date(`${start}T00:00:00Z`)) / 86400000) + 1
+    : null;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO cycles (user_id, start_date, end_date, period_length, heaviest_flow, notes, source, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, 'manual', ?, ?) " +
+      "ON CONFLICT(user_id, start_date) DO UPDATE SET " +
+      "  end_date = excluded.end_date, period_length = excluded.period_length, " +
+      "  heaviest_flow = excluded.heaviest_flow, notes = excluded.notes, " +
+      "  source = 'manual', updated_at = excluded.updated_at"
+    ).bind(user.id, start, end, periodLen, heaviest, notes, now, now).run();
+  } catch (e) {
+    return json({ error: "Could not save cycle" }, 500);
+  }
+  // Recompute cycle_length on the cycle before this one.
+  try {
+    await env.DB.prepare(
+      "UPDATE cycles SET cycle_length = " +
+      "  CAST((julianday(?) - julianday(start_date)) AS INTEGER), updated_at = ? " +
+      "WHERE user_id = ? AND start_date < ? " +
+      "  AND start_date = (SELECT MAX(start_date) FROM cycles WHERE user_id = ? AND start_date < ?)"
+    ).bind(start, now, user.id, start, user.id, start).run();
+  } catch {}
+  return getCycles(env, user);
+}
+
+// PATCH /api/me/cycles/:id
+async function patchCycle(request, env, user, id) {
+  await ensureCycleSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const owned = await env.DB.prepare("SELECT id, start_date FROM cycles WHERE id = ? AND user_id = ?")
+    .bind(id, user.id).first();
+  if (!owned) return json({ error: "Not found" }, 404);
+  const end = body.end_date === null ? null : parseDateParam(body.end_date);
+  const heaviest = body.heaviest_flow == null ? null
+    : (["spotting","light","medium","heavy"].includes(body.heaviest_flow) ? body.heaviest_flow : null);
+  const notes = body.notes == null ? null : sanitizeText(body.notes, 500);
+  const start = owned.start_date;
+  const periodLen = (start && end)
+    ? Math.round((new Date(`${end}T00:00:00Z`) - new Date(`${start}T00:00:00Z`)) / 86400000) + 1
+    : null;
+  const now = nowSec();
+  try {
+    await env.DB.prepare(
+      "UPDATE cycles SET end_date = ?, period_length = ?, heaviest_flow = ?, notes = COALESCE(?, notes), " +
+      "  source = 'manual', updated_at = ? WHERE id = ? AND user_id = ?"
+    ).bind(end, periodLen, heaviest, notes, now, id, user.id).run();
+  } catch (e) { return json({ error: "Could not update" }, 500); }
+  return getCycles(env, user);
+}
+
+// DELETE /api/me/cycles/:id
+async function deleteCycle(env, user, id) {
+  await ensureCycleSchema(env);
+  try {
+    await env.DB.prepare("DELETE FROM cycles WHERE id = ? AND user_id = ?").bind(id, user.id).run();
+  } catch {}
+  return getCycles(env, user);
+}
+
 // Seed a curated demo result of each kind for tom@bluerydge.com so the page
 // has something to render out of the box. Runs once per user — checks for
 // any existing test_results row before inserting.
@@ -9658,6 +9943,7 @@ async function buildInsightContext(env, user, scope) {
       else if (s === "appointments_60d") chunk = await ctxAppointments(env, user, 60);
       else if (s === "food_logs_30d")  chunk = await ctxFoodLogs(env, user, 30);
       else if (s === "cravings_30d")   chunk = await ctxCravings(env, user, 30);
+      else if (s === "cycles")         chunk = await ctxCycles(env, user);
     } catch (err) {
       chunk = `(${s}: read failed — ${err?.message || "unknown"})`;
     }
@@ -9786,6 +10072,30 @@ async function ctxCravings(env, user, days) {
   ).join("\n");
   return `### Cravings (last ${days} days, ${r.results.length} entries)\n` +
          `Worth pairing with cycle phase: cravings cluster in the luteal phase due to higher progesterone + slightly higher energy needs.\n${lines}`;
+}
+
+async function ctxCycles(env, user) {
+  await ensureCycleSchema(env);
+  await reconcileCyclesFromLogs(env, user);
+  const r = await env.DB.prepare(
+    "SELECT start_date, end_date, cycle_length, period_length, heaviest_flow " +
+    "FROM cycles WHERE user_id = ? ORDER BY start_date DESC LIMIT 12"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  const cycles = r.results || [];
+  if (!cycles.length) return "### Menstrual cycles\nNothing logged yet — encourage logging flow on /food or the dashboard so I can start predicting cycles.";
+  const pred = predictNextCycle(cycles);
+  const lines = cycles.slice(0, 6).map((c) =>
+    `- ${c.start_date}${c.end_date ? ` → ${c.end_date}` : " (active)"}` +
+    (c.cycle_length ? ` · cycle ${c.cycle_length}d` : "") +
+    (c.period_length ? ` · period ${c.period_length}d` : "") +
+    (c.heaviest_flow ? ` · heaviest ${c.heaviest_flow}` : "")
+  ).join("\n");
+  const predLine = pred
+    ? `Next period predicted **${pred.nextStart}** (~${pred.daysUntil >= 0 ? `in ${pred.daysUntil} d` : `${-pred.daysUntil} d ago`}, confidence ${pred.confidence}, avg cycle ${pred.avgCycleLength}d ±${pred.stddev}). ` +
+      `Estimated phase today: ${pred.estimatedPhase || "unknown"} (day ${pred.dayInCycle || "?"} of cycle). ` +
+      `Fertile window: ${pred.fertileStart} → ${pred.fertileEnd}, ovulation ~${pred.ovulation}.`
+    : "Not enough cycle history yet for a prediction.";
+  return `### Menstrual cycles\n${predLine}\nRecent:\n${lines}`;
 }
 
 async function ctxTestResults(env, user) {

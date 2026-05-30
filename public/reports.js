@@ -253,7 +253,8 @@ function sectionSummary(d){
 function sectionCycle(d){
   const phases = d.daily?.phaseCounts || {};
   const total = Object.values(phases).reduce((a, b) => a + b, 0);
-  if (!total && !d.daily?.bleedingDays) return emptySection("Cycle &amp; bleeding", "🌸", "No cycle data logged in this window.");
+  const cyc = d.cyclesData || { cycles: [], prediction: null, summary: {} };
+  if (!total && !d.daily?.bleedingDays && !cyc.cycles.length) return emptySection("Cycle &amp; bleeding", "🌸", "No cycle data logged in this window.");
   const phaseOrder = ["menstrual","follicular","ovulation","luteal"];
   const bars = phaseOrder.map((k) => {
     const v = phases[k] || 0;
@@ -274,7 +275,33 @@ function sectionCycle(d){
         <div><span>Total bleeding days</span><strong>${num(d.daily?.bleedingDays)}</strong><em>any flow ≥ spotting</em></div>
         <div><span>Heaviest flow recorded</span><strong>${escapeHtml(FLOW_LABEL[d.daily?.heaviestFlow] || "None")}</strong></div>
         <div><span>Days with phase logged</span><strong>${total}</strong></div>
+        ${cyc.summary?.total ? `<div><span>Cycles on file</span><strong>${cyc.summary.total}</strong></div>` : ""}
+        ${cyc.summary?.avgPeriodLength ? `<div><span>Avg period length</span><strong>${cyc.summary.avgPeriodLength}</strong><em>days</em></div>` : ""}
+        ${cyc.prediction?.avgCycleLength ? `<div><span>Avg cycle length</span><strong>${cyc.prediction.avgCycleLength}</strong><em>±${cyc.prediction.stddev} d, ${cyc.prediction.confidence} confidence</em></div>` : ""}
       </div>
+      ${cyc.prediction ? `
+        <p class="section-sub" style="margin-top:14px"><strong>Forward projection</strong> (computed from the last ${cyc.prediction.sampleCycles} closed cycle${cyc.prediction.sampleCycles === 1 ? "" : "s"}):</p>
+        <div class="kv-grid">
+          <div><span>Predicted next start</span><strong>${escapeHtml(cyc.prediction.nextStart)}</strong><em>${cyc.prediction.daysUntil >= 0 ? `in ${cyc.prediction.daysUntil} d` : `${-cyc.prediction.daysUntil} d ago`}</em></div>
+          <div><span>Estimated ovulation</span><strong>${escapeHtml(cyc.prediction.ovulation)}</strong></div>
+          <div><span>Fertile window</span><strong>${escapeHtml(cyc.prediction.fertileStart)} → ${escapeHtml(cyc.prediction.fertileEnd)}</strong></div>
+          <div><span>Today in cycle</span><strong>${cyc.prediction.dayInCycle ?? "—"}</strong><em>est. phase: ${escapeHtml(cyc.prediction.estimatedPhase || "—")}</em></div>
+        </div>` : ""}
+      ${cyc.cycles?.length ? `
+        <p class="section-sub" style="margin-top:14px">Recent cycles on file:</p>
+        <table class="report-table">
+          <thead><tr><th>Period start</th><th>End</th><th class="num">Cycle length</th><th class="num">Period length</th><th>Heaviest flow</th><th>Source</th></tr></thead>
+          <tbody>${cyc.cycles.slice(0, 12).map((c) => `
+            <tr>
+              <td><strong>${escapeHtml(c.start_date)}</strong></td>
+              <td>${escapeHtml(c.end_date || "—")}</td>
+              <td class="num">${c.cycle_length ?? "—"}</td>
+              <td class="num">${c.period_length ?? "—"}</td>
+              <td>${escapeHtml(FLOW_LABEL[c.heaviest_flow] || c.heaviest_flow || "—")}</td>
+              <td class="muted">${escapeHtml(c.source || "manual")}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>` : ""}
     </section>
   `;
 }

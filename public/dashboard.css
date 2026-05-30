@@ -1148,3 +1148,42 @@ body.drawer-open{overflow:hidden}
   .body-map-svg{width:170px}
   .body-map-legend{min-width:0;width:100%}
 }
+
+/* =============================================================
+   Cycle prediction card — dashboard "next period" widget.
+   ============================================================= */
+.cycle-predict-card{padding:14px 18px}
+.cycle-predict-card.is-overdue{border-color:#ffc8d8;background:linear-gradient(180deg,#fff5f8,#fff)}
+.cp-conf{
+  margin-left:auto;padding:4px 10px;border-radius:999px;
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+}
+.cp-conf-good{background:#dff5e0;color:#2b6f1f}
+.cp-conf-okay{background:#fff3d6;color:#7a5500}
+.cp-conf-warn{background:#fff0f3;color:#c4344b}
+.cp-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+  gap:10px;margin:10px 0 14px;
+}
+.cp-tile{
+  background:#fff5f8;border:1px solid #ffeaf2;border-radius:12px;
+  padding:10px 12px;display:flex;flex-direction:column;gap:2px;
+  position:relative;overflow:hidden;
+}
+.cp-tile.cp-next{
+  background:linear-gradient(135deg,#ffeaf2,#fff5f8);
+  border-color:#ffd6e0;
+}
+.cp-tile .cp-label{
+  font-size:10px;color:#7a5f6c;text-transform:uppercase;letter-spacing:.06em;font-weight:700;
+}
+.cp-tile strong{
+  font-size:15px;color:#2b1922;font-weight:700;line-height:1.2;margin-top:2px;
+  font-feature-settings:"tnum";font-variant-numeric:tabular-nums;
+}
+.cp-tile .cp-big{font-size:18px;color:#ff4e8a}
+.cp-tile .cp-unit{font-size:11px;color:#7a5f6c;margin-left:2px;font-weight:600}
+.cp-tile em{font-size:11px;color:#7a5f6c;font-style:normal;margin-top:1px}
+.cycle-empty .cp-empty{
+  margin:8px 0 12px;font-size:12.5px;color:#5a3a48;line-height:1.5;
+}
