@@ -2280,9 +2280,34 @@ async function getSymptoms(request, env, user) {
 // dashboard's interactive figure can glow red where things hurt.
 // Locations are stored as comma-separated free text — we match against the
 // fixed vocabulary in the symptom modal.
+// Region allowlist for the body-pain map aggregation. Must mirror the
+// labels rendered by the dashboard's BODY_MAP_REGIONS so freshly logged
+// pain rows actually light up the silhouette. If you add a region on
+// the client, add it here too.
 const BODY_MAP_REGIONS = [
-  "Lower abdomen","Pelvis","Ovaries","Uterus","Lower back","Legs","Rectum","Bladder","Other",
+  // Head & neck
+  "Head","Jaw","Neck",
+  // Shoulders + arms
+  "Left shoulder","Right shoulder","Left arm","Right arm",
+  "Left elbow","Right elbow","Left hand","Right hand",
+  // Torso
+  "Chest","Left breast","Right breast",
+  "Upper abdomen","Lower abdomen",
+  // Pelvic
+  "Pelvis","Left ovary","Right ovary","Uterus","Bladder","Rectum","Lower back",
+  // Hips + legs
+  "Left hip","Right hip",
+  "Left thigh","Right thigh","Left knee","Right knee",
+  "Left calf","Right calf","Left foot","Right foot",
 ];
+// Map old free-text locations to their modern equivalent so historical
+// logs still glow on the new silhouette.
+const BODY_REGION_ALIASES = {
+  "ovaries":      "Pelvis",
+  "legs":         "Left thigh",
+  "lower back":   "Lower back",
+  "lower abdomen":"Lower abdomen",
+};
 async function getBodyPainMap(env, user) {
   const today = normaliseDate(null);
   const start = new Date(`${today}T00:00:00Z`);
@@ -2303,7 +2328,10 @@ async function getBodyPainMap(env, user) {
   for (const r of rows.results || []) {
     const parts = String(r.location || "").split(",").map((p) => p.trim()).filter(Boolean);
     for (const p of parts) {
-      const key = BODY_MAP_REGIONS.find((k) => k.toLowerCase() === p.toLowerCase());
+      const lc = p.toLowerCase();
+      // Try exact match first, then the legacy-alias map.
+      let key = BODY_MAP_REGIONS.find((k) => k.toLowerCase() === lc);
+      if (!key && BODY_REGION_ALIASES[lc]) key = BODY_REGION_ALIASES[lc];
       if (!key) continue;
       const slot = regions[key];
       slot.count += 1;

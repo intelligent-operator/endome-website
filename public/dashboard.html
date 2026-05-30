@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780141851" />
-  <link rel="stylesheet" href="/dashboard.css?v=1780142733" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780143394" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -757,8 +757,9 @@
     </div>
   </div>
 
-  <!-- MODAL: Period calendar — pick the day a period started. Shows where
-       you are in the cycle + predicted period / fertile window. -->
+  <!-- MODAL: Period calendar — pick the day a period started AND ended.
+       Shows where you are in the cycle, your past logged periods (solid),
+       and the next 1-2 predicted periods (striped) plus fertile window. -->
   <div class="modal" id="modal-period" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="period-title">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card">
@@ -766,7 +767,7 @@
       <header class="modal-h">
         <span class="modal-emoji">🌸</span>
         <h3 id="period-title">Log your period</h3>
-        <p>Tap the day your period started. Past or today.</p>
+        <p>Tap the start day, then the last bleeding day. Predictions update from your history.</p>
       </header>
 
       <div class="period-cal" id="period-cal">
@@ -780,7 +781,8 @@
         </div>
         <div class="period-cal-grid" id="period-cal-grid"></div>
         <div class="period-cal-legend">
-          <span><i class="leg-dot leg-period"></i> Period</span>
+          <span><i class="leg-dot leg-period-logged"></i> Past period</span>
+          <span><i class="leg-dot leg-period-predicted"></i> Predicted</span>
           <span><i class="leg-dot leg-fertile"></i> Fertile</span>
           <span><i class="leg-dot leg-ovul"></i> Ovulation</span>
           <span><i class="leg-dot leg-today"></i> Today</span>
@@ -791,7 +793,8 @@
 
       <div class="modal-actions">
         <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
-        <button type="button" class="btn btn-primary" id="period-save-btn" disabled>Log period start</button>
+        <button type="button" class="btn btn-ghost" id="period-clear-btn">Clear</button>
+        <button type="button" class="btn btn-primary" id="period-save-btn" disabled>Log period</button>
       </div>
     </div>
   </div>
@@ -1148,7 +1151,7 @@
 
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
-  <script src="/dashboard.js?v=1780142733" defer></script>
+  <script src="/dashboard.js?v=1780143394" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780118228" defer></script>
 </body>

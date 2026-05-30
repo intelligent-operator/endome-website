@@ -1195,22 +1195,32 @@ body.drawer-open{overflow:hidden}
 .pc-future{opacity:.4;cursor:not-allowed}
 .pc-today{border-color:#ff4e8a;border-width:2px}
 .pc-today .pc-num{color:#ff4e8a}
-.pc-period{background:linear-gradient(135deg,#ffe2ea,#ffd0dc)}
-.pc-period .pc-num{color:#c4344b}
+/* Past logged period — solid red */
+.pc-period-logged{background:linear-gradient(135deg,#ffb3c1,#ff8fa3)}
+.pc-period-logged .pc-num{color:#7a0a1f;font-weight:700}
+/* Predicted future period — striped pink so it reads as "expected, not yet" */
+.pc-period-predicted{
+  background:repeating-linear-gradient(45deg,#ffe2ea 0 6px,#ffd0dc 6px 12px);
+  border:1px dashed #ffa6b9;
+}
+.pc-period-predicted .pc-num{color:#c4344b}
 .pc-fertile{background:#e9f7e0}
 .pc-fertile .pc-num{color:#3d7a23}
 .pc-ovul{background:#fff6d6}
 .pc-ovul .pc-num{color:#9a7400}
+/* User selection — strong pink. Start-only differs slightly from a full range. */
 .pc-selected{background:linear-gradient(135deg,#ff4e8a,#ff7aa6) !important;border-color:transparent !important}
 .pc-selected .pc-num,.pc-selected .pc-cd{color:#fff !important}
-.pc-logged{position:absolute;bottom:4px;width:5px;height:5px;border-radius:50%;background:#c4344b}
-.period-cal-legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;justify-content:center;font-size:11px;color:#7a5f6c}
+.pc-selected-start{box-shadow:0 0 0 2px #ff4e8a inset}
+.pc-logged{position:absolute;bottom:4px;width:5px;height:5px;border-radius:50%;background:#7a0a1f}
+.period-cal-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;justify-content:center;font-size:11px;color:#7a5f6c}
 .period-cal-legend span{display:inline-flex;align-items:center;gap:5px}
-.leg-dot{width:10px;height:10px;border-radius:3px;display:inline-block}
-.leg-period{background:linear-gradient(135deg,#ffe2ea,#ffd0dc)}
+.leg-dot{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid transparent}
+.leg-period-logged{background:linear-gradient(135deg,#ffb3c1,#ff8fa3)}
+.leg-period-predicted{background:repeating-linear-gradient(45deg,#ffe2ea 0 4px,#ffd0dc 4px 8px);border-color:#ffa6b9}
 .leg-fertile{background:#e9f7e0}
 .leg-ovul{background:#fff6d6}
-.leg-today{border:2px solid #ff4e8a}
+.leg-today{border:2px solid #ff4e8a;background:transparent}
 .period-selected{
   margin:14px 0 4px;padding:10px 14px;background:#fff5f8;border-radius:10px;
   font-size:13px;color:#3a2330;line-height:1.5;text-align:center;

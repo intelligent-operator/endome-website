@@ -557,13 +557,18 @@ function shortDate(iso) {
 }
 
 // --- Period calendar ------------------------------------------------------
-// A proper month-grid date picker. Highlights today, the predicted next
-// period window, fertile window + ovulation, and overlays the cycle-day
-// number on each cell relative to the most-recent logged period start.
+// Month-grid date picker for logging a period as a date RANGE
+// (first click = start, second click = end). The calendar also overlays:
+//   - past logged periods in solid red (rebuilt from /api/me/cycles)
+//   - the next 1–2 predicted period windows in striped pink (predictNextCycle)
+//   - the fertile window in green and predicted ovulation in yellow
+//   - today, outlined in pink
+// "Predictions based on previous months" comes straight from the server's
+// rolling avg cycle length + period length; the calendar just paints them.
 let _periodCalState = {
-  viewYear: 0, viewMonth: 0, // currently-displayed month
-  selected: null,            // chosen YYYY-MM-DD
-  cycleData: null,           // /api/me/cycles payload
+  viewYear: 0, viewMonth: 0,     // currently-displayed month
+  start: null, end: null,        // selected range
+  cycleData: null,               // /api/me/cycles payload
 };
 
 function isoFromYMD(y, m, d) {
@@ -582,48 +587,53 @@ function openPeriodCalendar(cycleData) {
   const modal = document.getElementById("modal-period");
   if (!modal) return;
   _periodCalState.cycleData = cycleData || null;
-  _periodCalState.selected = null;
+  _periodCalState.start = null;
+  _periodCalState.end = null;
   const today = todayLocalDate();
   const td = new Date(today + "T00:00:00");
   _periodCalState.viewYear = td.getFullYear();
   _periodCalState.viewMonth = td.getMonth();
 
-  document.getElementById("period-selected").hidden = true;
-  document.getElementById("period-save-btn").disabled = true;
+  paintSelectedSummary();
   renderPeriodCalendar();
 
   modal.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+
+  // Defensive: explicitly wire close buttons in case the global delegated
+  // handler is intercepted elsewhere. Safe to call repeatedly — using
+  // onclick replaces any previous binding.
+  modal.querySelectorAll("[data-close-modal]").forEach((el) => {
+    el.onclick = () => closeAllModals();
+  });
 }
 
-function renderPeriodCalendar() {
-  const grid = document.getElementById("period-cal-grid");
-  const monthLabel = document.getElementById("period-cal-month");
-  if (!grid) return;
-  const { viewYear, viewMonth, cycleData } = _periodCalState;
-  const today = todayLocalDate();
-
-  monthLabel.textContent = new Date(viewYear, viewMonth, 1)
-    .toLocaleDateString(undefined, { month: "long", year: "numeric" });
-
-  // Prediction-derived markers.
-  const pred = cycleData?.prediction || null;
+// Pre-compute the sets of days for past logged periods + predicted future
+// periods so the renderer is a tight loop.
+function buildPredictionMaps(cycleData) {
   const cycles = cycleData?.cycles || [];
-  const lastStart = cycles[0]?.start_date || pred?.lastStart || null;
-  const avgLen = pred?.avgCycleLength || 28;
+  const pred = cycleData?.prediction || null;
+  const avgPeriodLen = cycleData?.summary?.avgPeriodLength || pred?.avgPeriodLength || 5;
 
-  // Build a set of period days (predicted next period ≈ avg period length),
-  // fertile window, and ovulation day.
-  const periodDays = new Set();
+  const loggedDays = new Set();   // confirmed period days from history
+  const loggedStarts = new Set(); // start dates (for the "logged" dot)
+  for (const c of cycles) {
+    if (!c.start_date) continue;
+    loggedStarts.add(c.start_date);
+    const end = c.end_date || addDaysIso(c.start_date, Math.max(0, (c.period_length || avgPeriodLen) - 1));
+    let d = c.start_date;
+    while (d <= end) { loggedDays.add(d); d = addDaysIso(d, 1); }
+  }
+
+  const predictedDays = new Set();
   const fertileDays = new Set();
   let ovulationDay = null;
   if (pred?.nextStart) {
-    const periodLen = cycleData?.summary?.avgPeriodLength || 5;
-    for (let i = 0; i < periodLen; i++) periodDays.add(addDaysIso(pred.nextStart, i));
-    // Also project the period after next so the calendar stays useful forward.
-    const next2 = addDaysIso(pred.nextStart, avgLen);
-    for (let i = 0; i < periodLen; i++) periodDays.add(addDaysIso(next2, i));
+    // Two future cycles worth of predicted period days.
+    for (let i = 0; i < avgPeriodLen; i++) predictedDays.add(addDaysIso(pred.nextStart, i));
+    const next2 = addDaysIso(pred.nextStart, pred.avgCycleLength || 28);
+    for (let i = 0; i < avgPeriodLen; i++) predictedDays.add(addDaysIso(next2, i));
   }
   if (pred?.fertileStart && pred?.fertileEnd) {
     let d = pred.fertileStart;
@@ -631,40 +641,101 @@ function renderPeriodCalendar() {
   }
   if (pred?.ovulation) ovulationDay = pred.ovulation;
 
+  // The most-recent logged start anchors the "Day N" cycle-day badge.
+  const lastStart = cycles[0]?.start_date || pred?.lastStart || null;
+  return { loggedDays, loggedStarts, predictedDays, fertileDays, ovulationDay, lastStart };
+}
+
+function renderPeriodCalendar() {
+  const grid = document.getElementById("period-cal-grid");
+  const monthLabel = document.getElementById("period-cal-month");
+  if (!grid) return;
+  const { viewYear, viewMonth, cycleData, start, end } = _periodCalState;
+  const today = todayLocalDate();
+
+  monthLabel.textContent = new Date(viewYear, viewMonth, 1)
+    .toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+  const maps = buildPredictionMaps(cycleData);
   const firstDow = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
+  // Range hover preview: when start is set but no end, hovered cell
+  // previews the range. We re-render on hover for simplicity.
   let cells = "";
-  // Leading blanks
   for (let i = 0; i < firstDow; i++) cells += `<span class="pc-cell pc-empty"></span>`;
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = isoFromYMD(viewYear, viewMonth, d);
     const isFuture = iso > today;
     const classes = ["pc-cell"];
     if (iso === today) classes.push("pc-today");
-    if (iso === _periodCalState.selected) classes.push("pc-selected");
-    if (periodDays.has(iso)) classes.push("pc-period");
-    if (fertileDays.has(iso)) classes.push("pc-fertile");
-    if (iso === ovulationDay) classes.push("pc-ovul");
+
+    // Selection layer (highest priority visually)
+    let inSelected = false;
+    if (start && end && iso >= start && iso <= end) { classes.push("pc-selected"); inSelected = true; }
+    else if (start && !end && iso === start) { classes.push("pc-selected", "pc-selected-start"); inSelected = true; }
+
+    // Logged period day (solid red) — past months
+    if (!inSelected && maps.loggedDays.has(iso)) classes.push("pc-period-logged");
+    // Predicted period day (striped pink) — future months
+    else if (!inSelected && maps.predictedDays.has(iso)) classes.push("pc-period-predicted");
+    // Fertile + ovulation overlays (don't fight with period colours)
+    if (!inSelected && !maps.loggedDays.has(iso) && !maps.predictedDays.has(iso)) {
+      if (maps.fertileDays.has(iso)) classes.push("pc-fertile");
+      if (iso === maps.ovulationDay) classes.push("pc-ovul");
+    }
     if (isFuture) classes.push("pc-future");
 
-    // Cycle-day overlay (relative to last logged start), only for days
-    // from the last start up to a sensible window.
+    // Cycle-day badge relative to most-recent start (so user sees Day 1/2/3...).
     let cycleDayBadge = "";
-    if (lastStart && iso >= lastStart) {
-      const cd = daysBetweenIso(lastStart, iso) + 1;
+    if (maps.lastStart && iso >= maps.lastStart) {
+      const cd = daysBetweenIso(maps.lastStart, iso) + 1;
       if (cd >= 1 && cd <= 45) cycleDayBadge = `<em class="pc-cd">${cd}</em>`;
     }
-    // Period start dates that are already logged get a marker dot.
-    const isLoggedStart = cycles.some((c) => c.start_date === iso);
+    const loggedDot = maps.loggedStarts.has(iso) ? '<i class="pc-logged"></i>' : "";
     cells += `<button type="button" class="${classes.join(" ")}" data-date="${iso}" ${isFuture ? "disabled" : ""}>
-      <span class="pc-num">${d}</span>${cycleDayBadge}${isLoggedStart ? '<i class="pc-logged"></i>' : ""}
+      <span class="pc-num">${d}</span>${cycleDayBadge}${loggedDot}
     </button>`;
   }
   grid.innerHTML = cells;
 }
 
-// Calendar interactions
+// Show the running selection summary above the Log button.
+function paintSelectedSummary() {
+  const sel = document.getElementById("period-selected");
+  const btn = document.getElementById("period-save-btn");
+  const { start, end, cycleData } = _periodCalState;
+  if (!sel || !btn) return;
+
+  if (!start) {
+    sel.hidden = true;
+    btn.disabled = true;
+    btn.textContent = "Log period";
+    return;
+  }
+  const fmt = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const lastStart = cycleData?.cycles?.[0]?.start_date || null;
+
+  if (!end) {
+    let context = "";
+    if (lastStart && start > lastStart) {
+      const cd = daysBetweenIso(lastStart, start) + 1;
+      context = ` (day <strong>${cd}</strong> of current cycle)`;
+    }
+    sel.innerHTML = `Period start: <strong>${fmt(start)}</strong>${context}.<br><em>Now tap the last bleeding day — or save start-only.</em>`;
+    sel.hidden = false;
+    btn.disabled = false;
+    btn.textContent = "Log start only";
+  } else {
+    const n = daysBetweenIso(start, end) + 1;
+    sel.innerHTML = `Period: <strong>${fmt(start)} → ${fmt(end)}</strong> · <strong>${n} day${n === 1 ? "" : "s"}</strong>.`;
+    sel.hidden = false;
+    btn.disabled = false;
+    btn.textContent = "Log period";
+  }
+}
+
+// Calendar interactions — handles month nav + range selection.
 document.addEventListener("click", (e) => {
   if (e.target.closest("#period-prev")) {
     _periodCalState.viewMonth--;
@@ -678,38 +749,48 @@ document.addEventListener("click", (e) => {
     renderPeriodCalendar();
     return;
   }
-  const cell = e.target.closest(".pc-cell[data-date]");
-  if (cell && !cell.disabled) {
-    _periodCalState.selected = cell.dataset.date;
+  if (e.target.closest("#period-clear-btn")) {
+    _periodCalState.start = null;
+    _periodCalState.end = null;
+    paintSelectedSummary();
     renderPeriodCalendar();
-    // Show the cycle-day context for the chosen date.
-    const sel = document.getElementById("period-selected");
-    const cycles = _periodCalState.cycleData?.cycles || [];
-    const lastStart = cycles[0]?.start_date || null;
-    const pretty = new Date(cell.dataset.date + "T00:00:00")
-      .toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
-    let context = "";
-    if (lastStart && cell.dataset.date > lastStart) {
-      const cd = daysBetweenIso(lastStart, cell.dataset.date) + 1;
-      context = ` · that's <strong>day ${cd}</strong> of your current cycle`;
-    }
-    sel.innerHTML = `Starting your period on <strong>${pretty}</strong>${context}.`;
-    sel.hidden = false;
-    document.getElementById("period-save-btn").disabled = false;
+    return;
   }
+  const cell = e.target.closest(".pc-cell[data-date]");
+  if (!cell || cell.disabled) return;
+  const iso = cell.dataset.date;
+  const s = _periodCalState;
+  if (!s.start || (s.start && s.end)) {
+    // No start yet, or already have a complete range → start over.
+    s.start = iso;
+    s.end = null;
+  } else if (iso < s.start) {
+    // Clicked earlier than current start → that becomes the new start.
+    s.start = iso;
+    s.end = null;
+  } else if (iso === s.start) {
+    // Same day clicked again → treat as one-day period.
+    s.end = iso;
+  } else {
+    // Later day → that's the end.
+    s.end = iso;
+  }
+  paintSelectedSummary();
+  renderPeriodCalendar();
 });
 
 document.getElementById("period-save-btn")?.addEventListener("click", async () => {
-  const start = _periodCalState.selected;
+  const { start, end } = _periodCalState;
   if (!start) return;
   const btn = document.getElementById("period-save-btn");
+  const prev = btn.textContent;
   btn.disabled = true; btn.textContent = "Logging…";
   try {
     const r = await fetch("/api/me/cycles", {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ start_date: start }),
+      body: JSON.stringify({ start_date: start, end_date: end || null }),
     });
     if (!r.ok) throw new Error(await r.text());
     toast("Period logged 🌸");
@@ -717,7 +798,7 @@ document.getElementById("period-save-btn")?.addEventListener("click", async () =
     renderCyclePrediction();
   } catch (err) {
     toast(`Couldn't log: ${err.message || err}`, "error");
-    btn.disabled = false; btn.textContent = "Log period start";
+    btn.disabled = false; btn.textContent = prev;
   }
 });
 
