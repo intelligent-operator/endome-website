@@ -286,6 +286,9 @@ export default {
           if (url.pathname === "/api/me/report" && request.method === "GET") {
             return jsonHeaders(await getMedicalReport(request, env, user));
           }
+          if (url.pathname === "/api/me/report/clinical-summary" && request.method === "POST") {
+            return jsonHeaders(await getClinicalSummary(request, env, user));
+          }
           if (url.pathname === "/api/me/week" && request.method === "GET") {
             return jsonHeaders(await getMeWeek(env, user));
           }
@@ -2515,6 +2518,96 @@ async function getMedicalReport(request, env, user) {
     testResults: testResults,
     patternWatch,
   });
+}
+
+// --- /api/me/report/clinical-summary --------------------------------------
+// Build a clinician-tone narrative summary of the report data. Runs in a
+// separate request from /api/me/report so the page renders the tables
+// instantly and the AI section streams in afterwards.
+//
+// The prompt frames Claude as a clinical assistant briefing another
+// physician — concise, structured, plain medical language, never
+// diagnostic, always grounded in what the patient actually logged.
+async function getClinicalSummary(request, env, user) {
+  const body = await readJsonSafe(request);
+  const report = (body && body.report) || null;
+  if (!report || !report.meta) return json({ error: "report payload required" }, 400);
+
+  // Compact, structured snapshot — no PII, just the numbers Claude needs.
+  const m = report.meta;
+  const da = report.daily?.averages || {};
+  const summaryInput = {
+    window: { from: m.from, to: m.to, days: m.spanDays },
+    patient: {
+      endoStatus: m.patient?.endoStatus || "unknown",
+      endoStage:  m.patient?.endoStage  || null,
+    },
+    adherence: {
+      daysLogged: da.daysLogged || 0,
+      avgPain: da.avgPain, avgMood: da.avgMood, avgEnergy: da.avgEnergy,
+      avgSleepHours: da.avgSleepHours, avgSleepQuality: da.avgSleepQuality,
+      avgStress: da.avgStress, avgOverall: da.avgOverall,
+    },
+    cycle: {
+      phaseCounts: report.daily?.phaseCounts || {},
+      bleedingDays: report.daily?.bleedingDays || 0,
+      heaviestFlow: report.daily?.heaviestFlow || "none",
+    },
+    symptoms: {
+      total: report.symptoms?.total || 0,
+      avgSeverity: report.symptoms?.avgSeverity,
+      top: (report.symptoms?.byType || []).slice(0, 8),
+      byRegion: (report.symptoms?.byRegion || []).slice(0, 6),
+    },
+    medications: {
+      active: (report.medications?.list || []).filter((m) => m.is_active)
+        .map((m) => ({ name: m.name, kind: m.kind, dose: m.dose, frequency: m.frequency })),
+      adherence: (report.medications?.adherence || []).slice(0, 10),
+    },
+    nutrition: report.food?.averages || null,
+    cravings: (report.cravings?.byType || []).slice(0, 6),
+    testResults: (Array.isArray(report.testResults) ? report.testResults : [])
+      .slice(0, 6).map((t) => ({ kind: t.kind, title: t.title, summary: t.summary })),
+    patternWatch: report.patternWatch?.eligible ? {
+      score: report.patternWatch.score,
+      markers: (report.patternWatch.markers || []).map((x) => x.label),
+    } : null,
+  };
+
+  const system = [
+    "You are an experienced gynaecology / women's-health clinical assistant.",
+    "You are briefing a treating clinician on the patient's self-tracked data from the EndoMe app over the report window.",
+    "Tone: clinician to clinician. Precise, calm, structured. Plain medical English — no marketing, no hype, no emoji.",
+    "You are NOT diagnosing. Phrase findings as 'logged', 'reported', 'patient-recorded'. Distinguish frequency, severity, temporal pattern.",
+    "Never invent data. If a field is missing or zero, say so explicitly or omit. Do not extrapolate beyond what is in the JSON.",
+    "Severity is on a 1–5 self-report scale. Frequencies are counts in the window, not rates per day unless you compute them from daysLogged.",
+    "Return GitHub-flavoured Markdown with these H3 sections in order:",
+    "### Reporting period & engagement",
+    "### Symptom burden",
+    "### Pain distribution & character",
+    "### Cycle pattern",
+    "### Medications & adherence",
+    "### Lifestyle (sleep, stress, nutrition, cravings)",
+    "### Test results on file",
+    "### Pattern markers worth noting",
+    "### Suggested points to explore at consultation",
+    "Each section: 1–4 short sentences or a tight bullet list. Skip any section that has no data.",
+    "End the final section as 3–5 bullets framed as 'consider exploring' / 'worth discussing' — never prescriptive.",
+  ].join("\n");
+
+  const userPrompt =
+    "Patient self-tracked data (JSON). Brief the clinician.\n\n```json\n" +
+    JSON.stringify(summaryInput, null, 2) +
+    "\n```";
+
+  const ai = await invokeClaude(env, null, {
+    messages: [{ role: "user", content: userPrompt }],
+    system,
+    maxTokens: 1800,
+  });
+
+  if (!ai.ok) return json({ ok: false, error: ai.error || "AI unavailable" }, 502);
+  return json({ ok: true, summary: ai.text, generatedAt: nowSec() });
 }
 
 // --- /api/me/week ---------------------------------------------------------

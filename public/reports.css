@@ -1,12 +1,15 @@
 /* =====================================================================
    /reports — clinician-ready summary, printable to PDF.
+   Designed to look polished on screen AND print cleanly on A4.
    The screen view follows the dashboard's three-col layout. The print
    view drops the chrome and pours the report itself onto the page.
    ===================================================================== */
 
 .reports-main{padding:20px 28px;max-width:1100px;margin:0 auto}
 
-/* Hero + controls — never printed */
+/* =====================================================================
+   Controls (never printed)
+   ===================================================================== */
 .reports-hero{margin:0 0 14px}
 .reports-hero h1{margin:6px 0 8px;font-size:26px;color:#2b1922}
 .reports-hero .hero-eyebrow{margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#ff4e8a;font-weight:700}
@@ -31,109 +34,335 @@
 .reports-range input{
   font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid #ffd6e0;border-radius:10px;background:#fff;color:#2b1922;
 }
-.reports-actions{display:flex;gap:8px}
+.reports-actions{display:flex;gap:8px;flex-wrap:wrap}
 
-/* The report document itself */
+/* =====================================================================
+   The report document
+   Subtle medical-document feel — generous whitespace, structured
+   hierarchy, restrained accent colour, serif numbers for clinical
+   readability.
+   ===================================================================== */
 .report-doc{
   background:#fff;border:1px solid #ffeaf2;border-radius:18px;
-  padding:32px 36px;box-shadow:0 4px 16px rgba(255,77,138,.05);
-  color:#2b1922;font-size:13px;line-height:1.55;
+  padding:38px 44px;box-shadow:0 6px 24px rgba(255,77,138,.06);
+  color:#2b1922;font-size:13.5px;line-height:1.6;
+  font-feature-settings:"liga","kern";
 }
 .report-empty{margin:80px 0;text-align:center;color:#7a5f6c;font-size:14px}
 
-.report-header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:18px;border-bottom:2px solid #ffd6e0;padding-bottom:18px}
-.report-header h1{margin:0 0 6px;font-size:22px;color:#2b1922}
-.report-header .meta{font-size:12px;color:#5a3a48;line-height:1.6}
-.report-header .meta strong{color:#2b1922}
-.report-brand{display:flex;align-items:center;gap:8px;font-weight:800;color:#ff4e8a;font-size:16px}
+/* ---- Letterhead ---- */
+.report-header{
+  display:grid;grid-template-columns:1fr auto;gap:24px;align-items:start;
+  margin-bottom:22px;padding-bottom:18px;
+  border-bottom:3px double #ffd6e0;
+}
+.report-header h1{margin:0 0 4px;font-size:24px;color:#2b1922;letter-spacing:-.01em}
+.report-header .subtitle{margin:0 0 14px;font-size:12px;color:#7a5f6c;font-style:italic}
+.report-meta-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 24px;
+  font-size:12px;color:#3a2330;
+}
+.report-meta-grid > div{display:flex;gap:6px;align-items:baseline;line-height:1.6}
+.report-meta-grid strong{color:#7a5f6c;font-weight:600;min-width:90px;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.report-meta-grid span{color:#2b1922;font-weight:600}
+
+.report-brand{
+  display:flex;flex-direction:column;align-items:flex-end;gap:6px;
+  text-align:right;
+}
+.report-brand .brand-lockup{display:flex;align-items:center;gap:8px;font-weight:800;color:#ff4e8a;font-size:18px}
 .report-brand img{width:36px;height:36px}
+.report-brand .brand-tag{font-size:10px;color:#7a5f6c;text-transform:uppercase;letter-spacing:.08em}
 
-.report-section{margin:22px 0;page-break-inside:auto}
+/* ---- Sections ---- */
+.report-section{margin:26px 0;page-break-inside:auto}
 .report-section h2{
-  margin:0 0 8px;font-size:15px;color:#ff4e8a;
-  text-transform:uppercase;letter-spacing:.08em;font-weight:800;
-  border-left:4px solid #ff4e8a;padding-left:10px;
+  margin:0 0 10px;font-size:13px;color:#2b1922;
+  text-transform:uppercase;letter-spacing:.1em;font-weight:800;
+  display:flex;align-items:center;gap:10px;
+  padding-bottom:6px;border-bottom:1px solid #ffd6e0;
 }
-.report-section .section-sub{margin:0 0 10px;font-size:12px;color:#7a5f6c}
+.report-section h2::before{
+  content:"";width:6px;height:18px;border-radius:3px;
+  background:linear-gradient(180deg,#ff4e8a,#ff7aa6);flex-shrink:0;
+}
+.report-section .sec-ico{font-size:14px;-webkit-font-smoothing:antialiased}
+.report-section .section-sub{margin:0 0 12px;font-size:12px;color:#7a5f6c;font-style:italic}
 
-/* Tables */
-.report-table{
-  width:100%;border-collapse:collapse;margin:8px 0 12px;
-  font-size:12px;
+/* ---- Key-value summary tiles ---- */
+.kv-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;margin:12px 0;
 }
-.report-table th, .report-table td{
-  text-align:left;padding:7px 10px;border-bottom:1px solid #ffeaf2;vertical-align:top;
+.kv-grid > div{
+  background:linear-gradient(180deg,#fff,#fff5f8);
+  border:1px solid #ffeaf2;border-radius:12px;
+  padding:10px 12px;
+  display:flex;flex-direction:column;gap:1px;
+  position:relative;overflow:hidden;
+}
+.kv-grid > div::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:linear-gradient(180deg,#ff4e8a,#ff7aa6);opacity:.7;
+}
+.kv-grid span{
+  font-size:10px;color:#7a5f6c;text-transform:uppercase;letter-spacing:.06em;
+  font-weight:700;
+}
+.kv-grid strong{
+  font-size:22px;color:#2b1922;font-weight:700;margin-top:2px;
+  font-feature-settings:"tnum","lnum";line-height:1.1;
+  font-variant-numeric:tabular-nums;
+}
+.kv-grid em{font-size:10.5px;color:#7a5f6c;font-style:normal;margin-top:2px}
+
+/* ---- Tables ---- */
+.report-table{
+  width:100%;border-collapse:separate;border-spacing:0;
+  margin:8px 0 14px;font-size:12.5px;
+  border:1px solid #ffeaf2;border-radius:12px;overflow:hidden;
 }
 .report-table th{
-  background:#fff5f8;color:#5a3a48;font-weight:700;
-  text-transform:uppercase;font-size:10.5px;letter-spacing:.04em;
+  background:linear-gradient(180deg,#fff5f8,#ffeef5);
+  color:#5a3a48;font-weight:700;
+  text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;
+  text-align:left;padding:9px 12px;
+  border-bottom:1px solid #ffd6e0;
 }
+.report-table th.num{text-align:right}
+.report-table td{
+  text-align:left;padding:8px 12px;vertical-align:top;
+  border-bottom:1px solid #fff0f5;
+}
+.report-table tr:last-child td{border-bottom:none}
+.report-table td.num{text-align:right;font-feature-settings:"tnum";font-variant-numeric:tabular-nums}
+.report-table td.muted{color:#7a5f6c;font-size:11.5px}
 .report-table tbody tr:nth-child(even){background:#fffafc}
 .report-table tbody tr:hover{background:#fff5f8}
-.report-table td.num,.report-table th.num{text-align:right;font-feature-settings:"tnum"}
-.report-table td.muted{color:#7a5f6c}
-.report-table .sev-pill{
-  display:inline-block;min-width:18px;text-align:center;padding:1px 7px;border-radius:8px;
-  font-weight:700;font-size:11px;color:#fff;background:#ffb380;
+
+/* Severity pills (clinical traffic light, accessible) */
+.sev-pill{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:22px;height:22px;padding:0 7px;border-radius:999px;
+  font-weight:700;font-size:11px;color:#fff;
+  font-feature-settings:"tnum";
 }
-.report-table .sev-pill.s1{background:#cdebb8;color:#345d22}
-.report-table .sev-pill.s2{background:#9bd97a;color:#1f3c10}
-.report-table .sev-pill.s3{background:#ffd700;color:#5a4500}
-.report-table .sev-pill.s4{background:#ff7aa6;color:#fff}
-.report-table .sev-pill.s5{background:#c4344b;color:#fff}
+.sev-pill.s1{background:#7cbf5f;color:#fff}
+.sev-pill.s2{background:#9bd97a;color:#1f3c10}
+.sev-pill.s3{background:#ffc24f;color:#5a3500}
+.sev-pill.s4{background:#ff7aa6;color:#fff}
+.sev-pill.s5{background:#c4344b;color:#fff}
 
-/* Key-value grid (used for summaries) */
-.kv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:8px 0 12px}
-.kv-grid > div{background:#fff5f8;border:1px solid #ffeaf2;border-radius:10px;padding:8px 10px}
-.kv-grid span{font-size:10px;color:#7a5f6c;text-transform:uppercase;letter-spacing:.06em;font-weight:600;display:block}
-.kv-grid strong{display:block;font-size:18px;color:#2b1922;font-weight:700;margin-top:2px;font-feature-settings:"tnum"}
-.kv-grid em{font-size:11px;color:#7a5f6c;font-style:normal}
+/* Frequency bar inside the symptom-frequency table */
+.freq-cell{display:flex;align-items:center;gap:8px;min-width:120px}
+.freq-bar{
+  flex:1;height:8px;background:#fff0f5;border-radius:999px;overflow:hidden;
+  border:1px solid #ffeaf2;min-width:60px;
+}
+.freq-bar > i{
+  display:block;height:100%;
+  background:linear-gradient(90deg,#ff4e8a,#ff7aa6);
+  border-radius:999px;
+}
+.freq-count{font-weight:700;color:#2b1922;font-feature-settings:"tnum";min-width:28px;text-align:right;font-size:12px}
 
+/* Cycle phase bar chart (CSS-only) */
+.phase-bars{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+  gap:10px;margin:12px 0;
+}
+.phase-bar{
+  background:#fff;border:1px solid #ffeaf2;border-radius:12px;padding:10px 12px;
+  display:flex;flex-direction:column;gap:6px;
+}
+.phase-bar header{
+  display:flex;justify-content:space-between;font-size:11px;color:#5a3a48;
+  font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+}
+.phase-bar header em{font-style:normal;color:#ff4e8a;font-feature-settings:"tnum"}
+.phase-bar .bar{height:8px;background:#fff0f5;border-radius:999px;overflow:hidden;border:1px solid #ffeaf2}
+.phase-bar .bar > i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#ff4e8a,#ff7aa6)}
+.phase-bar[data-phase="menstrual"]  .bar > i{background:linear-gradient(90deg,#c4344b,#ff7aa6)}
+.phase-bar[data-phase="follicular"] .bar > i{background:linear-gradient(90deg,#9bd97a,#cdebb8)}
+.phase-bar[data-phase="ovulation"]  .bar > i{background:linear-gradient(90deg,#ffd700,#ffe9a3)}
+.phase-bar[data-phase="luteal"]     .bar > i{background:linear-gradient(90deg,#7e57c2,#b39ddb)}
+
+.phase-meta{display:flex;gap:14px;font-size:12px;color:#3a2330;margin-top:6px}
+.phase-meta strong{font-weight:700;font-feature-settings:"tnum"}
+
+/* Empty section card */
 .report-empty-section{
-  padding:14px;background:#fff5f8;border:1px dashed #ffd6e0;border-radius:10px;
-  font-size:12px;color:#7a5f6c;text-align:center;
+  padding:14px;background:#fff5f8;border:1px dashed #ffd6e0;border-radius:12px;
+  font-size:12px;color:#7a5f6c;text-align:center;font-style:italic;
 }
 
+/* Long log tables collapse for screen-only "Show all" toggle */
+.report-table.is-truncated tbody tr.hidden-row{display:none}
+.show-more-btn{
+  background:#fff5f8;border:1px solid #ffd6e0;color:#ff4e8a;font-family:inherit;
+  padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;
+  margin:0 0 8px;
+}
+.show-more-btn:hover{background:#ffeaf2}
+
+/* =====================================================================
+   AI clinical narrative — the "doctor briefing another doctor" section.
+   Looks like a stamped clinical letter at the top of the report.
+   ===================================================================== */
+.report-narrative{
+  margin:0 0 28px;padding:22px 26px;
+  background:linear-gradient(180deg,#fff7fb,#fff);
+  border:1px solid #ffd6e0;border-left:5px solid #ff4e8a;
+  border-radius:14px;
+  position:relative;
+}
+.report-narrative header{
+  display:flex;align-items:center;gap:10px;
+  margin:0 0 12px;padding-bottom:10px;
+  border-bottom:1px solid #ffeaf2;
+}
+.report-narrative header h2{
+  margin:0;font-size:13px;color:#2b1922;font-weight:800;
+  text-transform:uppercase;letter-spacing:.1em;
+}
+.report-narrative .narrative-stamp{
+  margin-left:auto;font-size:10px;color:#7a5f6c;
+  text-transform:uppercase;letter-spacing:.08em;font-weight:700;
+}
+.report-narrative .narrative-stamp em{
+  display:inline-block;color:#ff4e8a;font-style:normal;font-weight:800;
+}
+.report-narrative .narrative-body{
+  font-size:13px;color:#2b1922;line-height:1.7;
+}
+.report-narrative .narrative-body h3{
+  margin:14px 0 4px;font-size:12px;font-weight:800;
+  color:#ff4e8a;text-transform:uppercase;letter-spacing:.06em;
+}
+.report-narrative .narrative-body h3:first-child{margin-top:0}
+.report-narrative .narrative-body p{margin:0 0 8px}
+.report-narrative .narrative-body ul{margin:4px 0 10px;padding-left:20px}
+.report-narrative .narrative-body li{margin:2px 0;line-height:1.55}
+.report-narrative .narrative-body strong{color:#2b1922}
+.report-narrative .narrative-loading{
+  display:flex;align-items:center;gap:10px;color:#7a5f6c;font-size:13px;
+  font-style:italic;
+}
+.report-narrative .narrative-loading::before{
+  content:"";width:14px;height:14px;border-radius:50%;
+  border:2px solid #ffd6e0;border-top-color:#ff4e8a;
+  animation:nrvSpin 1s linear infinite;flex-shrink:0;
+}
+@keyframes nrvSpin{to{transform:rotate(360deg)}}
+.report-narrative .narrative-error{
+  font-size:12px;color:#c4344b;font-style:italic;
+}
+.report-narrative .narrative-disclaimer{
+  margin-top:14px;padding-top:10px;border-top:1px dashed #ffd6e0;
+  font-size:10.5px;color:#7a5f6c;line-height:1.5;font-style:italic;
+}
+
+/* ---- Footer ---- */
 .report-footer{
-  margin-top:32px;padding-top:14px;border-top:1px solid #ffeaf2;
+  margin-top:38px;padding-top:16px;border-top:2px solid #ffd6e0;
   font-size:11px;color:#7a5f6c;line-height:1.6;
+  display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;
 }
+.report-footer .signature-block{
+  flex:1;min-width:240px;border-top:1px solid #2b1922;padding-top:6px;
+  font-size:11px;color:#3a2330;
+}
+.report-footer .signature-block strong{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#7a5f6c;font-weight:700}
 
-/* ====== PRINT ====== */
+/* =====================================================================
+   PRINT — strip chrome, switch to print-safe colours, keep structure.
+   ===================================================================== */
 @media print{
   @page{ size:A4; margin:14mm }
   body{ background:#fff !important }
-  .no-print, .dash-topbar, .dash-sidebar, .reports-controls, .page-loader{ display:none !important }
+  .no-print, .dash-topbar, .dash-sidebar, .reports-controls, .page-loader, .show-more-btn{ display:none !important }
   .dash-layout{display:block !important;padding:0 !important;margin:0 !important}
   .reports-main{padding:0 !important;max-width:none !important;margin:0 !important}
   .report-doc{
     border:none !important;box-shadow:none !important;padding:0 !important;
-    border-radius:0 !important;font-size:11px;line-height:1.45;
+    border-radius:0 !important;font-size:11px;line-height:1.5;
   }
-  .report-header{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px}
-  .report-header h1{font-size:18px}
+  .report-header{
+    border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px;
+  }
+  .report-header h1{font-size:18px;color:#000}
+  .report-header .subtitle{color:#444}
+  .report-meta-grid strong{color:#444}
+  .report-brand .brand-lockup{color:#000}
+  .report-brand .brand-tag{color:#444}
+
   .report-section{margin:14px 0;page-break-inside:avoid}
   .report-section h2{
-    color:#000;border-left-color:#000;font-size:12px;
+    color:#000;font-size:12px;border-bottom-color:#000;
   }
-  .report-table{font-size:10.5px}
-  .report-table th{background:#eee !important;color:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .report-table tbody tr:nth-child(even){background:#f7f7f7 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .report-table .sev-pill{
-    color:#000 !important;background:none !important;border:1px solid #000;padding:0 4px;
+  .report-section h2::before{background:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  .report-table{font-size:10.5px;border-color:#888}
+  .report-table th{
+    background:#eee !important;color:#000 !important;border-bottom-color:#000 !important;
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
-  .kv-grid > div{background:none !important;border:1px solid #ccc}
-  .kv-grid strong{font-size:14px}
+  .report-table td{border-bottom-color:#ddd}
+  .report-table tbody tr:nth-child(even){
+    background:#f7f7f7 !important;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  }
+  /* Severity pills: switch to bordered text so they print clearly on B&W */
+  .sev-pill{
+    color:#000 !important;background:#fff !important;
+    border:1.2px solid #000;padding:0 5px;min-width:18px;height:16px;
+    font-size:10px;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  }
+  .sev-pill.s4, .sev-pill.s5{background:#ddd !important}
+
+  .kv-grid > div{background:#fff !important;border:1px solid #888;page-break-inside:avoid}
+  .kv-grid > div::before{background:#000 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .kv-grid strong{font-size:14px;color:#000}
+
+  .phase-bar{border:1px solid #888;page-break-inside:avoid}
+  .phase-bar .bar{background:#eee !important}
+  .phase-bar .bar > i{background:#666 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .phase-bar header em{color:#000}
+
+  .freq-bar{background:#eee !important;border-color:#888}
+  .freq-bar > i{background:#666 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  .report-narrative{
+    background:#fff !important;border:1px solid #000;border-left:4px solid #000;
+    page-break-inside:avoid;padding:14px 18px;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  }
+  .report-narrative header h2{color:#000}
+  .report-narrative .narrative-stamp{color:#444}
+  .report-narrative .narrative-stamp em{color:#000}
+  .report-narrative .narrative-body h3{color:#000}
+
+  .report-empty-section{background:#fafafa !important;border-color:#888;color:#444}
+
   /* Repeat headers across pages */
   .report-table thead{display:table-header-group}
   tr, td, th{page-break-inside:avoid}
+  .report-table.is-truncated tbody tr.hidden-row{display:table-row !important}
+  .report-footer{border-top:2px solid #000;color:#000}
 }
 
-/* Mobile */
+/* =====================================================================
+   Mobile
+   ===================================================================== */
 @media (max-width:760px){
   .reports-main{padding:14px}
-  .report-doc{padding:18px}
+  .report-doc{padding:18px;font-size:12.5px}
+  .report-header{grid-template-columns:1fr;gap:12px}
+  .report-brand{align-items:flex-start;text-align:left}
+  .report-meta-grid{grid-template-columns:1fr}
   .report-table{font-size:11px}
   .report-table th,.report-table td{padding:5px 6px}
+  .freq-cell{min-width:80px}
+  .report-narrative{padding:16px}
 }
