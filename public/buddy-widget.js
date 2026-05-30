@@ -22,17 +22,29 @@
   panel.setAttribute("aria-label", "Buddy chat");
   panel.innerHTML = `
     <header class="bw-head">
+      <button type="button" class="bw-head-icon" data-bw-history title="Chat history" aria-label="Chat history">☰</button>
       <div class="bw-head-avatar">💬</div>
       <div class="bw-head-title">
         <strong>Buddy</strong>
         <span><span class="bw-dot"></span> Health companion · online</span>
       </div>
       <div class="bw-head-actions">
+        <button type="button" class="bw-head-icon" data-bw-new title="New chat" aria-label="New chat">+</button>
         <a href="/buddy" title="Open full chat" aria-label="Open full chat">↗</a>
-        <button type="button" data-bw-close title="Close" aria-label="Close">×</button>
+        <button type="button" class="bw-head-icon" data-bw-close title="Close" aria-label="Close">×</button>
       </div>
     </header>
-    <div class="bw-body" id="bw-body"></div>
+    <div class="bw-stage">
+      <!-- Slide-in history drawer (collapsed by default) -->
+      <aside class="bw-drawer" id="bw-drawer" hidden>
+        <div class="bw-drawer-head">
+          <strong>Your chats</strong>
+          <button type="button" class="bw-head-icon dark" data-bw-history title="Close history">×</button>
+        </div>
+        <ul class="bw-drawer-list" id="bw-drawer-list"></ul>
+      </aside>
+      <div class="bw-body" id="bw-body"></div>
+    </div>
     <form class="bw-input-row" id="bw-form">
       <textarea id="bw-input" rows="1" placeholder="Ask Buddy…" maxlength="4000"></textarea>
       <button type="submit" id="bw-send" disabled>Send</button>
@@ -54,10 +66,13 @@
   let busy = false;
   let opened = false;
   let loadedOnce = false;
+  let myAvatar = { url: null, emoji: null };
 
   function wire() {
     launcher.addEventListener("click", openPanel);
-    panel.querySelector("[data-bw-close]").addEventListener("click", closePanel);
+    panel.querySelectorAll("[data-bw-close]").forEach((b) => b.addEventListener("click", closePanel));
+    panel.querySelectorAll("[data-bw-history]").forEach((b) => b.addEventListener("click", toggleDrawer));
+    panel.querySelector("[data-bw-new]").addEventListener("click", startNewChat);
     const input = panel.querySelector("#bw-input");
     const send  = panel.querySelector("#bw-send");
     input.addEventListener("input", () => {
@@ -86,6 +101,11 @@
     panel.querySelector("#bw-input").focus();
     if (!loadedOnce) {
       loadedOnce = true;
+      // Grab the user's avatar once so their bubbles show their photo/emoji.
+      try {
+        const r = await fetch("/api/me/today", { credentials: "same-origin" });
+        if (r.ok) { const me = await r.json(); myAvatar = { url: me?.user?.avatarUrl || null, emoji: me?.user?.avatar || null }; }
+      } catch {}
       await loadMostRecent();
     }
   }
@@ -93,6 +113,75 @@
     opened = false;
     panel.hidden = true;
     launcher.hidden = false;
+    panel.querySelector("#bw-drawer").hidden = true;
+  }
+
+  // ---- History drawer ----------------------------------------------------
+  function toggleDrawer() {
+    const drawer = panel.querySelector("#bw-drawer");
+    const show = drawer.hidden;
+    drawer.hidden = !show;
+    if (show) loadDrawer();
+  }
+  async function loadDrawer() {
+    const list = panel.querySelector("#bw-drawer-list");
+    list.innerHTML = `<li class="bw-drawer-empty">Loading…</li>`;
+    let convs = [];
+    try {
+      const r = await fetch("/api/me/buddy/conversations", { credentials: "same-origin" });
+      if (r.ok) { const data = await r.json(); convs = data.conversations || []; }
+    } catch {}
+    if (!convs.length) { list.innerHTML = `<li class="bw-drawer-empty">No chats yet.</li>`; return; }
+    list.innerHTML = convs.map((c) => `
+      <li class="bw-drawer-item ${c.id === activeConvId ? "active" : ""}" data-conv="${c.id}">
+        <span class="t">${esc(c.title || "New chat")}</span>
+        <button type="button" class="bw-drawer-del" data-del="${c.id}" aria-label="Delete chat">×</button>
+      </li>`).join("");
+    list.querySelectorAll("[data-conv]").forEach((li) => {
+      li.addEventListener("click", (e) => {
+        if (e.target.closest("[data-del]")) return;
+        openConv(+li.dataset.conv);
+      });
+    });
+    list.querySelectorAll("[data-del]").forEach((b) => {
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        confirmDelete(+b.dataset.del, b.closest(".bw-drawer-item")?.querySelector(".t")?.textContent || "this chat");
+      });
+    });
+  }
+  async function openConv(id) {
+    activeConvId = id;
+    panel.querySelector("#bw-drawer").hidden = true;
+    const body = panel.querySelector("#bw-body");
+    body.innerHTML = `<p class="bw-welcome"><em style="color:#7a5f6c">Loading…</em></p>`;
+    try {
+      const r = await fetch(`/api/me/buddy/conversations/${id}`, { credentials: "same-origin" });
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      renderMessages(data.messages || []);
+    } catch { renderWelcome(); }
+  }
+  async function startNewChat() {
+    panel.querySelector("#bw-drawer").hidden = true;
+    activeConvId = null;
+    renderWelcome();
+    panel.querySelector("#bw-input").focus();
+  }
+  function confirmDelete(id, title) {
+    bwConfirm({
+      title: "Delete chat?",
+      body: `"${title}" and all its messages will be permanently removed.`,
+      confirmText: "Delete",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/me/buddy/conversations/${id}`, { method: "DELETE", credentials: "same-origin" });
+          if (activeConvId === id) { activeConvId = null; renderWelcome(); }
+          loadDrawer();
+        } catch {}
+      },
+    });
   }
 
   // Pull the user's most recent conversation; if none, show the welcome.
@@ -143,8 +232,13 @@
     body.innerHTML = messages.map(bubble).join("");
     body.scrollTop = body.scrollHeight;
   }
+  function userAv() {
+    if (myAvatar.url) return `<img src="${esc(myAvatar.url)}" alt="" />`;
+    if (myAvatar.emoji) return esc(myAvatar.emoji);
+    return "🌸";
+  }
   function bubble(m) {
-    const av = m.role === "user" ? "🌸" : "💬";
+    const av = m.role === "user" ? userAv() : "💬";
     return `<div class="bw-msg ${m.role}">
       <div class="av">${av}</div>
       <div class="bb">${renderLite(m.content)}</div>
@@ -175,6 +269,39 @@
   }
   function esc(s) {
     return String(s ?? "").replace(/[<>&"']/g, (c) => ({ "<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;" })[c]);
+  }
+
+  // Styled confirm modal (shares .buddy-confirm styles from buddy.css, which
+  // is loaded on /buddy; for other pages we inject minimal fallback styles).
+  function bwConfirm({ title, body, confirmText = "Confirm", danger = false, onConfirm }) {
+    let m = document.getElementById("bw-confirm");
+    if (!m) {
+      m = document.createElement("div");
+      m.id = "bw-confirm";
+      m.className = "buddy-confirm";
+      m.innerHTML = `
+        <div class="buddy-confirm-backdrop" data-bwc-cancel></div>
+        <div class="buddy-confirm-card" role="dialog" aria-modal="true">
+          <h3 id="bwc-title"></h3>
+          <p id="bwc-body"></p>
+          <div class="buddy-confirm-actions">
+            <button type="button" class="btn-soft" id="bwc-cancel">Cancel</button>
+            <button type="button" class="btn" id="bwc-confirm"></button>
+          </div>
+        </div>`;
+      document.body.appendChild(m);
+    }
+    m.querySelector("#bwc-title").textContent = title;
+    m.querySelector("#bwc-body").textContent = body;
+    const cancel = m.querySelector("#bwc-cancel");
+    const ok = m.querySelector("#bwc-confirm");
+    ok.textContent = confirmText;
+    ok.className = "btn " + (danger ? "btn-danger" : "btn-primary");
+    const close = () => m.classList.remove("open");
+    cancel.onclick = close;
+    m.querySelector("[data-bwc-cancel]").onclick = close;
+    ok.onclick = async () => { close(); await onConfirm?.(); };
+    m.classList.add("open");
   }
 
   async function onSend(e) {

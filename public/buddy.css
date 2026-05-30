@@ -72,7 +72,8 @@
   display:flex;align-items:center;justify-content:center;font-size:18px;
   background:linear-gradient(135deg,#ffeaf2,#fff5f8);
 }
-.buddy-msg.user .avatar{background:linear-gradient(135deg,#ff4e8a,#ffb380);color:#fff}
+.buddy-msg.user .avatar{background:linear-gradient(135deg,#ff4e8a,#ffb380);color:#fff;overflow:hidden}
+.buddy-msg .avatar img{width:100%;height:100%;object-fit:cover;border-radius:999px}
 .buddy-msg .bubble{
   background:#fff5f8;border:1px solid #ffeaf2;border-radius:14px;
   padding:10px 14px;font-size:14px;color:#2b1922;line-height:1.55;max-width:560px;
@@ -119,3 +120,20 @@
 }
 .fab-buddy:hover{filter:brightness(1.05);transform:translateY(-1px)}
 @media (max-width:520px){.fab-buddy{right:14px;bottom:84px;padding:10px 14px;font-size:13px}}
+
+/* Confirmation modal (replaces native confirm) */
+.buddy-confirm{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;padding:20px}
+.buddy-confirm.open{display:flex}
+.buddy-confirm-backdrop{position:absolute;inset:0;background:rgba(58,29,43,.5);backdrop-filter:blur(4px)}
+.buddy-confirm-card{
+  position:relative;z-index:1;width:100%;max-width:380px;background:#fff;border-radius:18px;
+  padding:24px;box-shadow:0 30px 70px rgba(58,29,43,.35);text-align:center;
+  animation:bw-pop .16s ease-out;
+}
+.buddy-confirm-card h3{margin:0 0 8px;font-size:18px;color:#2b1922;font-weight:700}
+.buddy-confirm-card p{margin:0 0 18px;font-size:13px;color:#5a3a48;line-height:1.5}
+.buddy-confirm-actions{display:flex;gap:10px;justify-content:center}
+.buddy-confirm-actions .btn,
+.buddy-confirm-actions .btn-soft{flex:1;justify-content:center}
+.btn-danger{background:linear-gradient(135deg,#e85c6c,#c4344b);color:#fff;border:none}
+.btn-danger:hover{filter:brightness(1.05)}

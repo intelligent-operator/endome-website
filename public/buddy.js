@@ -5,6 +5,7 @@ console.info("EndoMe buddy build v1");
   let conversations = [];
   let activeId = null;
   let busy = false;
+  let myAvatar = { url: null, emoji: null };
 
   (async () => {
     try {
@@ -12,6 +13,7 @@ console.info("EndoMe buddy build v1");
       document.querySelectorAll("[data-bind='displayName']").forEach((el) => {
         el.textContent = me?.user?.displayName || me?.user?.username || "there";
       });
+      myAvatar = { url: me?.user?.avatarUrl || null, emoji: me?.user?.avatar || null };
     } catch {}
     await loadConversations();
     // Open the most recent if any, else stay on the welcome screen.
@@ -51,13 +53,23 @@ console.info("EndoMe buddy build v1");
     list.querySelectorAll("[data-del-conv]").forEach((b) => {
       b.addEventListener("click", async (e) => {
         e.stopPropagation();
-        if (!confirm("Delete this chat?")) return;
-        try {
-          await fetchJson(`/api/me/buddy/conversations/${b.dataset.delConv}`, { method: "DELETE" });
-          if (activeId === +b.dataset.delConv) activeId = null;
-          await loadConversations();
-          if (!activeId) showWelcome();
-        } catch (err) { toast(err.message || "Couldn't delete", "err"); }
+        const convId = +b.dataset.delConv;
+        const title = b.closest(".buddy-history-item")?.querySelector(".ttl")?.textContent || "this chat";
+        confirmModal({
+          title: "Delete chat?",
+          body: `"${title}" and all its messages will be permanently removed. This can't be undone.`,
+          confirmText: "Delete",
+          danger: true,
+          onConfirm: async () => {
+            try {
+              await fetchJson(`/api/me/buddy/conversations/${convId}`, { method: "DELETE" });
+              if (activeId === convId) activeId = null;
+              await loadConversations();
+              if (!activeId) showWelcome();
+              toast("Chat deleted", "ok");
+            } catch (err) { toast(err.message || "Couldn't delete", "err"); }
+          },
+        });
       });
     });
   }
@@ -107,8 +119,13 @@ console.info("EndoMe buddy build v1");
     chat.innerHTML = messages.map(msgBubble).join("");
     chat.scrollTop = chat.scrollHeight;
   }
+  function userAvatarHtml() {
+    if (myAvatar.url) return `<img src="${escapeHtml(myAvatar.url)}" alt="" />`;
+    if (myAvatar.emoji) return escapeHtml(myAvatar.emoji);
+    return "🌸";
+  }
   function msgBubble(m) {
-    const avatar = m.role === "user" ? "🌸" : "💬";
+    const avatar = m.role === "user" ? userAvatarHtml() : "💬";
     return `<div class="buddy-msg ${m.role}">
       <div class="avatar">${avatar}</div>
       <div class="bubble">${renderLite(m.content)}</div>
@@ -197,6 +214,40 @@ console.info("EndoMe buddy build v1");
       input.focus();
     } catch (err) { toast(err.message || "Couldn't start", "err"); }
   });
+
+  // --- Confirmation modal (replaces native confirm) -------------------
+  function confirmModal({ title, body, confirmText = "Confirm", cancelText = "Cancel", danger = false, onConfirm }) {
+    let modal = document.getElementById("buddy-confirm-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "buddy-confirm-modal";
+      modal.className = "buddy-confirm";
+      modal.innerHTML = `
+        <div class="buddy-confirm-backdrop" data-bc-cancel></div>
+        <div class="buddy-confirm-card" role="dialog" aria-modal="true">
+          <h3 id="bc-title"></h3>
+          <p id="bc-body"></p>
+          <div class="buddy-confirm-actions">
+            <button type="button" class="btn-soft" id="bc-cancel"></button>
+            <button type="button" class="btn" id="bc-confirm"></button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+    modal.querySelector("#bc-title").textContent = title;
+    modal.querySelector("#bc-body").textContent = body;
+    const cancelBtn = modal.querySelector("#bc-cancel");
+    const confirmBtn = modal.querySelector("#bc-confirm");
+    cancelBtn.textContent = cancelText;
+    confirmBtn.textContent = confirmText;
+    confirmBtn.className = "btn " + (danger ? "btn-danger" : "btn-primary");
+    const close = () => { modal.classList.remove("open"); };
+    cancelBtn.onclick = close;
+    modal.querySelector("[data-bc-cancel]").onclick = close;
+    confirmBtn.onclick = async () => { close(); await onConfirm?.(); };
+    modal.classList.add("open");
+    confirmBtn.focus();
+  }
 
   // --- Helpers ---------------------------------------------------------
   async function fetchJson(url, init = {}) {

@@ -136,3 +136,65 @@
 }
 .bw-foot a{color:#ff4e8a;text-decoration:none;font-weight:600}
 .bw-foot a:hover{text-decoration:underline}
+
+/* Header icon buttons (history / new / close) */
+.bw-head-icon{
+  background:rgba(255,255,255,.15);border:none;color:#fff;
+  width:28px;height:28px;border-radius:8px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:15px;line-height:1;
+  font-family:inherit;transition:background .12s;flex-shrink:0;
+}
+.bw-head-icon:hover{background:rgba(255,255,255,.28)}
+.bw-head-icon.dark{background:#ffeaf2;color:#a3174f}
+.bw-head-icon.dark:hover{background:#ffd6e0}
+
+/* Stage holds the body + the slide-in history drawer */
+.bw-stage{position:relative;flex:1;min-height:0;display:flex;overflow:hidden}
+.bw-stage .bw-body{flex:1}
+
+.bw-drawer{
+  position:absolute;inset:0;z-index:5;background:#fff;
+  display:flex;flex-direction:column;
+  animation:bw-slide .18s ease-out;
+}
+@keyframes bw-slide{from{transform:translateX(-12px);opacity:0}to{transform:translateX(0);opacity:1}}
+.bw-drawer-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 14px;border-bottom:1px solid #ffeaf2;
+}
+.bw-drawer-head strong{font-size:13px;color:#2b1922}
+.bw-drawer-list{list-style:none;margin:0;padding:8px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:4px;
+  scrollbar-width:thin;scrollbar-color:#ffd6e0 transparent}
+.bw-drawer-list::-webkit-scrollbar{width:6px}
+.bw-drawer-list::-webkit-scrollbar-thumb{background:#ffd6e0;border-radius:999px}
+.bw-drawer-empty{color:#a08596;font-size:12px;text-align:center;padding:18px 0}
+.bw-drawer-item{
+  display:flex;align-items:center;gap:6px;padding:9px 10px;border-radius:10px;cursor:pointer;
+  background:#fff5f8;border:1px solid transparent;transition:border-color .12s,background .12s;
+}
+.bw-drawer-item:hover{border-color:#ffd6e0}
+.bw-drawer-item.active{background:linear-gradient(135deg,#ffe6ef,#fff5f8);border-color:#ff4e8a}
+.bw-drawer-item .t{flex:1;min-width:0;font-size:12px;color:#2b1922;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bw-drawer-del{background:transparent;border:none;color:#cdb9c4;cursor:pointer;font-size:15px;
+  padding:2px 6px;border-radius:6px;font-family:inherit;line-height:1}
+.bw-drawer-item:hover .bw-drawer-del{color:#c4344b}
+
+/* User avatar image inside widget bubbles */
+.bw-msg.user .av{overflow:hidden}
+.bw-msg .av img{width:100%;height:100%;object-fit:cover;border-radius:999px}
+
+/* Confirm-modal fallback (buddy.css only loads on /buddy) */
+.buddy-confirm{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+.buddy-confirm.open{display:flex}
+.buddy-confirm-backdrop{position:absolute;inset:0;background:rgba(58,29,43,.5);backdrop-filter:blur(4px)}
+.buddy-confirm-card{position:relative;z-index:1;width:100%;max-width:360px;background:#fff;border-radius:18px;
+  padding:24px;box-shadow:0 30px 70px rgba(58,29,43,.35);text-align:center}
+.buddy-confirm-card h3{margin:0 0 8px;font-size:18px;color:#2b1922;font-weight:700}
+.buddy-confirm-card p{margin:0 0 18px;font-size:13px;color:#5a3a48;line-height:1.5}
+.buddy-confirm-actions{display:flex;gap:10px;justify-content:center}
+.buddy-confirm-actions .btn,.buddy-confirm-actions .btn-soft{flex:1;justify-content:center;
+  padding:10px 14px;border-radius:12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:none}
+.buddy-confirm-actions .btn-soft{background:#fff5f8;border:1px solid #ffd6e0;color:#7a5f6c}
+.buddy-confirm-actions .btn-primary{background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff}
+.buddy-confirm-actions .btn-danger{background:linear-gradient(135deg,#e85c6c,#c4344b);color:#fff}
