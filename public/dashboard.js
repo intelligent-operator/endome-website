@@ -509,7 +509,14 @@ async function _renderCyclePredictionInner(slot) {
         <p class="cp-empty">${msg}</p>
         <button type="button" class="pill-btn full" id="cp-log-btn">📅 Log a period</button>
       </div>`;
-    document.getElementById("cp-log-btn")?.addEventListener("click", () => openPeriodCalendar(data));
+    document.getElementById("cp-log-btn")?.addEventListener("click", () => {
+      try { openPeriodCalendar(data); }
+      catch (err) {
+        console.warn("openPeriodCalendar throw:", err?.message);
+        document.body.classList.remove("modal-open");
+        toast("Could not open the period calendar.", "error");
+      }
+    });
     return;
   }
 
@@ -552,7 +559,14 @@ async function _renderCyclePredictionInner(slot) {
       </div>
       <button type="button" class="pill-btn full" id="cp-log-btn">📅 Log a period</button>
     </div>`;
-  document.getElementById("cp-log-btn")?.addEventListener("click", () => openPeriodCalendar(data));
+  document.getElementById("cp-log-btn")?.addEventListener("click", () => {
+    try { openPeriodCalendar(data); }
+    catch (err) {
+      console.warn("openPeriodCalendar throw:", err?.message);
+      document.body.classList.remove("modal-open");
+      toast("Could not open the period calendar.", "error");
+    }
+  });
 }
 
 function formatPrettyDate(iso) {
@@ -594,9 +608,24 @@ function daysBetweenIso(a, b) {
 }
 
 function openPeriodCalendar(cycleData) {
+  const modal = document.getElementById("modal-period");
+  if (!modal) {
+    toast("Period calendar unavailable — refresh the page.", "error");
+    return;
+  }
+  // Open the modal FIRST so even if the render below throws, the user
+  // sees the chrome, can hit Cancel, and isn't stuck behind a locked
+  // body with nothing on screen.
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  // Wire close buttons immediately — never wait for a render that
+  // might fail to give the user an exit.
+  modal.querySelectorAll("[data-close-modal]").forEach((el) => {
+    el.onclick = () => closeAllModals();
+  });
+
   try {
-    const modal = document.getElementById("modal-period");
-    if (!modal) return;
     _periodCalState.cycleData = cycleData || null;
     _periodCalState.start = null;
     _periodCalState.end = null;
@@ -607,34 +636,23 @@ function openPeriodCalendar(cycleData) {
 
     paintSelectedSummary();
     renderPeriodCalendar();
-
-    modal.classList.add("open");
-    modal.setAttribute("aria-hidden", "false");
-    document.body.classList.add("modal-open");
-
-    // Defensive: explicitly wire close buttons + the backdrop so a
-    // tap anywhere outside the card releases the body lock, even if
-    // the global delegated handler hiccups on mobile.
-    modal.querySelectorAll("[data-close-modal]").forEach((el) => {
-      el.onclick = () => closeAllModals();
-    });
   } catch (err) {
-    // Last-ditch safety: never leave the user with a locked body if
-    // the modal can't open for some reason.
-    console.warn("openPeriodCalendar failed:", err?.message);
-    document.body.classList.remove("modal-open");
-    toast("Couldn't open the period calendar — try refreshing the page.", "error");
+    console.warn("openPeriodCalendar render failed:", err?.message);
+    // Replace the grid with a recovery message — modal still open + Cancel works.
+    const grid = document.getElementById("period-cal-grid");
+    if (grid) grid.innerHTML = `<p class="empty-state" style="grid-column:1/-1;padding:24px;text-align:center">Calendar failed to load. Tap Cancel to close.</p>`;
   }
 }
 
-// Global escape hatch: tap the backdrop on mobile reliably closes the
-// modal. Backdrop has data-close-modal already, but we double-bind so
-// nothing can swallow it.
-document.addEventListener("touchend", (e) => {
-  if (e.target?.classList?.contains("modal-backdrop")) {
-    closeAllModals();
+// Emergency body-unlock — Escape always frees the body, no matter what
+// state the modals are in. Belt-and-braces fix for the case where a
+// rogue handler somewhere leaves body.modal-open / .bw-open set.
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    document.body.classList.remove("modal-open");
+    document.body.classList.remove("bw-open");
   }
-}, { passive: true });
+});
 
 // Pre-compute the sets of days for past logged periods + predicted future
 // periods so the renderer is a tight loop.
@@ -691,8 +709,10 @@ function renderPeriodCalendar() {
   const { viewYear, viewMonth, cycleData, start, end } = _periodCalState;
   const today = todayLocalDate();
 
-  monthLabel.textContent = new Date(viewYear, viewMonth, 1)
-    .toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  if (monthLabel) {
+    monthLabel.textContent = new Date(viewYear, viewMonth, 1)
+      .toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  }
 
   const maps = buildPredictionMaps(cycleData);
   const firstDow = new Date(viewYear, viewMonth, 1).getDay();
@@ -1774,11 +1794,17 @@ function resetMultiState(modal) {
   for (const el of modal.querySelectorAll("[data-show-when]")) el.hidden = true;
 }
 function closeAllModals() {
-  document.querySelectorAll(".modal.open").forEach((m) => {
-    m.classList.remove("open");
-    m.setAttribute("aria-hidden", "true");
-  });
+  try {
+    document.querySelectorAll(".modal.open").forEach((m) => {
+      m.classList.remove("open");
+      m.setAttribute("aria-hidden", "true");
+    });
+  } catch {}
+  // Always remove the body lock — this is the most important step.
+  // If a previous open call set the class but the close path bailed,
+  // we still need the page to be scrollable again.
   document.body.classList.remove("modal-open");
+  document.body.classList.remove("bw-open");
 }
 function prefillModal(name) {
   const modal = document.getElementById(`modal-${name}`);
