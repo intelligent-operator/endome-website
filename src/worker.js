@@ -2206,8 +2206,11 @@ function pickStringList(v, maxCount, maxLen) {
 // --- /api/me/symptoms (GET) -----------------------------------------------
 async function getSymptoms(request, env, user) {
   const url = new URL(request.url);
-  const from = normaliseDate(url.searchParams.get("from"));
-  const to = normaliseDate(url.searchParams.get("to") || url.searchParams.get("from"));
+  // Permissive parse for reads — we need to look at historic dates, not
+  // just ±2 days. Default to today if unparseable.
+  const today = new Date().toISOString().slice(0, 10);
+  const from = parseDateParam(url.searchParams.get("from")) || today;
+  const to   = parseDateParam(url.searchParams.get("to") || url.searchParams.get("from")) || from;
   const res = await env.DB
     .prepare(
       "SELECT id, log_date, logged_at, symptom, severity, location, notes " +
@@ -2267,11 +2270,13 @@ async function getBodyPainMap(env, user) {
 // the user prints/PDFs from their browser.
 async function getMedicalReport(request, env, user) {
   const url = new URL(request.url);
-  const today = normaliseDate(null);
+  const today = new Date().toISOString().slice(0, 10);
 
   // Date range: default = last 90 days. Cap at 730 days to keep this honest.
-  let from = normaliseDate(url.searchParams.get("from"));
-  let to   = normaliseDate(url.searchParams.get("to") || today);
+  // Use the read-side parser — the report needs to look weeks/months back,
+  // so the ±2 day write-side guard would silently snap everything to today.
+  let to   = parseDateParam(url.searchParams.get("to"))   || today;
+  let from = parseDateParam(url.searchParams.get("from"));
   if (!from) {
     const d = new Date(`${to}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() - 89);
@@ -3511,6 +3516,18 @@ function normaliseDate(s) {
     if (Math.abs(sent - now) <= 2 * 86400 * 1000) return s;
   }
   return new Date().toISOString().slice(0, 10);
+}
+
+// Read-side date parser. Validates the YYYY-MM-DD shape but does NOT apply
+// the ±2-day spoofing window — query-string filters need to look backwards.
+// Returns null when the param is missing or malformed so callers can decide
+// the default (vs. silently snapping to today, which was a long-running bug
+// that made every historic /api/me/symptoms range return today's rows).
+function parseDateParam(s) {
+  if (typeof s !== "string") return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  if (isNaN(Date.parse(`${s}T00:00:00Z`))) return null;
+  return s;
 }
 
 // =============================================================================
