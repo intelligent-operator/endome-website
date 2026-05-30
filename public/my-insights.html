@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/my-insights.css?v=1779968156" />
+  <link rel="stylesheet" href="/my-insights.css?v=1780116692" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -81,6 +81,20 @@
         </div>
       </header>
 
+      <!-- Symptom-by-cycle correlation chart — rendered from
+           /api/me/cycle-correlation; hides itself if there's no cycle data. -->
+      <section class="community-section" id="cycle-corr-section" hidden>
+        <div class="section-head">
+          <h2>📈 Symptoms across your cycle</h2>
+          <span class="section-hint" id="cycle-corr-sub">Averaged from your last logged cycles</span>
+        </div>
+        <div class="cycle-corr-card">
+          <div class="cycle-corr-legend" id="cycle-corr-legend"></div>
+          <div class="cycle-corr-chart" id="cycle-corr-chart"></div>
+          <p class="cycle-corr-caption" id="cycle-corr-caption">Hover any day to see the breakdown.</p>
+        </div>
+      </section>
+
       <section class="community-section">
         <ul class="insights-list" id="insights-list">
           <li class="empty-state">Loading…</li>
@@ -99,7 +113,7 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/my-insights.js?v=1780049142" defer></script>
+  <script src="/my-insights.js?v=1780116692" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780114587" />
   <script src="/buddy-widget.js?v=1780114587" defer></script>
 </body>

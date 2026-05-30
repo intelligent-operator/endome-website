@@ -336,6 +336,7 @@ export default {
           if (url.pathname === "/api/me/endo" && request.method === "GET")  return jsonHeaders(await getEndoStatus(env, user));
           if (url.pathname === "/api/me/endo" && request.method === "PUT")  return jsonHeaders(await updateEndoStatus(request, env, user));
           if (url.pathname === "/api/me/early-dx-watch" && request.method === "GET") return jsonHeaders(await getEndoPatternWatch(env, user));
+          if (url.pathname === "/api/me/cycle-correlation" && request.method === "GET") return jsonHeaders(await computeCycleCorrelation(env, user));
 
           // --- Buddy chatbot ----------------------------------------------
           if (url.pathname === "/api/me/buddy/conversations" && request.method === "GET")  return jsonHeaders(await listBuddyConversations(env, user));
@@ -1741,6 +1742,154 @@ async function computeEndoPatternWatch(env, user) {
 
 async function getEndoPatternWatch(env, user) {
   return json(await computeEndoPatternWatch(env, user));
+}
+
+// =============================================================================
+// SYMPTOM-BY-CYCLE CORRELATION
+//
+// For each cycle day, average the user's symptom severity across the most
+// recent cycles on file (default last 3). Returns a per-day series the
+// frontend can chart — pain, fatigue, bloating, mood-low, energy-low —
+// plus a "cycle days covered" indicator so the user knows how much data
+// is behind each point.
+//
+// All computed deterministically — no Bedrock call, no admin tuning needed.
+// Lives at GET /api/me/cycle-correlation.
+// =============================================================================
+const CYCLE_CORR_TRACKED = [
+  // group key      -> list of symptom slugs that aggregate into it
+  { key: "pain",     label: "Pain",       color: "#ff4e8a", slugs: ["pelvic_pain","cramps","back_pain","headache","painful_urination","painful_bowel","painful_sex","endo_belly"] },
+  { key: "fatigue",  label: "Fatigue",    color: "#9b4f9c", slugs: ["fatigue","brain_fog"] },
+  { key: "bloating", label: "Bloating",   color: "#ffb380", slugs: ["bloating","endo_belly","nausea"] },
+  { key: "mood",     label: "Mood low",   color: "#a3174f", slugs: ["mood_sad","mood_angry","mood_anxious","mood_irritable","mood_numb","anxiety"] },
+];
+
+async function computeCycleCorrelation(env, user) {
+  // Pull the last 120 days — enough for ~3-4 cycles of data.
+  const since = nowSec() - 120 * 86400;
+  const sinceDate = new Date(since * 1000).toISOString().slice(0, 10);
+
+  const [sympRes, dailyRes] = await Promise.all([
+    env.DB.prepare(
+      "SELECT log_date, symptom, severity FROM symptoms " +
+      "WHERE user_id = ? AND logged_at >= ?"
+    ).bind(user.id, since).all().catch(() => ({ results: [] })),
+    env.DB.prepare(
+      "SELECT log_date, cycle_day, cycle_phase, flow, " +
+      "       morning_pain, afternoon_pain, evening_overall, " +
+      "       morning_energy, afternoon_energy, morning_mood, afternoon_mood " +
+      "FROM daily_logs WHERE user_id = ? AND log_date >= ?"
+    ).bind(user.id, sinceDate).all().catch(() => ({ results: [] })),
+  ]);
+
+  // Map log_date -> cycle_day. Carry the cycle day forward from the most
+  // recent daily log that has one if a given date is missing one — same
+  // heuristic the morning-modal prefill uses, so the chart matches what
+  // the user has been doing manually.
+  const cycleDayByDate = new Map();
+  const orderedDailies = (dailyRes.results || [])
+    .filter((d) => d.cycle_day != null)
+    .sort((a, b) => a.log_date.localeCompare(b.log_date));
+  for (const d of orderedDailies) cycleDayByDate.set(d.log_date, d.cycle_day);
+
+  // Aggregator: per cycle day -> per group -> { sum, count }.
+  const empty = () => Object.fromEntries(CYCLE_CORR_TRACKED.map((g) => [g.key, { sum: 0, count: 0 }]));
+  const buckets = new Map(); // cycleDay -> empty()
+
+  function ensure(day) {
+    if (!buckets.has(day)) buckets.set(day, empty());
+    return buckets.get(day);
+  }
+
+  // Symptoms — severity is 1-5; rescale to 0-100 for charting (sev 1 -> 20).
+  for (const s of (sympRes.results || [])) {
+    const day = cycleDayByDate.get(s.log_date);
+    if (!day || day < 1 || day > 45) continue;
+    const sev = Math.max(0, Math.min(100, ((+s.severity || 0) / 5) * 100));
+    const bucket = ensure(day);
+    for (const g of CYCLE_CORR_TRACKED) {
+      if (g.slugs.includes(s.symptom)) {
+        bucket[g.key].sum += sev;
+        bucket[g.key].count += 1;
+      }
+    }
+  }
+
+  // Daily check-in pain/energy/mood (1-5) folded in too — gives us a
+  // signal even on days without a discrete symptom entry.
+  for (const d of (dailyRes.results || [])) {
+    if (d.cycle_day == null || d.cycle_day < 1 || d.cycle_day > 45) continue;
+    const bucket = ensure(d.cycle_day);
+    // Pain — average of morning/afternoon/evening overall as a proxy.
+    const painVals = [d.morning_pain, d.afternoon_pain].filter((v) => v != null);
+    if (painVals.length) {
+      const avg = painVals.reduce((a, v) => a + v, 0) / painVals.length;
+      bucket.pain.sum += (avg / 5) * 100;
+      bucket.pain.count += 1;
+    }
+    // Mood low — invert mood (5=high -> 0 mood-low; 1=low -> 100 mood-low).
+    const moodVals = [d.morning_mood, d.afternoon_mood].filter((v) => v != null);
+    if (moodVals.length) {
+      const avg = moodVals.reduce((a, v) => a + v, 0) / moodVals.length;
+      bucket.mood.sum += ((5 - avg) / 4) * 100;
+      bucket.mood.count += 1;
+    }
+    // Fatigue — invert energy.
+    const enVals = [d.morning_energy, d.afternoon_energy].filter((v) => v != null);
+    if (enVals.length) {
+      const avg = enVals.reduce((a, v) => a + v, 0) / enVals.length;
+      bucket.fatigue.sum += ((5 - avg) / 4) * 100;
+      bucket.fatigue.count += 1;
+    }
+  }
+
+  // Build a per-day series for the typical cycle range (day 1-35).
+  const days = [];
+  for (let day = 1; day <= 35; day++) {
+    const bucket = buckets.get(day) || empty();
+    const out = { day };
+    for (const g of CYCLE_CORR_TRACKED) {
+      const b = bucket[g.key];
+      out[g.key] = b.count ? Math.round(b.sum / b.count) : null;
+    }
+    days.push(out);
+  }
+
+  // Identify the user's "typical" cycle length from the most recent cycles
+  // by finding the max day with non-null pain readings — gives the chart
+  // a meaningful "you're here" line.
+  const maxLoggedDay = days.reduce((m, d) =>
+    Object.values(d).some((v) => typeof v === "number" && v > 0) && d.day > m ? d.day : m, 1);
+
+  // What phase corresponds to each day (rough, fixed-window estimate —
+  // realistic enough for charting; user's own logged phases take priority
+  // wherever they exist).
+  const phaseFor = (day) => {
+    if (day <= 5) return "menstrual";
+    if (day <= 13) return "follicular";
+    if (day <= 16) return "ovulation";
+    return "luteal";
+  };
+
+  // Group counts so we can render a "based on N cycles" caption.
+  const cyclesCovered = new Set(orderedDailies.map((d) =>
+    d.cycle_day === 1 ? d.log_date : null).filter(Boolean)).size;
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const todayCycleDay = cycleDayByDate.get(todayStr) || null;
+
+  return json({
+    groups: CYCLE_CORR_TRACKED.map((g) => ({ key: g.key, label: g.label, color: g.color })),
+    days: days.map((d) => ({ ...d, phase: phaseFor(d.day) })),
+    cyclesCovered: Math.max(1, cyclesCovered),
+    maxLoggedDay,
+    todayCycleDay,
+    sampleSize: {
+      symptoms: (sympRes.results || []).length,
+      dailyLogs: (dailyRes.results || []).length,
+      windowDays: 120,
+    },
+  });
 }
 
 // Virtual reminders synthesised from medication_schedules. Returns notification

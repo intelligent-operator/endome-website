@@ -144,3 +144,29 @@
 .field code{
   background:#fff5f8;color:#ff4e8a;padding:1px 6px;border-radius:6px;font-size:11px;
 }
+
+/* Symptom-by-cycle correlation chart */
+.cycle-corr-card{
+  background:#fff;border:1px solid #ffeaf2;border-radius:18px;
+  padding:18px 20px;box-shadow:0 4px 16px rgba(255,77,138,.05);
+}
+.cycle-corr-legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.cc-leg-chip{
+  background:#fff5f8;border:1px solid #ffd6e0;color:#7a5f6c;
+  padding:5px 12px;border-radius:999px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;opacity:.55;
+  transition:opacity .15s,background .12s,border-color .12s;
+}
+.cc-leg-chip.on{opacity:1;background:#fff;border-color:var(--cc-color)}
+.cc-leg-chip:hover{filter:brightness(1.02)}
+.cc-leg-dot{width:10px;height:10px;border-radius:999px;background:var(--cc-color)}
+.cycle-corr-chart{width:100%;overflow-x:auto}
+.cycle-corr-chart .cc-svg{width:100%;height:auto;min-width:560px;display:block}
+.cc-axis{font:600 10px Poppins,sans-serif;fill:#a08596;text-anchor:middle}
+.cc-axis-right{text-anchor:end}
+.cc-phase{font:600 10px Poppins,sans-serif;fill:#7a5f6c;text-anchor:middle;text-transform:uppercase;letter-spacing:.06em}
+.cc-today{font:700 10px Poppins,sans-serif;fill:#ff4e8a;text-anchor:middle}
+.cycle-corr-chart circle{cursor:pointer;transition:r .12s}
+.cycle-corr-chart circle:hover{r:5}
+.cycle-corr-caption{margin:10px 0 0;font-size:12px;color:#5a3a48;line-height:1.5;min-height:1.4em}
+.cycle-corr-caption strong{color:#2b1922}
