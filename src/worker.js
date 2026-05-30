@@ -426,6 +426,24 @@ export default {
           if (url.pathname === "/api/me/friends" && request.method === "GET") {
             return jsonHeaders(await getMyFriends(env, user));
           }
+          if (url.pathname === "/api/me/friends/search" && request.method === "GET") {
+            return jsonHeaders(await searchUsersForFriend(request, env, user));
+          }
+
+          // --- Messages (Buddy + friend DMs in one inbox) -------------------
+          if (url.pathname === "/api/me/messages/conversations" && request.method === "GET") {
+            return jsonHeaders(await listMessageConversations(env, user));
+          }
+          {
+            const dm = url.pathname.match(/^\/api\/me\/messages\/dm\/([^/]+)(?:\/(\w+))?$/);
+            if (dm) {
+              const other = decodeURIComponent(dm[1]);
+              const action = dm[2];
+              if (!action     && request.method === "GET")  return jsonHeaders(await getDmThread(env, user, other));
+              if (!action     && request.method === "POST") return jsonHeaders(await sendDmMessage(request, env, user, other));
+              if (action === "read" && request.method === "POST") return jsonHeaders(await markDmRead(env, user, other));
+            }
+          }
           const friendActionMatch = url.pathname.match(/^\/api\/me\/friends\/([^\/]+)(?:\/(\w+))?$/);
           if (friendActionMatch) {
             const [, otherId, action] = friendActionMatch;
@@ -556,6 +574,7 @@ export default {
       url.pathname === "/meds"        || url.pathname.startsWith("/meds/") ||
       url.pathname === "/food"        || url.pathname.startsWith("/food/") ||
       url.pathname === "/buddy"       || url.pathname.startsWith("/buddy/") ||
+      url.pathname === "/messages"    || url.pathname.startsWith("/messages/") ||
       url.pathname === "/documents"   || url.pathname.startsWith("/documents/") ||
       url.pathname === "/security"    || url.pathname.startsWith("/security/") ||
       url.pathname === "/research"    || url.pathname.startsWith("/research/") ||
@@ -5222,6 +5241,18 @@ async function ensureProfileSchema(env) {
     ")",
     "CREATE INDEX IF NOT EXISTS idx_friendships_a ON friendships(user_id_a, status)",
     "CREATE INDEX IF NOT EXISTS idx_friendships_b ON friendships(user_id_b, status)",
+    // Direct messages between two accepted friends. recipient_id is
+    // denormalised on every row so listing inbox / outbox is one query.
+    "CREATE TABLE IF NOT EXISTS direct_messages (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  sender_id TEXT NOT NULL," +
+    "  recipient_id TEXT NOT NULL," +
+    "  body TEXT NOT NULL," +
+    "  sent_at INTEGER NOT NULL," +
+    "  read_at INTEGER" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_dm_pair ON direct_messages(sender_id, recipient_id, sent_at)",
+    "CREATE INDEX IF NOT EXISTS idx_dm_recipient ON direct_messages(recipient_id, sent_at DESC)",
   ];
   for (const sql of tries) {
     try { await env.DB.prepare(sql).run(); } catch { /* already there */ }
@@ -6003,6 +6034,237 @@ async function deleteFriendship(env, user, otherId) {
   await env.DB.prepare(
     "DELETE FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
   ).bind(a, b).run();
+  return json({ ok: true });
+}
+
+// --- Friend search (for the "+ New chat" picker) -------------------------
+// Looks up users by username / display_name / alias prefix. Returns the
+// current friendship status so the UI can render "Send request" /
+// "Pending" / "Already friends".
+async function searchUsersForFriend(request, env, user) {
+  await ensureProfileSchema(env);
+  const url = new URL(request.url);
+  const q = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 60);
+  if (!q || q.length < 2) return json({ results: [] });
+  const like = `%${q.replace(/[%_]/g, (c) => "\\" + c)}%`;
+  const rows = await env.DB.prepare(
+    "SELECT id, username, display_name, alias, avatar, avatar_image_key, bio " +
+    "FROM users " +
+    "WHERE id != ? AND (" +
+    "  LOWER(username) LIKE ? ESCAPE '\\' OR " +
+    "  LOWER(display_name) LIKE ? ESCAPE '\\' OR " +
+    "  LOWER(alias) LIKE ? ESCAPE '\\'" +
+    ") LIMIT 20"
+  ).bind(user.id, like, like, like).all().catch(() => ({ results: [] }));
+
+  const ids = (rows.results || []).map((r) => r.id);
+  // Look up each result's friendship status with the requester in one go.
+  const statusMap = new Map();
+  if (ids.length) {
+    const placeholders = ids.map(() => "?").join(",");
+    const fr = await env.DB.prepare(
+      `SELECT user_id_a, user_id_b, status, requested_by FROM friendships
+       WHERE (user_id_a = ? AND user_id_b IN (${placeholders}))
+          OR (user_id_b = ? AND user_id_a IN (${placeholders}))`
+    ).bind(user.id, ...ids, user.id, ...ids).all().catch(() => ({ results: [] }));
+    for (const f of (fr.results || [])) {
+      const other = f.user_id_a === user.id ? f.user_id_b : f.user_id_a;
+      const status = f.status === "accepted"
+        ? "friends"
+        : (f.requested_by === user.id ? "outgoing" : "incoming");
+      statusMap.set(other, status);
+    }
+  }
+  return json({
+    results: (rows.results || []).map((r) => ({
+      ...profileResponse(r),
+      friendStatus: statusMap.get(r.id) || "none",
+    })),
+  });
+}
+
+// =============================================================================
+// MESSAGES — unified inbox: Buddy pet conversation + friend DMs in one
+// list. The frontend renders it like a chat app; Buddy is pinned at the
+// top of every user's queue.
+// =============================================================================
+
+// List of conversations for the inbox. Always includes Buddy first
+// (preview = the most recent buddy message), then friend DMs sorted by
+// most-recent message.
+async function listMessageConversations(env, user) {
+  await ensureProfileSchema(env);
+  // --- Buddy entry (pinned). Pull the most recent buddy message for
+  //     the preview text. ---
+  let buddyPreview = null;
+  let buddyAt = null;
+  try {
+    await ensureBuddySchema(env);
+    const r = await env.DB.prepare(
+      "SELECT bm.body, bm.role, bm.created_at " +
+      "FROM buddy_conversations c " +
+      "LEFT JOIN buddy_messages bm ON bm.conversation_id = c.id " +
+      "WHERE c.user_id = ? " +
+      "ORDER BY bm.created_at DESC LIMIT 1"
+    ).bind(user.id).first();
+    if (r) {
+      buddyPreview = r.body ? String(r.body).slice(0, 140) : null;
+      buddyAt = r.created_at || null;
+    }
+  } catch { /* buddy schema missing — show empty preview */ }
+  let petName = "Your Buddy";
+  try {
+    const p = await env.DB.prepare("SELECT name FROM pets WHERE user_id = ?")
+      .bind(user.id).first();
+    if (p?.name) petName = p.name;
+  } catch {}
+
+  // --- Friend DMs. For each friend, fetch the latest message + unread
+  //     count in two queries (last message via window, unread count
+  //     server-side). ---
+  let friendRows = { results: [] };
+  let lastMsgRows = { results: [] };
+  let unreadRows = { results: [] };
+  try {
+    friendRows = await env.DB.prepare(
+      "SELECT u.id, u.username, u.display_name, u.alias, u.avatar, u.avatar_image_key " +
+      "FROM friendships f " +
+      "JOIN users u ON u.id = CASE WHEN f.user_id_a = ? THEN f.user_id_b ELSE f.user_id_a END " +
+      "WHERE f.status = 'accepted' AND (f.user_id_a = ? OR f.user_id_b = ?)"
+    ).bind(user.id, user.id, user.id).all();
+  } catch {}
+  try {
+    lastMsgRows = await env.DB.prepare(
+      "SELECT sender_id, recipient_id, body, sent_at " +
+      "FROM direct_messages " +
+      "WHERE sender_id = ? OR recipient_id = ? " +
+      "ORDER BY sent_at DESC LIMIT 500"
+    ).bind(user.id, user.id).all();
+  } catch {}
+  try {
+    unreadRows = await env.DB.prepare(
+      "SELECT sender_id, COUNT(*) AS n FROM direct_messages " +
+      "WHERE recipient_id = ? AND read_at IS NULL " +
+      "GROUP BY sender_id"
+    ).bind(user.id).all();
+  } catch {}
+
+  // Index helpers
+  const lastByOther = new Map();
+  for (const m of (lastMsgRows.results || [])) {
+    const other = m.sender_id === user.id ? m.recipient_id : m.sender_id;
+    if (!lastByOther.has(other)) lastByOther.set(other, m);
+  }
+  const unreadByOther = new Map();
+  for (const u of (unreadRows.results || [])) unreadByOther.set(u.sender_id, u.n);
+
+  const friends = (friendRows.results || []).map((r) => {
+    const last = lastByOther.get(r.id) || null;
+    return {
+      type: "friend",
+      userId: r.id,
+      username: r.username,
+      displayName: publicName(r),
+      avatarUrl: r.avatar_image_key ? `/api/u/${encodeURIComponent(r.id)}/avatar` : null,
+      lastMessage: last ? String(last.body).slice(0, 140) : null,
+      lastAt: last?.sent_at || null,
+      unread: unreadByOther.get(r.id) || 0,
+      youSentLast: last ? last.sender_id === user.id : false,
+    };
+  });
+
+  // Sort friends DESC by lastAt (no messages → push to bottom).
+  friends.sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+
+  return json({
+    conversations: [
+      // Buddy is always first.
+      {
+        type: "buddy",
+        userId: "buddy",
+        displayName: petName,
+        avatarUrl: null,
+        lastMessage: buddyPreview,
+        lastAt: buddyAt,
+        unread: 0,
+        pinned: true,
+      },
+      ...friends,
+    ],
+  });
+}
+
+// --- DM thread (full message history with one friend) --------------------
+async function getDmThread(env, user, otherId) {
+  await ensureProfileSchema(env);
+  // Friendship gate — only accepted friends can see each other's DMs.
+  const [a, b] = friendPair(user.id, otherId);
+  const friend = await env.DB.prepare(
+    "SELECT status FROM friendships WHERE user_id_a = ? AND user_id_b = ? AND status = 'accepted'"
+  ).bind(a, b).first().catch(() => null);
+  if (!friend) return json({ error: "Not your friend" }, 403);
+
+  const other = await env.DB.prepare(
+    "SELECT id, username, display_name, alias, avatar, avatar_image_key, bio FROM users WHERE id = ?"
+  ).bind(otherId).first().catch(() => null);
+  if (!other) return json({ error: "Not found" }, 404);
+
+  const msgs = await env.DB.prepare(
+    "SELECT id, sender_id, body, sent_at, read_at FROM direct_messages " +
+    "WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?) " +
+    "ORDER BY sent_at ASC LIMIT 500"
+  ).bind(user.id, otherId, otherId, user.id).all().catch(() => ({ results: [] }));
+
+  // Mark anything they sent us as read.
+  try {
+    await env.DB.prepare(
+      "UPDATE direct_messages SET read_at = ? " +
+      "WHERE recipient_id = ? AND sender_id = ? AND read_at IS NULL"
+    ).bind(nowSec(), user.id, otherId).run();
+  } catch {}
+
+  return json({
+    other: profileResponse(other),
+    messages: (msgs.results || []).map((m) => ({
+      id: m.id,
+      fromMe: m.sender_id === user.id,
+      body: m.body,
+      sentAt: m.sent_at,
+      readAt: m.read_at,
+    })),
+  });
+}
+
+async function sendDmMessage(request, env, user, otherId) {
+  await ensureProfileSchema(env);
+  const [a, b] = friendPair(user.id, otherId);
+  const friend = await env.DB.prepare(
+    "SELECT status FROM friendships WHERE user_id_a = ? AND user_id_b = ? AND status = 'accepted'"
+  ).bind(a, b).first().catch(() => null);
+  if (!friend) return json({ error: "Not your friend" }, 403);
+
+  const body = await readJsonSafe(request);
+  const text = sanitizeText(body?.body, 2000);
+  if (!text) return json({ error: "Empty message" }, 400);
+
+  const now = nowSec();
+  const ins = await env.DB.prepare(
+    "INSERT INTO direct_messages (sender_id, recipient_id, body, sent_at) " +
+    "VALUES (?, ?, ?, ?) RETURNING id"
+  ).bind(user.id, otherId, text, now).first().catch((e) => {
+    console.warn("dm insert:", e?.message); return null;
+  });
+  if (!ins?.id) return json({ error: "Could not send" }, 500);
+  return json({ ok: true, id: ins.id, sentAt: now });
+}
+
+async function markDmRead(env, user, otherId) {
+  try {
+    await env.DB.prepare(
+      "UPDATE direct_messages SET read_at = ? " +
+      "WHERE recipient_id = ? AND sender_id = ? AND read_at IS NULL"
+    ).bind(nowSec(), user.id, otherId).run();
+  } catch {}
   return json({ ok: true });
 }
 

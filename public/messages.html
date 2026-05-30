@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
-  <title>Results – EndoMe</title>
+  <title>Messages – EndoMe</title>
   <meta name="robots" content="noindex,nofollow" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/logo-final.png" />
@@ -13,8 +13,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780146586" />
-  <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/tests.css?v=1779934116" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780147274" />
+  <link rel="stylesheet" href="/messages.css?v=1780180907" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -22,7 +22,7 @@
     <div class="page-loader-content">
       <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
       <div class="page-loader-bar"></div>
-      <p class="page-loader-text">Loading your results…</p>
+      <p class="page-loader-text">Loading your messages…</p>
     </div>
   </div>
 
@@ -37,7 +37,6 @@
         <button class="account-toggle" id="account-toggle" type="button" aria-haspopup="true" aria-expanded="false">
           <div class="avatar"><svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/><circle cx="20" cy="16" r="7" fill="#8a4a2a"/><path d="M6 36c2-8 8-12 14-12s12 4 14 12" fill="#f5c69b"/><circle cx="20" cy="16" r="6" fill="#f5c69b"/></svg></div>
           <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
-          <svg class="account-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M6 9l6 6 6-6" stroke="#3a2330" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="account-dropdown" id="account-dropdown" hidden role="menu">
           <a href="/profile" role="menuitem"><span class="acm-ico">👤</span> Profile</a>
@@ -57,10 +56,10 @@
         <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
         <a href="/story"><span class="ico">📖</span> Your Story</a>
         <a href="/tests"><span class="ico">🧪</span> Tests</a>
-        <a class="active" href="/results"><span class="ico">📊</span> Results</a>
+        <a href="/results"><span class="ico">📊</span> Results</a>
         <a href="/my-insights"><span class="ico">✨</span> Insights</a>
         <a href="/reports"><span class="ico">📄</span> Reports</a>
-        <a href="/messages"><span class="ico">💬</span> Messages</a>
+        <a class="active" href="/messages"><span class="ico">💬</span> Messages</a>
         <a href="/meds"><span class="ico">💊</span> Medications</a>
         <a href="/food"><span class="ico">🥗</span> Food</a>
         <a href="/appointments"><span class="ico">📅</span> Appointments</a>
@@ -73,55 +72,81 @@
       </nav>
     </aside>
 
-    <main class="dash-main community-main">
-      <header class="community-hero soft">
-        <div>
-          <p class="hero-eyebrow">Results</p>
-          <h1>Your assessed test results.</h1>
-          <p class="hero-lead">Every panel we've processed, with the values mapped against reference ranges, the EndoMe community average, and your previous reading so trends are obvious.</p>
-        </div>
-      </header>
-
-      <section class="results-layout">
-        <div class="results-list-wrap">
-          <header class="section-head">
-            <h2>Your reports</h2>
-            <span class="section-hint">Tap any result to drill into the full report — values, ranges, where you sit vs the community, and the trend against your previous panel.</span>
+    <main class="dash-main messages-main">
+      <div class="msg-shell" id="msg-shell">
+        <!-- Conversation list -->
+        <aside class="msg-list-pane" id="msg-list-pane">
+          <header class="msg-list-head">
+            <h1>Messages</h1>
+            <button type="button" class="msg-new-btn" id="msg-new-btn" title="Add a friend">＋</button>
           </header>
-          <ul class="results-list" id="results-list">
-            <li class="empty-state">Loading…</li>
+          <div class="msg-search">
+            <input type="search" id="msg-search-input" placeholder="Search conversations…" autocomplete="off" />
+          </div>
+          <ul class="msg-list" id="msg-list">
+            <li class="msg-empty">Loading…</li>
           </ul>
-        </div>
-
-        <aside class="results-side">
-          <section class="side-card">
-            <div class="section-head"><h2>🧪 Order another test</h2></div>
-            <p class="side-sub">Build the full picture by adding the panels you haven't taken yet.</p>
-            <ul class="results-order-list" id="results-order-list"></ul>
-          </section>
-          <section class="side-card results-help">
-            <div class="section-head"><h2>📞 Need a hand?</h2></div>
-            <p class="side-sub">Our team can talk you through your results 1:1 before your next clinician visit.</p>
-            <a class="btn btn-soft small" href="/community">Ask the community</a>
+          <!-- Friend-requests strip; only visible when there are incoming requests -->
+          <section class="msg-requests" id="msg-requests" hidden>
+            <h3>Friend requests</h3>
+            <ul id="msg-requests-list"></ul>
           </section>
         </aside>
-      </section>
+
+        <!-- Active thread -->
+        <section class="msg-thread-pane" id="msg-thread-pane">
+          <header class="msg-thread-head" id="msg-thread-head">
+            <button type="button" class="msg-back-btn" id="msg-back-btn" aria-label="Back to conversations">‹</button>
+            <div class="msg-thread-id">
+              <div class="msg-thread-avatar" id="msg-thread-avatar">💬</div>
+              <div class="msg-thread-meta">
+                <strong id="msg-thread-name">—</strong>
+                <span id="msg-thread-sub"></span>
+              </div>
+            </div>
+          </header>
+
+          <div class="msg-thread-body" id="msg-thread-body">
+            <div class="msg-thread-empty">
+              <span class="msg-thread-empty-icon">💬</span>
+              <p>Pick a conversation to start.</p>
+              <p class="muted">Your Buddy is always pinned at the top — they're listening any time you need.</p>
+            </div>
+          </div>
+
+          <form class="msg-composer" id="msg-composer" autocomplete="off" novalidate hidden>
+            <textarea id="msg-input" rows="1" placeholder="Write a message…" maxlength="2000"></textarea>
+            <button type="submit" class="msg-send-btn" id="msg-send-btn" aria-label="Send">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M3 12l18-9-4 9 4 9-18-9z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+            </button>
+          </form>
+        </section>
+      </div>
     </main>
   </div>
 
-  <!-- Result detail modal -->
-  <div class="modal" id="result-modal" aria-hidden="true" role="dialog">
-    <div class="modal-backdrop" data-close-result></div>
-    <div class="modal-card modal-xl result-modal-card">
-      <button class="modal-close" type="button" data-close-result aria-label="Close">×</button>
-      <div id="result-modal-body">Loading…</div>
+  <!-- MODAL: Add a friend / start a chat -->
+  <div class="modal" id="modal-add-friend" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-close-modal aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🤝</span>
+        <h3>Find a friend</h3>
+        <p>Search by name or username. Send a request — once they accept, you can message.</p>
+      </header>
+      <div class="modal-section">
+        <input type="search" id="friend-search" placeholder="Type a name or username…" autocomplete="off" />
+        <ul class="friend-results" id="friend-results"></ul>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>Close</button>
+      </div>
     </div>
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/results.js?v=1779934116" defer></script>
-  <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
-  <script src="/buddy-widget.js?v=1780180907" defer></script>
+  <script src="/messages.js?v=1780180907" defer></script>
 </body>
 </html>

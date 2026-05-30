@@ -115,7 +115,7 @@
       // (better UX than a popup with the keyboard taking over the screen).
       // Desktop keeps the in-place Intercom-style popup.
       if (matchMedia("(max-width: 820px)").matches) {
-        location.href = "/buddy";
+        location.href = "/messages?c=buddy";
         return;
       }
       openPanel();
