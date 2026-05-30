@@ -283,6 +283,9 @@ export default {
           if (url.pathname === "/api/me/body-pain-map" && request.method === "GET") {
             return jsonHeaders(await getBodyPainMap(env, user));
           }
+          if (url.pathname === "/api/me/report" && request.method === "GET") {
+            return jsonHeaders(await getMedicalReport(request, env, user));
+          }
           if (url.pathname === "/api/me/week" && request.method === "GET") {
             return jsonHeaders(await getMeWeek(env, user));
           }
@@ -506,6 +509,7 @@ export default {
       url.pathname === "/appointments" || url.pathname.startsWith("/appointments/") ||
       url.pathname === "/results"     || url.pathname.startsWith("/results/") ||
       url.pathname === "/my-insights" || url.pathname.startsWith("/my-insights/") ||
+      url.pathname === "/reports"     || url.pathname.startsWith("/reports/") ||
       url.pathname === "/explore"     || url.pathname.startsWith("/explore/")
     ) {
       const session = await readSession(request, env);
@@ -2251,6 +2255,266 @@ async function getBodyPainMap(env, user) {
     }
   }
   return json({ regions, since: startISO });
+}
+
+// --- /api/me/report -------------------------------------------------------
+// Comprehensive clinician-ready report. Pulls every relevant table for
+// a user-chosen date range and returns flat, table-ready JSON that the
+// /reports page renders into printable tables. No PHI leaves the box —
+// the user prints/PDFs from their browser.
+async function getMedicalReport(request, env, user) {
+  const url = new URL(request.url);
+  const today = normaliseDate(null);
+
+  // Date range: default = last 90 days. Cap at 730 days to keep this honest.
+  let from = normaliseDate(url.searchParams.get("from"));
+  let to   = normaliseDate(url.searchParams.get("to") || today);
+  if (!from) {
+    const d = new Date(`${to}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 89);
+    from = d.toISOString().slice(0, 10);
+  }
+  // Swap if reversed.
+  if (from > to) { const t = from; from = to; to = t; }
+  // Cap span.
+  const fromD = new Date(`${from}T00:00:00Z`);
+  const toD   = new Date(`${to}T00:00:00Z`);
+  const spanDays = Math.round((toD - fromD) / 86400000) + 1;
+  if (spanDays > 730) {
+    const d = new Date(toD); d.setUTCDate(d.getUTCDate() - 729);
+    from = d.toISOString().slice(0, 10);
+  }
+  const fromEpoch = Math.floor(new Date(`${from}T00:00:00Z`).getTime() / 1000);
+  const toEpoch   = Math.floor(new Date(`${to}T23:59:59Z`).getTime() / 1000);
+
+  // Helper — every query is wrapped in try/catch so a missing table
+  // never takes the whole report down.
+  const safe = async (label, fn) => {
+    try { return await fn(); } catch (_e) { return { _error: true, label }; }
+  };
+
+  // --- Profile / identity ---
+  // Only select columns we actually have on `users`. Demographic fields
+  // (dob, sex, weight, etc.) aren't captured yet — surface what we do have.
+  const profile = await safe("profile", async () => {
+    const u = await env.DB.prepare(
+      "SELECT id, username, display_name, alias, timezone, " +
+      "       endo_status, endo_stage, wants_early_dx_support, created_at " +
+      "FROM users WHERE id = ?"
+    ).bind(user.id).first();
+    return u || null;
+  });
+
+  // --- Symptoms (every row in the range) ---
+  const symptoms = await safe("symptoms", async () => {
+    const r = await env.DB.prepare(
+      "SELECT log_date, logged_at, symptom, severity, location, pain_type, " +
+      "       triggers, relief, notes " +
+      "FROM symptoms WHERE user_id = ? AND log_date BETWEEN ? AND ? " +
+      "ORDER BY log_date DESC, logged_at DESC"
+    ).bind(user.id, from, to).all();
+    return r.results || [];
+  });
+
+  // Symptom frequency rollup (table 2).
+  const symptomCounts = {};
+  let totalSeverity = 0, severityCount = 0;
+  for (const s of Array.isArray(symptoms) ? symptoms : []) {
+    const k = s.symptom;
+    if (!symptomCounts[k]) symptomCounts[k] = { count: 0, maxSev: 0, sumSev: 0, lastDate: null };
+    symptomCounts[k].count += 1;
+    symptomCounts[k].sumSev += s.severity || 0;
+    if (s.severity > symptomCounts[k].maxSev) symptomCounts[k].maxSev = s.severity;
+    if (!symptomCounts[k].lastDate || s.log_date > symptomCounts[k].lastDate) symptomCounts[k].lastDate = s.log_date;
+    totalSeverity += s.severity || 0; severityCount += 1;
+  }
+  const symptomSummary = Object.entries(symptomCounts)
+    .map(([k, v]) => ({ symptom: k, count: v.count, avgSev: +(v.sumSev / v.count).toFixed(1), maxSev: v.maxSev, lastDate: v.lastDate }))
+    .sort((a, b) => b.count - a.count);
+
+  // Body region rollup.
+  const regionCounts = {};
+  for (const s of Array.isArray(symptoms) ? symptoms : []) {
+    const parts = String(s.location || "").split(",").map((p) => p.trim()).filter(Boolean);
+    for (const p of parts) {
+      if (!regionCounts[p]) regionCounts[p] = { count: 0, maxSev: 0 };
+      regionCounts[p].count += 1;
+      if (s.severity > regionCounts[p].maxSev) regionCounts[p].maxSev = s.severity;
+    }
+  }
+  const regionSummary = Object.entries(regionCounts)
+    .map(([k, v]) => ({ region: k, count: v.count, maxSev: v.maxSev }))
+    .sort((a, b) => b.count - a.count);
+
+  // --- Daily check-ins ---
+  const dailyLogs = await safe("dailyLogs", async () => {
+    const r = await env.DB.prepare(
+      "SELECT log_date, morning_mood, morning_energy, morning_pain, " +
+      "       morning_sleep_hours, morning_sleep_quality, " +
+      "       evening_overall, stress_level, water_glasses, movement_level, " +
+      "       bowel_count, bowel_type, intimacy, " +
+      "       cycle_day, cycle_phase, flow, bbt, cervical_mucus, breast_tenderness " +
+      "FROM daily_logs WHERE user_id = ? AND log_date BETWEEN ? AND ? " +
+      "ORDER BY log_date DESC"
+    ).bind(user.id, from, to).all();
+    return r.results || [];
+  });
+
+  // Daily averages summary.
+  const dlArr = Array.isArray(dailyLogs) ? dailyLogs : [];
+  const avg = (key) => {
+    const vals = dlArr.map((r) => r[key]).filter((v) => v != null && !isNaN(v));
+    if (!vals.length) return null;
+    return +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2);
+  };
+  const dailyAverages = {
+    daysLogged: dlArr.length,
+    avgMood: avg("morning_mood"),
+    avgEnergy: avg("morning_energy"),
+    avgPain: avg("morning_pain"),
+    avgSleepHours: avg("morning_sleep_hours"),
+    avgSleepQuality: avg("morning_sleep_quality"),
+    avgStress: avg("stress_level"),
+    avgOverall: avg("evening_overall"),
+    avgWater: avg("water_glasses"),
+  };
+
+  // --- Cycle / period summary ---
+  // Phase counts + bleeding days.
+  const phaseCounts = {};
+  let bleedingDays = 0, heaviestFlow = "none";
+  const flowRank = { none: 0, spotting: 1, light: 2, medium: 3, heavy: 4 };
+  for (const r of dlArr) {
+    if (r.cycle_phase) phaseCounts[r.cycle_phase] = (phaseCounts[r.cycle_phase] || 0) + 1;
+    if (r.flow && r.flow !== "none") {
+      bleedingDays += 1;
+      if ((flowRank[r.flow] || 0) > (flowRank[heaviestFlow] || 0)) heaviestFlow = r.flow;
+    }
+  }
+
+  // --- Medications (active list + log) ---
+  const medications = await safe("medications", async () => {
+    const r = await env.DB.prepare(
+      "SELECT id, name, kind, dose, frequency, brand, notes, is_active, created_at " +
+      "FROM medications WHERE user_id = ? ORDER BY is_active DESC, name ASC"
+    ).bind(user.id).all();
+    return r.results || [];
+  });
+  const medLogs = await safe("medLogs", async () => {
+    const r = await env.DB.prepare(
+      "SELECT ml.taken_at, ml.dose_text, ml.notes, ml.status, m.name AS med_name " +
+      "FROM medication_logs ml LEFT JOIN medications m ON m.id = ml.medication_id " +
+      "WHERE ml.user_id = ? AND ml.taken_at BETWEEN ? AND ? " +
+      "ORDER BY ml.taken_at DESC LIMIT 2000"
+    ).bind(user.id, fromEpoch, toEpoch).all();
+    return r.results || [];
+  });
+  // Adherence rollup per med.
+  const adherence = {};
+  for (const l of Array.isArray(medLogs) ? medLogs : []) {
+    const k = l.med_name || "(deleted)";
+    if (!adherence[k]) adherence[k] = { taken: 0, missed: 0, lastTaken: null };
+    if (l.status === "missed") adherence[k].missed += 1;
+    else { adherence[k].taken += 1; if (!adherence[k].lastTaken || l.taken_at > adherence[k].lastTaken) adherence[k].lastTaken = l.taken_at; }
+  }
+  const medAdherence = Object.entries(adherence)
+    .map(([k, v]) => ({ name: k, taken: v.taken, missed: v.missed, lastTaken: v.lastTaken }))
+    .sort((a, b) => b.taken - a.taken);
+
+  // --- Food logs ---
+  const foodLogs = await safe("foodLogs", async () => {
+    const r = await env.DB.prepare(
+      "SELECT log_date, meal, name, calories, protein_g, carbs_g, fat_g, fiber_g, servings " +
+      "FROM food_logs WHERE user_id = ? AND log_date BETWEEN ? AND ? " +
+      "ORDER BY log_date DESC, logged_at DESC LIMIT 2000"
+    ).bind(user.id, from, to).all();
+    return r.results || [];
+  });
+  // Per-day nutrition averages.
+  const perDay = {};
+  for (const f of Array.isArray(foodLogs) ? foodLogs : []) {
+    if (!perDay[f.log_date]) perDay[f.log_date] = { cal: 0, p: 0, c: 0, fa: 0, fi: 0 };
+    perDay[f.log_date].cal += (f.calories || 0) * (f.servings || 1);
+    perDay[f.log_date].p  += (f.protein_g || 0) * (f.servings || 1);
+    perDay[f.log_date].c  += (f.carbs_g || 0) * (f.servings || 1);
+    perDay[f.log_date].fa += (f.fat_g || 0) * (f.servings || 1);
+    perDay[f.log_date].fi += (f.fiber_g || 0) * (f.servings || 1);
+  }
+  const foodDays = Object.values(perDay);
+  const foodAverages = foodDays.length ? {
+    daysLogged: foodDays.length,
+    avgCalories: Math.round(foodDays.reduce((s, d) => s + d.cal, 0) / foodDays.length),
+    avgProtein: +(foodDays.reduce((s, d) => s + d.p, 0) / foodDays.length).toFixed(1),
+    avgCarbs:   +(foodDays.reduce((s, d) => s + d.c, 0) / foodDays.length).toFixed(1),
+    avgFat:     +(foodDays.reduce((s, d) => s + d.fa, 0) / foodDays.length).toFixed(1),
+    avgFiber:   +(foodDays.reduce((s, d) => s + d.fi, 0) / foodDays.length).toFixed(1),
+  } : null;
+
+  // --- Cravings ---
+  const cravings = await safe("cravings", async () => {
+    const r = await env.DB.prepare(
+      "SELECT log_date, logged_at, craving, intensity, satisfied, notes " +
+      "FROM cravings WHERE user_id = ? AND log_date BETWEEN ? AND ? " +
+      "ORDER BY logged_at DESC LIMIT 500"
+    ).bind(user.id, from, to).all();
+    return r.results || [];
+  });
+  const cravingCounts = {};
+  for (const c of Array.isArray(cravings) ? cravings : []) {
+    cravingCounts[c.craving] = (cravingCounts[c.craving] || 0) + 1;
+  }
+  const cravingSummary = Object.entries(cravingCounts)
+    .map(([k, v]) => ({ craving: k, count: v }))
+    .sort((a, b) => b.count - a.count);
+
+  // --- Appointments ---
+  const appointments = await safe("appointments", async () => {
+    const r = await env.DB.prepare(
+      "SELECT title, kind, doctor, location, notes, starts_at, ends_at, all_day " +
+      "FROM appointments WHERE user_id = ? AND starts_at BETWEEN ? AND ? " +
+      "ORDER BY starts_at DESC"
+    ).bind(user.id, fromEpoch, toEpoch).all();
+    return r.results || [];
+  });
+
+  // --- Test results ---
+  const testResults = await safe("testResults", async () => {
+    const r = await env.DB.prepare(
+      "SELECT kind, title, summary, assessed_at " +
+      "FROM test_results WHERE user_id = ? AND assessed_at BETWEEN ? AND ? " +
+      "ORDER BY assessed_at DESC"
+    ).bind(user.id, fromEpoch, toEpoch).all();
+    return r.results || [];
+  });
+
+  // --- Pattern markers (early-dx-watch) ---
+  let patternWatch = null;
+  try { patternWatch = await computeEndoPatternWatch(env, user); } catch (_) {}
+
+  return json({
+    meta: {
+      generatedAt: nowSec(),
+      from, to, spanDays,
+      patient: {
+        displayName: profile?.display_name || profile?.alias || profile?.username || null,
+        alias: profile?.alias || null,
+        endoStatus: profile?.endo_status || null,
+        endoStage: profile?.endo_stage || null,
+        memberSince: profile?.created_at || null,
+        timezone: profile?.timezone || null,
+      },
+    },
+    daily: { rows: dlArr, averages: dailyAverages, phaseCounts, bleedingDays, heaviestFlow },
+    symptoms: { rows: symptoms, byType: symptomSummary, byRegion: regionSummary,
+                avgSeverity: severityCount ? +(totalSeverity / severityCount).toFixed(2) : null,
+                total: severityCount },
+    medications: { list: medications, logs: medLogs, adherence: medAdherence },
+    food: { rows: foodLogs, averages: foodAverages },
+    cravings: { rows: cravings, byType: cravingSummary },
+    appointments: appointments,
+    testResults: testResults,
+    patternWatch,
+  });
 }
 
 // --- /api/me/week ---------------------------------------------------------
