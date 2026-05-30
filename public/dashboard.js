@@ -115,6 +115,7 @@ function render() {
   renderStoryMini();
   renderDosesDue();
   renderEndoWatch();
+  renderBodyMap();
 }
 
 // --- Early-diagnosis pattern watch ---------------------------------------
@@ -155,6 +156,103 @@ async function renderEndoWatch() {
       </footer>
     </section>`;
 }
+
+// --- Body pain map -------------------------------------------------------
+// Interactive silhouette: each named region has a hotspot for click-to-log
+// and (when a recent symptom exists at that location) a glowing red dot
+// sized by how many entries hit it in the last 30 days.
+const BODY_MAP_REGIONS = [
+  // [key, cx, cy, hotR, glowR, label]
+  ["Lower abdomen", 110, 195, 18, 14, "Lower abdomen"],
+  ["Pelvis",        110, 230, 18, 14, "Pelvis"],
+  ["Ovaries",        92, 218, 12, 10, "Ovaries"],
+  ["Uterus",        110, 218, 10,  9, "Uterus"],
+  ["Bladder",       110, 240, 10,  9, "Bladder"],
+  ["Rectum",        110, 258, 10,  9, "Rectum"],
+  ["Lower back",    110, 200, 16, 13, "Lower back"], // overlapping the abdomen visually is fine — it's a front view but we still need a spot
+  ["Legs",          110, 370, 22, 16, "Legs"],
+  ["Other",         110,  85, 14, 11, "Other"],
+];
+
+async function renderBodyMap() {
+  const hotG  = document.getElementById("body-map-hotspots");
+  const glowG = document.getElementById("body-map-glows");
+  const legend = document.getElementById("body-map-legend");
+  if (!hotG || !glowG || !legend) return;
+
+  let data = { regions: {} };
+  try {
+    const r = await fetch("/api/me/body-pain-map", { credentials: "same-origin" });
+    if (r.ok) data = await r.json();
+  } catch { /* fall through with empty data */ }
+
+  // Build hotspots (always present, even with no logs).
+  hotG.innerHTML = BODY_MAP_REGIONS.map(([key, cx, cy, hr, _gr, label]) =>
+    `<circle data-region="${escapeHtml(key)}" cx="${cx}" cy="${cy}" r="${hr}" tabindex="0" role="button" aria-label="Log pain — ${escapeHtml(label)}"><title>Tap to log: ${escapeHtml(label)}</title></circle>`
+  ).join("");
+
+  // Build glows from server data.
+  const regions = data.regions || {};
+  const glowMarkup = [];
+  const legendRows = [];
+  for (const [key, cx, cy, _hr, gr, label] of BODY_MAP_REGIONS) {
+    const slot = regions[key];
+    if (!slot || !slot.count) continue;
+    // Scale glow with count + severity (capped).
+    const sevBoost = Math.min(slot.maxSeverity || 3, 5);
+    const haloR = gr + Math.min(slot.count, 6) + sevBoost * 1.5;
+    glowMarkup.push(
+      `<circle cx="${cx}" cy="${cy}" r="${haloR}" fill="url(#painGlow)"/>` +
+      `<circle class="glow-core" cx="${cx}" cy="${cy}" r="${Math.max(4, gr * 0.45)}" fill="#ff4e6d"/>`
+    );
+    const sevClass = sevBoost >= 4 ? "sev-high" : sevBoost >= 3 ? "sev-mid" : "sev-low";
+    legendRows.push({ key, label, count: slot.count, sev: sevBoost, sevClass, lastDate: slot.lastDate });
+  }
+  glowG.innerHTML = glowMarkup.join("");
+
+  if (!legendRows.length) {
+    legend.innerHTML = `<p class="body-map-empty">No pain logged in the last 30 days. Tap any spot on the figure to log one.</p>`;
+  } else {
+    legendRows.sort((a, b) => b.count - a.count || b.sev - a.sev);
+    legend.innerHTML = legendRows.map((r) => `
+      <button type="button" class="body-map-row" data-body-region="${escapeHtml(r.key)}">
+        <span class="dot ${r.sevClass}"></span>
+        <strong>${escapeHtml(r.label)}</strong>
+        <span class="meta">${r.count}× · sev ${r.sev}</span>
+      </button>`).join("");
+  }
+}
+
+// Click on the silhouette or legend → open the symptom modal and
+// pre-select the location chip the user pointed at.
+document.addEventListener("click", (e) => {
+  const region =
+    e.target.closest?.("[data-region]")?.dataset.region ||
+    e.target.closest?.("[data-body-region]")?.dataset.bodyRegion;
+  if (!region) return;
+  openModal("symptom");
+  setTimeout(() => {
+    const modal = document.getElementById("modal-symptom");
+    if (!modal) return;
+    const locGroup = modal.querySelector('[data-multi="location"]');
+    if (!locGroup) return;
+    // Show the "Where & context" sub-section regardless of which symptom
+    // is picked — the user came from the body figure, location is the point.
+    const wrap = locGroup.closest("[data-show-when]");
+    if (wrap) wrap.hidden = false;
+    for (const b of locGroup.children) {
+      if (b.tagName !== "BUTTON") continue;
+      if (b.dataset.val === region) {
+        b.classList.add("on");
+        b.setAttribute("aria-pressed", "true");
+      }
+    }
+    locGroup.dataset.value = region;
+    updateMultiCount(locGroup);
+    // Scroll the location section into view.
+    wrap?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 120);
+});
 
 // --- Doses due banner ----------------------------------------------------
 // Pulls today's scheduled doses + their current status. Renders a card

@@ -280,6 +280,9 @@ export default {
           if (url.pathname === "/api/me/symptoms" && request.method === "GET") {
             return jsonHeaders(await getSymptoms(request, env, user));
           }
+          if (url.pathname === "/api/me/body-pain-map" && request.method === "GET") {
+            return jsonHeaders(await getBodyPainMap(env, user));
+          }
           if (url.pathname === "/api/me/week" && request.method === "GET") {
             return jsonHeaders(await getMeWeek(env, user));
           }
@@ -2206,6 +2209,48 @@ async function getSymptoms(request, env, user) {
     )
     .bind(user.id, from, to).all();
   return json({ symptoms: res.results || [] });
+}
+
+// --- /api/me/body-pain-map ------------------------------------------------
+// Aggregate the last 30 days of symptom entries by body region so the
+// dashboard's interactive figure can glow red where things hurt.
+// Locations are stored as comma-separated free text — we match against the
+// fixed vocabulary in the symptom modal.
+const BODY_MAP_REGIONS = [
+  "Lower abdomen","Pelvis","Ovaries","Uterus","Lower back","Legs","Rectum","Bladder","Other",
+];
+async function getBodyPainMap(env, user) {
+  const today = normaliseDate(null);
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - 29);
+  const startISO = start.toISOString().slice(0, 10);
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT log_date, logged_at, symptom, severity, location " +
+      "FROM symptoms WHERE user_id = ? AND log_date BETWEEN ? AND ? " +
+      "AND location IS NOT NULL AND location <> '' " +
+      "ORDER BY logged_at DESC LIMIT 500"
+    ).bind(user.id, startISO, today).all();
+  } catch (_) { /* table missing — empty */ }
+
+  const regions = {};
+  for (const k of BODY_MAP_REGIONS) regions[k] = { count: 0, maxSeverity: 0, lastDate: null, lastSymptom: null };
+  for (const r of rows.results || []) {
+    const parts = String(r.location || "").split(",").map((p) => p.trim()).filter(Boolean);
+    for (const p of parts) {
+      const key = BODY_MAP_REGIONS.find((k) => k.toLowerCase() === p.toLowerCase());
+      if (!key) continue;
+      const slot = regions[key];
+      slot.count += 1;
+      if (r.severity > slot.maxSeverity) slot.maxSeverity = r.severity;
+      if (!slot.lastDate || r.log_date > slot.lastDate) {
+        slot.lastDate = r.log_date;
+        slot.lastSymptom = r.symptom;
+      }
+    }
+  }
+  return json({ regions, since: startISO });
 }
 
 // --- /api/me/week ---------------------------------------------------------

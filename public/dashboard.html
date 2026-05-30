@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
-  <link rel="stylesheet" href="/dashboard.css?v=1780116415" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780122039" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -183,6 +183,56 @@
               <div class="ep-level">Level <span data-bind="petLevel">1</span></div>
               <span class="happy-pill" data-bind="petMoodClass">Happy</span>
               <div class="ep-poop-hint" id="ep-mini-poop" hidden>💩 needs a clean</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Interactive body pain map (last 30d) -->
+      <section>
+        <div class="card body-map-card">
+          <div class="card-head wide">
+            <span><span class="ico-tile pink">🫀</span> Body Map <span class="muted">last 30 days</span></span>
+            <span class="card-head-cta-static">Tap a spot to log</span>
+          </div>
+          <div class="body-map-wrap">
+            <svg class="body-map-svg" viewBox="0 0 220 440" aria-label="Body pain map" role="img">
+              <defs>
+                <radialGradient id="painGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="#ff4e6d" stop-opacity=".85"/>
+                  <stop offset="55%" stop-color="#ff4e6d" stop-opacity=".35"/>
+                  <stop offset="100%" stop-color="#ff4e6d" stop-opacity="0"/>
+                </radialGradient>
+                <linearGradient id="bodyFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#ffeaf2"/>
+                  <stop offset="100%" stop-color="#fff5f8"/>
+                </linearGradient>
+              </defs>
+              <!-- Simplified female silhouette (front view) -->
+              <g class="body-silhouette" fill="url(#bodyFill)" stroke="#ffc8d8" stroke-width="1.4" stroke-linejoin="round">
+                <!-- head -->
+                <ellipse cx="110" cy="34" rx="20" ry="24"/>
+                <!-- neck -->
+                <path d="M102 55 L102 66 Q110 70 118 66 L118 55 Z"/>
+                <!-- torso (shoulders + waist) -->
+                <path d="M70 70 Q92 64 110 66 Q128 64 150 70 L156 130 Q156 160 148 190 L150 230 Q138 244 110 244 Q82 244 70 230 L72 190 Q64 160 64 130 Z"/>
+                <!-- arms -->
+                <path d="M70 72 Q52 88 50 130 Q48 170 56 210 Q60 220 64 218 Q60 180 62 140 Q64 100 72 82 Z"/>
+                <path d="M150 72 Q168 88 170 130 Q172 170 164 210 Q160 220 156 218 Q160 180 158 140 Q156 100 148 82 Z"/>
+                <!-- hips / lower body -->
+                <path d="M70 230 Q60 260 64 300 Q66 320 78 320 L88 320 Q96 280 100 248 Z"/>
+                <path d="M150 230 Q160 260 156 300 Q154 320 142 320 L132 320 Q124 280 120 248 Z"/>
+                <!-- legs (thighs + calves merged) -->
+                <path d="M78 320 Q72 360 76 400 Q80 422 96 422 Q104 422 106 410 Q108 370 104 320 Z"/>
+                <path d="M142 320 Q148 360 144 400 Q140 422 124 422 Q116 422 114 410 Q112 370 116 320 Z"/>
+              </g>
+              <!-- Glow layer: rendered by JS -->
+              <g class="body-map-glows" id="body-map-glows"></g>
+              <!-- Click hotspots: rendered by JS as <circle> overlays mapped to regions -->
+              <g class="body-map-hotspots" id="body-map-hotspots"></g>
+            </svg>
+            <div class="body-map-legend" id="body-map-legend">
+              <p class="body-map-empty">No pain logged in the last 30 days. Tap any spot to log one.</p>
             </div>
           </div>
         </div>
@@ -913,7 +963,7 @@
 
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
-  <script src="/dashboard.js?v=1780116415" defer></script>
+  <script src="/dashboard.js?v=1780122039" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780118228" defer></script>
 </body>
