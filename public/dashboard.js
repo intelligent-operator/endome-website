@@ -224,35 +224,122 @@ async function renderBodyMap() {
   }
 }
 
-// Click on the silhouette or legend → open the symptom modal and
-// pre-select the location chip the user pointed at.
+// Region → sub-spots offered when the user taps that region. Lets the
+// user say "left ovary" / "right ovary" / "both" instead of just "Ovaries".
+// Keys MUST match the region labels rendered by the body map.
+const PAIN_SUBSPOTS = {
+  "Ovaries":       ["Left ovary", "Right ovary", "Both ovaries"],
+  "Pelvis":        ["Left pelvis", "Right pelvis", "Centre", "Whole pelvis"],
+  "Lower abdomen": ["Left lower", "Right lower", "Centre", "Whole"],
+  "Lower back":    ["Left lower back", "Right lower back", "Centre"],
+  "Legs":          ["Left leg", "Right leg", "Both legs"],
+  "Uterus":        [],
+  "Bladder":       [],
+  "Rectum":        [],
+  "Other":         [],
+};
+
+// Pick the canonical symptom key based on which region the user tapped,
+// so the row lands in the right bucket on the symptom-frequency chart.
+const REGION_TO_SYMPTOM = {
+  "Ovaries":       "pelvic_pain",
+  "Pelvis":        "pelvic_pain",
+  "Uterus":        "pelvic_pain",
+  "Bladder":       "pelvic_pain",
+  "Rectum":        "painful_bowel",
+  "Lower abdomen": "endo_belly",
+  "Lower back":    "back_pain",
+  "Legs":          "pain",
+  "Other":         "pain",
+};
+
+function openPainModal(region) {
+  const modal = document.getElementById("modal-pain");
+  if (!modal) return;
+  // Reset state
+  resetMultiState(modal);
+  for (const b of modal.querySelectorAll(".seg-slider button")) {
+    b.classList.remove("on");
+    b.setAttribute("aria-pressed", "false");
+  }
+  const noteField = modal.querySelector('textarea[name="notes"]');
+  if (noteField) noteField.value = "";
+  // Region
+  modal.querySelector("#pain-region-input").value = region;
+  modal.querySelector("#pain-region-display").textContent = region;
+  // Sub-spot chips for this region
+  const subGroup = modal.querySelector("#pain-subspot-group");
+  const subs = PAIN_SUBSPOTS[region] || [];
+  if (!subs.length) {
+    subGroup.innerHTML = `<span class="seg-sublabel" style="font-size:12px;color:#7a5f6c">No sub-spots for this region.</span>`;
+  } else {
+    subGroup.innerHTML = subs.map((s) => `<button type="button" data-val="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("");
+  }
+  subGroup.dataset.value = "";
+  // Wire up the new chips
+  wireMultiButtons(modal);
+  // Open
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+// Click on the silhouette or legend → open the pain-only modal.
 document.addEventListener("click", (e) => {
   const region =
     e.target.closest?.("[data-region]")?.dataset.region ||
     e.target.closest?.("[data-body-region]")?.dataset.bodyRegion;
   if (!region) return;
-  openModal("symptom");
-  setTimeout(() => {
-    const modal = document.getElementById("modal-symptom");
-    if (!modal) return;
-    const locGroup = modal.querySelector('[data-multi="location"]');
-    if (!locGroup) return;
-    // Show the "Where & context" sub-section regardless of which symptom
-    // is picked — the user came from the body figure, location is the point.
-    const wrap = locGroup.closest("[data-show-when]");
-    if (wrap) wrap.hidden = false;
-    for (const b of locGroup.children) {
-      if (b.tagName !== "BUTTON") continue;
-      if (b.dataset.val === region) {
-        b.classList.add("on");
-        b.setAttribute("aria-pressed", "true");
-      }
-    }
-    locGroup.dataset.value = region;
-    updateMultiCount(locGroup);
-    // Scroll the location section into view.
-    wrap?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, 120);
+  openPainModal(region);
+});
+
+// Form submission — posts to /api/me/symptoms with pain-only payload.
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "form-pain") return;
+  e.preventDefault();
+  const form = e.target;
+  const modal = document.getElementById("modal-pain");
+  const region = form.region.value;
+  const severity = pickerVal(form, "painSeverity");
+  if (!severity) { toast("Set severity 1–5", "error"); return; }
+  const subs = multiVals(form, "subspot");
+  const character = multiVals(form, "painCharacter");
+  const triggers = multiVals(form, "painTriggers");
+  const relief = multiVals(form, "painRelief");
+  const notes = form.notes.value.trim();
+
+  // Build the locations list: region + any sub-spots the user picked.
+  const locations = [region, ...subs];
+  const symptomKey = REGION_TO_SYMPTOM[region] || "pain";
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  submitBtn.disabled = true; submitBtn.textContent = "Saving…";
+  try {
+    const res = await fetch("/api/me/symptoms", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        date: todayLocalDate(),
+        symptoms: [symptomKey],
+        severity,
+        locations,
+        painTypes: character,
+        triggers,
+        relief,
+        notes: notes || null,
+      }),
+    });
+    if (!res.ok) throw new Error(await safeError(res));
+    toast("Pain logged");
+    closeAllModals();
+    // Refresh dashboard + body map glow so user sees their entry land.
+    await refresh();
+  } catch (err) {
+    toast(`Couldn't save: ${err.message || err}`, "error");
+  } finally {
+    submitBtn.disabled = false; submitBtn.textContent = "Save pain log";
+  }
 });
 
 // --- Cycle prediction card -----------------------------------------------
