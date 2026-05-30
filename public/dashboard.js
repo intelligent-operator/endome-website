@@ -2218,13 +2218,79 @@ document.addEventListener("submit", async (e) => {
   }
 });
 
+// Mark all notifications as read — broken out so we can bind it both via
+// delegation AND directly on the button. Mobile Safari sometimes drops
+// the synthesised click on a small button inside a dropdown; the direct
+// pointerup binding is the belt-and-braces backup.
+let _markingAllRead = false;
+async function markAllNotificationsAsRead() {
+  if (_markingAllRead) return;
+  _markingAllRead = true;
+  // Immediate visual feedback so the user knows the tap registered, even
+  // before the server round-trip and refresh finishes.
+  const btn = document.getElementById("notif-mark-all");
+  if (btn) { btn.disabled = true; btn.textContent = "Marking…"; }
+  const badge = document.querySelector(".bell-dot");
+  if (badge) { badge.hidden = true; badge.textContent = "0"; }
+  // Optimistically dim every notif row so they read as "done".
+  document.querySelectorAll("#notif-list .notif-item").forEach((row) => {
+    row.classList.add("notif-item-read");
+    row.classList.remove("notif-item-unread");
+  });
+  // Mirror the server-side dismissal locally so the next render keeps
+  // the badge at zero even if the network response is slow.
+  for (const k of ["builtin:morning","builtin:evening"]) localReadKeys.add(k);
+  for (const d of pendingDosesCache || []) {
+    localReadKeys.add(`dose:${d.medicationId}:${d.scheduledFor}`);
+  }
+  for (const n of (state?.notifications || [])) {
+    if (typeof n.id === "string") localReadKeys.add(n.id);
+  }
+
+  try {
+    const r = await fetch("/api/me/notifications/read-all", {
+      method: "POST", credentials: "same-origin",
+    });
+    if (!r.ok) throw new Error("Server returned " + r.status);
+    toast("All caught up ✨");
+    await refresh();
+  } catch (err) {
+    console.warn("mark-all-read failed:", err?.message);
+    toast("Couldn't mark all read — check your connection.", "err");
+  } finally {
+    _markingAllRead = false;
+    if (btn) { btn.disabled = false; btn.textContent = "Mark all read"; }
+  }
+}
+
 // --- Bell dropdown --------------------------------------------------------
 const bell = document.querySelector(".bell");
 const dropdown = document.getElementById("notif-dropdown");
 if (bell && dropdown) {
+  // Direct binding on the mark-all-read button. Belt-and-braces against
+  // mobile Safari occasionally dropping the synthesised click — pointerup
+  // gives us a touch-first path that doesn't have the 300ms delay.
+  // _mar flag prevents double-binding.
+  const wireMarkAll = () => {
+    const b = document.getElementById("notif-mark-all");
+    if (!b || b._mar) return;
+    b._mar = true;
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      markAllNotificationsAsRead();
+    };
+    b.addEventListener("click", handler);
+    b.addEventListener("pointerup", handler);
+  };
+  // Run once on load and again every time the bell is opened.
+  setTimeout(wireMarkAll, 100);
   bell.addEventListener("click", (e) => {
     e.stopPropagation();
     dropdown.hidden = !dropdown.hidden;
+    // Belt: re-resolve + re-bind in case the button wasn't in the DOM
+    // at first script run (e.g. delayed render on slow mobile).
+    if (!dropdown.hidden) setTimeout(wireMarkAll, 0);
   });
   document.addEventListener("click", (e) => {
     if (!dropdown.hidden && !e.target.closest("#notif-dropdown") && !e.target.closest(".bell")) {
@@ -2237,26 +2303,8 @@ if (bell && dropdown) {
     // Mark all as read
     if (e.target.closest("#notif-mark-all")) {
       e.preventDefault();
-      try {
-        await fetch("/api/me/notifications/read-all", {
-          method: "POST", credentials: "same-origin",
-        });
-        // Locally clear EVERY pending-dose / built-in key. The previous
-        // version only cleared morning/evening, so dose-due items kept
-        // showing as unread and the badge never went to zero. Mirror the
-        // server-side dismissal here so the UI matches immediately.
-        for (const k of ["builtin:morning","builtin:evening"]) localReadKeys.add(k);
-        for (const d of pendingDosesCache || []) {
-          localReadKeys.add(`dose:${d.medicationId}:${d.scheduledFor}`);
-        }
-        // Also clear any server-virtual reminder ids currently in state —
-        // belt and braces in case the server's dismissed_reminders write
-        // didn't propagate by the time refresh() reads back.
-        for (const n of (state?.notifications || [])) {
-          if (typeof n.id === "string") localReadKeys.add(n.id);
-        }
-        await refresh();
-      } catch {}
+      e.stopPropagation();
+      await markAllNotificationsAsRead();
       return;
     }
 
