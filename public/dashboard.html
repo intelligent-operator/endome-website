@@ -282,10 +282,7 @@
     </svg>
     <span>Log symptom</span>
   </button>
-  <link rel="stylesheet" href="/buddy.css?v=1780111683" />
-  <a class="fab-buddy" href="/buddy" aria-label="Open Buddy chat">
-    <span>💬</span><span>Buddy</span>
-  </a>
+  <!-- Buddy launcher + popup is injected by /buddy-widget.js (loaded at end of body). -->
 
   <!-- Notification dropdown (anchored to the bell) -->
   <div id="notif-dropdown" class="notif-dropdown" hidden role="dialog" aria-label="Notifications">
@@ -913,5 +910,7 @@
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
   <script src="/dashboard.js?v=1780094730" defer></script>
+  <link rel="stylesheet" href="/buddy-widget.css?v=1780112242" />
+  <script src="/buddy-widget.js?v=1780112242" defer></script>
 </body>
 </html>
