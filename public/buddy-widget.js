@@ -55,12 +55,19 @@
   // /dashboard before this widget existed), drop it — the launcher replaces it.
   document.querySelectorAll(".fab-buddy").forEach((el) => el.remove());
 
+  // Backdrop dims the page behind the popup on mobile (bottom-sheet style)
+  // and on tablet (modal). Tapping it closes. Pointer-events:none above
+  // tablet width so desktop keeps working as an Intercom-style floater.
+  const backdrop = document.createElement("div");
+  backdrop.className = "bw-backdrop";
+  backdrop.hidden = true;
+
   document.addEventListener("DOMContentLoaded", () => {
     document.body.appendChild(launcher);
+    document.body.appendChild(backdrop);
     document.body.appendChild(panel);
     wire();
-    // Eagerly fetch the user's pet identity so the launcher reads
-    // "Talk to <petName>" and shows the pet's face before the panel opens.
+    backdrop.addEventListener("click", closePanel);
     fetchIdentity();
   }, { once: true });
 
@@ -126,8 +133,10 @@
     if (opened) return;
     opened = true;
     launcher.hidden = true;
+    backdrop.hidden = false;
     panel.hidden = false;
-    panel.querySelector("#bw-input").focus();
+    document.body.classList.add("bw-open");
+    panel.querySelector("#bw-input").focus({ preventScroll: true });
     if (!loadedOnce) {
       loadedOnce = true;
       await fetchIdentity();
@@ -137,7 +146,9 @@
   function closePanel() {
     opened = false;
     panel.hidden = true;
+    backdrop.hidden = true;
     launcher.hidden = false;
+    document.body.classList.remove("bw-open");
     panel.querySelector("#bw-drawer").hidden = true;
   }
 

@@ -3,6 +3,23 @@
    Drop-in on any authed page: include this CSS + buddy-widget.js.
    ===================================================================== */
 
+/* Backdrop — only visible on tablet/mobile when the panel is open.
+   Desktop keeps the floating-bubble feel (no backdrop, page stays usable). */
+.bw-backdrop{
+  position:fixed;inset:0;z-index:69;
+  background:rgba(43,25,34,.45);
+  backdrop-filter:blur(3px);
+  animation:bw-fade .18s ease-out;
+  display:none;
+}
+.bw-backdrop[hidden]{display:none}
+@keyframes bw-fade{from{opacity:0}to{opacity:1}}
+@media (max-width:820px){
+  .bw-backdrop:not([hidden]){display:block}
+  /* Stop the page behind from scrolling while the sheet is open. */
+  body.bw-open{overflow:hidden;touch-action:none}
+}
+
 /* Launcher FAB (the bottom-right circle that opens the popup) */
 .bw-launcher{
   position:fixed;right:24px;bottom:96px;z-index:60;
@@ -29,27 +46,34 @@
   animation:bw-pop .18s ease-out;
 }
 .bw-panel[hidden]{display:none}
-/* Tablet — comfortable size, still floats over content. */
-@media (max-width:820px){
+/* Tablet — modal-style: backdrop dims the page, panel is a comfortable
+   floating window centred horizontally. Still anchored bottom-right so
+   it feels like an extension of the launcher. */
+@media (min-width:561px) and (max-width:820px){
   .bw-panel{
-    width:min(420px, calc(100vw - 32px));
-    height:min(640px, calc(100dvh - 96px));
+    width:min(440px, calc(100vw - 32px));
+    height:min(680px, calc(100dvh - 60px));
+    right:16px;bottom:16px;
+    box-shadow:0 30px 70px rgba(58,29,43,.45);
   }
 }
-/* Mobile — full-screen sheet that respects the iOS safe area. Uses
-   dvh (dynamic viewport height) so the layout updates as the iOS
-   address bar / keyboard come and go, instead of overflowing. */
+/* Mobile — bottom-sheet modal. Sits over a dimmed backdrop, takes
+   ~72% of the viewport, leaves the page visible above it so the user
+   feels they're talking IN the app, not taken over by it. */
 @media (max-width:560px){
   .bw-launcher{
     right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0));
     padding:11px 16px;font-size:13px;
   }
   .bw-panel{
-    inset:0;width:auto;max-width:none;height:100dvh;max-height:none;
-    border-radius:0;border:none;
+    /* Sheet: full width minus tiny side gutters, anchored to the bottom. */
+    left:8px;right:8px;bottom:0;top:auto;
+    width:auto;max-width:none;
+    height:min(76dvh, 640px);max-height:76dvh;
+    border-radius:20px 20px 0 0;border:none;
+    box-shadow:0 -20px 60px rgba(58,29,43,.35);
     padding-bottom:env(safe-area-inset-bottom,0);
-    padding-top:env(safe-area-inset-top,0);
-    animation:bw-slide-up .2s ease-out;
+    animation:bw-slide-up .22s ease-out;
   }
 }
 @keyframes bw-pop{
@@ -57,7 +81,7 @@
   to  {opacity:1;transform:scale(1) translateY(0)}
 }
 @keyframes bw-slide-up{
-  from{opacity:0;transform:translateY(20px)}
+  from{opacity:0;transform:translateY(40px)}
   to  {opacity:1;transform:translateY(0)}
 }
 
@@ -240,8 +264,16 @@
 
 /* ------ Mobile / tablet polish ------ */
 @media (max-width:560px){
-  /* Compact head — let the title shrink so the icon row never wraps. */
-  .bw-head{padding:12px 12px;gap:8px}
+  /* Grab handle on top of the sheet — visual cue this is a sheet, not
+     a full takeover. Pure CSS, sits above the head. */
+  .bw-panel::before{
+    content:"";
+    position:absolute;top:6px;left:50%;transform:translateX(-50%);
+    width:36px;height:4px;border-radius:999px;background:rgba(255,255,255,.55);
+    pointer-events:none;z-index:5;
+  }
+  /* Push head down a touch so it doesn't overlap the handle. */
+  .bw-head{padding:18px 12px 12px;gap:8px}
   .bw-head-avatar{width:30px;height:30px;font-size:14px}
   .bw-head-title strong{font-size:13px}
   .bw-head-title span{font-size:10.5px}
