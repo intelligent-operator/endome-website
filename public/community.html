@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/community.css?v=1779934116" />
+  <link rel="stylesheet" href="/community.css?v=1780141319" />
   <link rel="stylesheet" href="/profile.css?v=1779934116" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
@@ -210,16 +210,29 @@
           <div>
             <p class="hero-eyebrow">Community Stories</p>
             <h1>Real stories from real people.</h1>
-            <p class="hero-lead">Long-form reflections from people on this same path. Curated, gentle, never preachy.</p>
+            <p class="hero-lead">Long-form reflections from people on this same path. Every story is reviewed before publishing.</p>
           </div>
+          <a class="btn btn-primary" href="/write-story">✍️ Write your story</a>
         </header>
+
         <section class="community-section">
-          <div class="coming-soon-card">
-            <span class="coming-soon-emoji">📖</span>
-            <h3>Coming soon</h3>
-            <p>We're working with our first wave of contributors. If you've got a story you want to share when this opens, we'd love to hear from you.</p>
-            <a href="mailto:contact@endome.com?subject=My%20EndoMe%20story" class="btn btn-primary">Pitch a story</a>
+          <div class="section-head">
+            <h2>📖 Published stories</h2>
+            <span class="section-hint" id="stories-count"></span>
           </div>
+          <div class="stories-grid" id="published-stories">
+            <p class="empty-state">Loading…</p>
+          </div>
+        </section>
+
+        <section class="community-section" id="my-stories-section" hidden>
+          <div class="section-head">
+            <h2>Your drafts &amp; submissions</h2>
+            <a class="link-btn" href="/write-story">+ New story</a>
+          </div>
+          <ul class="my-stories-list" id="my-stories">
+            <li class="empty-state">Loading…</li>
+          </ul>
         </section>
       </section>
 
@@ -229,37 +242,12 @@
           <div>
             <p class="hero-eyebrow">Resources</p>
             <h1>Trusted reading, when you need it.</h1>
-            <p class="hero-lead">A curated library of articles, guides, and links our community has actually found useful.</p>
+            <p class="hero-lead">A curated library — endo organisations, evidence-based guidelines, mental-health support, pain management, surgery, fertility, advocacy. Maintained by the EndoMe team.</p>
           </div>
         </header>
-        <section class="community-section">
-          <div class="resources-grid">
-            <article class="resource-card">
-              <span class="resource-tag">Guides</span>
-              <h3>What is endometriosis?</h3>
-              <p>A plain-English overview — symptoms, diagnosis pathways, and the big questions to bring to your GP.</p>
-              <span class="resource-soon">Coming soon</span>
-            </article>
-            <article class="resource-card">
-              <span class="resource-tag">GP visit</span>
-              <h3>Preparing for your GP appointment</h3>
-              <p>A printable checklist with the right questions to ask — and how to bring your symptom log.</p>
-              <span class="resource-soon">Coming soon</span>
-            </article>
-            <article class="resource-card">
-              <span class="resource-tag">Pain</span>
-              <h3>Managing flare days</h3>
-              <p>Heat, rest, hydration, meds — what's actually backed by research and what's just folklore.</p>
-              <span class="resource-soon">Coming soon</span>
-            </article>
-            <article class="resource-card">
-              <span class="resource-tag">Mental health</span>
-              <h3>Endo & mental load</h3>
-              <p>It's not "just in your head". Resources for the emotional side of chronic illness.</p>
-              <span class="resource-soon">Coming soon</span>
-            </article>
-          </div>
-        </section>
+        <div id="resources-slot">
+          <p class="empty-state">Loading resources…</p>
+        </div>
       </section>
 
       <!-- ===================== INDIVIDUAL CIRCLE VIEW (existing) ===================== -->
@@ -350,7 +338,7 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/community.js?v=1779934116" defer></script>
+  <script src="/community.js?v=1780141319" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780118228" defer></script>
 </body>

@@ -47,6 +47,10 @@ export default {
         if (avatarMatch && request.method === "GET") {
           return withSecurityHeaders(await serveAvatar(env, decodeURIComponent(avatarMatch[1])));
         }
+        const storyImg = url.pathname.match(/^\/api\/story-image\/(.+)$/);
+        if (storyImg && request.method === "GET") {
+          return withSecurityHeaders(await serveStoryImage(env, decodeURIComponent(storyImg[1])));
+        }
         const recipeImgMatch = url.pathname.match(/^\/api\/r\/(\d+)\/image$/);
         if (recipeImgMatch && request.method === "GET") {
           return withSecurityHeaders(await serveRecipeImage(env, +recipeImgMatch[1]));
@@ -114,7 +118,7 @@ export default {
           const session = await readSession(request, env);
           if (!isAdminSession(env, session)) return json({ error: "Forbidden" }, 403);
           if (!env.DB) return json({ error: "Storage not configured" }, 503);
-          return jsonHeaders(await handleAcp(request, env, url));
+          return jsonHeaders(await handleAcp(request, env, url, session));
         }
 
         // --- Authenticated user-data endpoints ----------------------------
@@ -303,6 +307,37 @@ export default {
           if (url.pathname === "/api/me/report/clinical-summary" && request.method === "POST") {
             return jsonHeaders(await getClinicalSummary(request, env, user));
           }
+
+          // --- User-authored stories (multi-chapter, photos, moderated) ---
+          if (url.pathname === "/api/me/stories" && request.method === "GET")  return jsonHeaders(await listMyStories(env, user));
+          if (url.pathname === "/api/me/stories" && request.method === "POST") return jsonHeaders(await createMyStory(request, env, user));
+          {
+            const m = url.pathname.match(/^\/api\/me\/stories\/(\d+)$/);
+            if (m && request.method === "GET")    return jsonHeaders(await getMyStory(env, user, +m[1]));
+            if (m && request.method === "PATCH")  return jsonHeaders(await patchMyStory(request, env, user, +m[1]));
+            if (m && request.method === "DELETE") return jsonHeaders(await deleteMyStory(env, user, +m[1]));
+            const submit = url.pathname.match(/^\/api\/me\/stories\/(\d+)\/submit$/);
+            if (submit && request.method === "POST") return jsonHeaders(await submitMyStory(env, user, +submit[1]));
+            const recall = url.pathname.match(/^\/api\/me\/stories\/(\d+)\/recall$/);
+            if (recall && request.method === "POST") return jsonHeaders(await recallMyStory(env, user, +recall[1]));
+            const cover = url.pathname.match(/^\/api\/me\/stories\/(\d+)\/cover$/);
+            if (cover && request.method === "POST") return jsonHeaders(await uploadStoryImage(request, env, user, { storyId: +cover[1] }));
+            const ch = url.pathname.match(/^\/api\/me\/stories\/(\d+)\/chapters$/);
+            if (ch && request.method === "POST") return jsonHeaders(await addStoryChapter(request, env, user, +ch[1]));
+            const chId = url.pathname.match(/^\/api\/me\/stories\/(\d+)\/chapters\/(\d+)$/);
+            if (chId && request.method === "PATCH")  return jsonHeaders(await patchStoryChapter(request, env, user, +chId[1], +chId[2]));
+            if (chId && request.method === "DELETE") return jsonHeaders(await deleteStoryChapter(env, user, +chId[1], +chId[2]));
+            const chImg = url.pathname.match(/^\/api\/me\/stories\/(\d+)\/chapters\/(\d+)\/image$/);
+            if (chImg && request.method === "POST") return jsonHeaders(await uploadStoryImage(request, env, user, { storyId: +chImg[1], chapterId: +chImg[2] }));
+          }
+          // Public stories (any logged-in user can read).
+          if (url.pathname === "/api/community/stories" && request.method === "GET") return jsonHeaders(await listPublishedStories(env));
+          {
+            const m = url.pathname.match(/^\/api\/community\/stories\/(\d+)$/);
+            if (m && request.method === "GET") return jsonHeaders(await getPublishedStory(env, +m[1]));
+          }
+          // Community resources (read-only for users; CMS in ACP).
+          if (url.pathname === "/api/community/resources" && request.method === "GET") return jsonHeaders(await listCommunityResources(env));
           if (url.pathname === "/api/me/week" && request.method === "GET") {
             return jsonHeaders(await getMeWeek(env, user));
           }
@@ -514,6 +549,8 @@ export default {
       url.pathname === "/tests"       || url.pathname.startsWith("/tests/") ||
       url.pathname === "/pet"         || url.pathname.startsWith("/pet/") ||
       url.pathname === "/community"   || url.pathname.startsWith("/community/") ||
+      url.pathname === "/write-story" || url.pathname.startsWith("/write-story/") ||
+      url.pathname === "/read-story"  || url.pathname.startsWith("/read-story/") ||
       url.pathname === "/profile"     || url.pathname.startsWith("/profile/") ||
       url.pathname === "/u"           || url.pathname.startsWith("/u/") ||
       url.pathname === "/meds"        || url.pathname.startsWith("/meds/") ||
@@ -1473,6 +1510,8 @@ async function bootstrapSchema(env) {
       ensureTestResultsSchema(env),
       ensureInsightSchema(env),
       ensureCycleSchema(env),
+      ensureUserStoriesSchema(env),
+      ensureCommunityResourcesSchema(env),
     ]);
     _bootstrapDone = true;
   })();
@@ -7922,8 +7961,31 @@ function isAdminSession(env, session) {
   return timingSafeEqual(String(session.u).toLowerCase(), cfgUser);
 }
 
-async function handleAcp(request, env, url) {
+async function handleAcp(request, env, url, session) {
   const path = url.pathname.slice("/api/acp".length); // e.g. "/users"
+
+  // --- Community resources CRUD (admin CMS) ------------------------------
+  if (path === "/resources" && request.method === "GET")  return await acpListAllResources(env);
+  if (path === "/resources" && request.method === "POST") return await acpCreateResource(request, env, session);
+  {
+    const m = path.match(/^\/resources\/(\d+)$/);
+    if (m && request.method === "PATCH")  return await acpPatchResource(request, env, session, +m[1]);
+    if (m && request.method === "DELETE") return await acpDeleteResource(env, +m[1]);
+  }
+
+  // --- Story moderation --------------------------------------------------
+  if (path === "/stories" && request.method === "GET") return await acpListStories(env, url);
+  {
+    const m = path.match(/^\/stories\/(\d+)$/);
+    if (m && request.method === "GET")    return await acpGetStory(env, +m[1]);
+    if (m && request.method === "DELETE") return await acpDeleteStory(env, +m[1]);
+    const approve = path.match(/^\/stories\/(\d+)\/approve$/);
+    if (approve && request.method === "POST") return await acpApproveStory(request, env, session, +approve[1]);
+    const reject = path.match(/^\/stories\/(\d+)\/reject$/);
+    if (reject && request.method === "POST") return await acpRejectStory(request, env, session, +reject[1]);
+    const unpub = path.match(/^\/stories\/(\d+)\/unpublish$/);
+    if (unpub && request.method === "POST") return await acpUnpublishStory(env, +unpub[1]);
+  }
 
   if (path === "/me" && request.method === "GET") {
     return json({ ok: true, admin: true });
@@ -9261,6 +9323,681 @@ async function deleteCycle(env, user, id) {
     await env.DB.prepare("DELETE FROM cycles WHERE id = ? AND user_id = ?").bind(id, user.id).run();
   } catch {}
   return getCycles(env, user);
+}
+
+// =============================================================================
+// USER STORIES — long-form, multi-chapter, photo-rich posts a community
+// member writes about their endo journey. Submitted for admin review
+// before going live on /community.
+// =============================================================================
+let _userStoriesSchemaChecked = false;
+async function ensureUserStoriesSchema(env) {
+  if (_userStoriesSchemaChecked) return;
+  _userStoriesSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS user_stories (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  title TEXT NOT NULL," +
+    "  summary TEXT," +
+    "  cover_image_key TEXT," +
+    "  status TEXT NOT NULL DEFAULT 'draft'," +        // draft | submitted | approved | rejected | published
+    "  submitted_at INTEGER," +
+    "  reviewed_at INTEGER," +
+    "  reviewed_by TEXT," +
+    "  reject_reason TEXT," +
+    "  published_at INTEGER," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_user_stories_user ON user_stories(user_id, updated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_user_stories_status ON user_stories(status, submitted_at DESC)",
+
+    "CREATE TABLE IF NOT EXISTS user_story_chapters (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  story_id INTEGER NOT NULL," +
+    "  position INTEGER NOT NULL," +
+    "  heading TEXT," +
+    "  body TEXT," +
+    "  image_key TEXT," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_chapters_story ON user_story_chapters(story_id, position)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+// Story image URL helper — R2 keys are served via /api/story-image/<key>.
+function storyImageUrl(key) {
+  return key ? `/api/story-image/${encodeURIComponent(key)}` : null;
+}
+
+async function listMyStories(env, user) {
+  await ensureUserStoriesSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT id, title, summary, cover_image_key, status, submitted_at, reviewed_at, " +
+    "       reject_reason, published_at, created_at, updated_at " +
+    "FROM user_stories WHERE user_id = ? ORDER BY updated_at DESC"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  const stories = (r.results || []).map((s) => ({
+    ...s,
+    coverImageUrl: storyImageUrl(s.cover_image_key),
+  }));
+  return json({ stories });
+}
+
+async function getMyStory(env, user, id) {
+  await ensureUserStoriesSchema(env);
+  const story = await env.DB.prepare(
+    "SELECT * FROM user_stories WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!story) return json({ error: "Not found" }, 404);
+  const chapters = await env.DB.prepare(
+    "SELECT id, position, heading, body, image_key FROM user_story_chapters " +
+    "WHERE story_id = ? ORDER BY position ASC"
+  ).bind(id).all().catch(() => ({ results: [] }));
+  return json({
+    story: { ...story, coverImageUrl: storyImageUrl(story.cover_image_key) },
+    chapters: (chapters.results || []).map((c) => ({ ...c, imageUrl: storyImageUrl(c.image_key) })),
+  });
+}
+
+async function createMyStory(request, env, user) {
+  await ensureUserStoriesSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const title = sanitizeText(body.title, 200);
+  if (!title) return json({ error: "Title required" }, 400);
+  const summary = sanitizeText(body.summary, 800);
+  const now = nowSec();
+  const res = await env.DB.prepare(
+    "INSERT INTO user_stories (user_id, title, summary, status, created_at, updated_at) " +
+    "VALUES (?, ?, ?, 'draft', ?, ?) RETURNING id"
+  ).bind(user.id, title, summary, now, now).first().catch(() => null);
+  if (!res?.id) return json({ error: "Could not create" }, 500);
+  return json({ ok: true, id: res.id });
+}
+
+async function patchMyStory(request, env, user, id) {
+  await ensureUserStoriesSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT status FROM user_stories WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Not found" }, 404);
+  // Once submitted/approved/published, the author can no longer edit
+  // without an explicit "recall to draft" step — keeps moderation honest.
+  if (owned.status !== "draft" && owned.status !== "rejected") {
+    return json({ error: "Story is locked — recall it to draft first" }, 409);
+  }
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const fields = [];
+  const args = [];
+  if (body.title !== undefined) { const t = sanitizeText(body.title, 200); if (!t) return json({ error: "Title required" }, 400); fields.push("title = ?"); args.push(t); }
+  if (body.summary !== undefined) { fields.push("summary = ?"); args.push(sanitizeText(body.summary, 800)); }
+  if (!fields.length) return json({ ok: true });
+  fields.push("updated_at = ?", "status = CASE WHEN status = 'rejected' THEN 'draft' ELSE status END");
+  args.push(nowSec(), id, user.id);
+  try {
+    await env.DB.prepare(
+      `UPDATE user_stories SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`
+    ).bind(...args).run();
+  } catch (e) {
+    return json({ error: "Could not update" }, 500);
+  }
+  return json({ ok: true });
+}
+
+async function submitMyStory(env, user, id) {
+  await ensureUserStoriesSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT s.status, (SELECT COUNT(*) FROM user_story_chapters WHERE story_id = s.id) AS chapter_count " +
+    "FROM user_stories s WHERE s.id = ? AND s.user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Not found" }, 404);
+  if (owned.status !== "draft" && owned.status !== "rejected") {
+    return json({ error: "Story already submitted" }, 409);
+  }
+  if (!owned.chapter_count) return json({ error: "Add at least one chapter before submitting" }, 400);
+  const now = nowSec();
+  await env.DB.prepare(
+    "UPDATE user_stories SET status = 'submitted', submitted_at = ?, reject_reason = NULL, updated_at = ? " +
+    "WHERE id = ? AND user_id = ?"
+  ).bind(now, now, id, user.id).run();
+  return json({ ok: true });
+}
+
+async function recallMyStory(env, user, id) {
+  await ensureUserStoriesSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT status FROM user_stories WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Not found" }, 404);
+  if (owned.status === "draft") return json({ ok: true });
+  // Allow recall from submitted or rejected. Don't allow recalling a
+  // published story without admin help.
+  if (owned.status === "published" || owned.status === "approved") {
+    return json({ error: "Published stories must be retracted by an admin" }, 403);
+  }
+  await env.DB.prepare(
+    "UPDATE user_stories SET status = 'draft', submitted_at = NULL, updated_at = ? " +
+    "WHERE id = ? AND user_id = ?"
+  ).bind(nowSec(), id, user.id).run();
+  return json({ ok: true });
+}
+
+async function deleteMyStory(env, user, id) {
+  await ensureUserStoriesSchema(env);
+  // Cascade: delete chapters first, then images, then the story.
+  try {
+    // Collect image keys to clean up R2 best-effort
+    const chapters = await env.DB.prepare(
+      "SELECT image_key FROM user_story_chapters WHERE story_id = ?"
+    ).bind(id).all().catch(() => ({ results: [] }));
+    const story = await env.DB.prepare(
+      "SELECT cover_image_key FROM user_stories WHERE id = ? AND user_id = ?"
+    ).bind(id, user.id).first().catch(() => null);
+    if (!story) return json({ error: "Not found" }, 404);
+    if (env.DOCS) {
+      const keys = [story.cover_image_key, ...(chapters.results || []).map((c) => c.image_key)].filter(Boolean);
+      for (const k of keys) { try { await env.DOCS.delete(k); } catch {} }
+    }
+    await env.DB.prepare("DELETE FROM user_story_chapters WHERE story_id = ?").bind(id).run();
+    await env.DB.prepare("DELETE FROM user_stories WHERE id = ? AND user_id = ?").bind(id, user.id).run();
+  } catch {}
+  return json({ ok: true });
+}
+
+// --- Chapters -------------------------------------------------------------
+async function addStoryChapter(request, env, user, storyId) {
+  await ensureUserStoriesSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT status FROM user_stories WHERE id = ? AND user_id = ?"
+  ).bind(storyId, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Not found" }, 404);
+  if (owned.status !== "draft" && owned.status !== "rejected") {
+    return json({ error: "Story is locked" }, 409);
+  }
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const heading = sanitizeText(body.heading, 200);
+  const text = sanitizeText(body.body, 8000);
+  if (!heading && !text) return json({ error: "Chapter needs a heading or body" }, 400);
+  const max = await env.DB.prepare(
+    "SELECT COALESCE(MAX(position), 0) AS m FROM user_story_chapters WHERE story_id = ?"
+  ).bind(storyId).first().catch(() => ({ m: 0 }));
+  const now = nowSec();
+  const res = await env.DB.prepare(
+    "INSERT INTO user_story_chapters (story_id, position, heading, body, created_at, updated_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?) RETURNING id"
+  ).bind(storyId, (max.m || 0) + 1, heading, text, now, now).first().catch(() => null);
+  await env.DB.prepare("UPDATE user_stories SET updated_at = ? WHERE id = ?").bind(now, storyId).run();
+  return json({ ok: true, id: res?.id });
+}
+
+async function patchStoryChapter(request, env, user, storyId, chapterId) {
+  await ensureUserStoriesSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT status FROM user_stories WHERE id = ? AND user_id = ?"
+  ).bind(storyId, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Not found" }, 404);
+  if (owned.status !== "draft" && owned.status !== "rejected") {
+    return json({ error: "Story is locked" }, 409);
+  }
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const fields = []; const args = [];
+  if (body.heading !== undefined) { fields.push("heading = ?"); args.push(sanitizeText(body.heading, 200)); }
+  if (body.body !== undefined) { fields.push("body = ?"); args.push(sanitizeText(body.body, 8000)); }
+  if (body.position !== undefined && Number.isInteger(body.position)) {
+    fields.push("position = ?"); args.push(body.position);
+  }
+  if (!fields.length) return json({ ok: true });
+  fields.push("updated_at = ?"); args.push(nowSec(), chapterId, storyId);
+  try {
+    await env.DB.prepare(
+      `UPDATE user_story_chapters SET ${fields.join(", ")} WHERE id = ? AND story_id = ?`
+    ).bind(...args).run();
+    await env.DB.prepare("UPDATE user_stories SET updated_at = ? WHERE id = ?").bind(nowSec(), storyId).run();
+  } catch { return json({ error: "Could not update" }, 500); }
+  return json({ ok: true });
+}
+
+async function deleteStoryChapter(env, user, storyId, chapterId) {
+  await ensureUserStoriesSchema(env);
+  const owned = await env.DB.prepare(
+    "SELECT status FROM user_stories WHERE id = ? AND user_id = ?"
+  ).bind(storyId, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Not found" }, 404);
+  if (owned.status !== "draft" && owned.status !== "rejected") {
+    return json({ error: "Story is locked" }, 409);
+  }
+  try {
+    const ch = await env.DB.prepare("SELECT image_key FROM user_story_chapters WHERE id = ? AND story_id = ?")
+      .bind(chapterId, storyId).first();
+    if (ch?.image_key && env.DOCS) { try { await env.DOCS.delete(ch.image_key); } catch {} }
+    await env.DB.prepare("DELETE FROM user_story_chapters WHERE id = ? AND story_id = ?").bind(chapterId, storyId).run();
+  } catch {}
+  return json({ ok: true });
+}
+
+// --- Image upload (story cover OR chapter) --------------------------------
+async function uploadStoryImage(request, env, user, target) {
+  // target: { storyId, chapterId? }
+  await ensureUserStoriesSchema(env);
+  if (!env.DOCS) return json({ error: "Storage not configured" }, 503);
+  const owned = await env.DB.prepare(
+    "SELECT status FROM user_stories WHERE id = ? AND user_id = ?"
+  ).bind(target.storyId, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Not found" }, 404);
+  if (owned.status !== "draft" && owned.status !== "rejected") {
+    return json({ error: "Story is locked" }, 409);
+  }
+  const form = await request.formData().catch(() => null);
+  const file = form?.get("file");
+  if (!(file instanceof File)) return json({ error: "No file" }, 400);
+  if (file.size > 5 * 1024 * 1024) return json({ error: "Max 5 MB" }, 413);
+  const ok = ["image/jpeg","image/png","image/webp","image/gif"];
+  if (!ok.includes(file.type)) return json({ error: "JPG/PNG/WEBP/GIF only" }, 415);
+  const ext = file.type.split("/")[1].replace("jpeg", "jpg");
+  const sub = target.chapterId ? `c${target.chapterId}` : "cover";
+  const key = `stories/${user.id}/${target.storyId}/${sub}-${Date.now()}.${ext}`;
+  const buf = await file.arrayBuffer();
+  await env.DOCS.put(key, buf, {
+    httpMetadata: { contentType: file.type, cacheControl: "public, max-age=86400" },
+  });
+  const now = nowSec();
+  if (target.chapterId) {
+    // Clean up previous
+    const ch = await env.DB.prepare("SELECT image_key FROM user_story_chapters WHERE id = ? AND story_id = ?")
+      .bind(target.chapterId, target.storyId).first().catch(() => null);
+    if (ch?.image_key && ch.image_key !== key) { try { await env.DOCS.delete(ch.image_key); } catch {} }
+    await env.DB.prepare(
+      "UPDATE user_story_chapters SET image_key = ?, updated_at = ? WHERE id = ? AND story_id = ?"
+    ).bind(key, now, target.chapterId, target.storyId).run();
+  } else {
+    const s = await env.DB.prepare("SELECT cover_image_key FROM user_stories WHERE id = ?").bind(target.storyId).first();
+    if (s?.cover_image_key && s.cover_image_key !== key) { try { await env.DOCS.delete(s.cover_image_key); } catch {} }
+    await env.DB.prepare(
+      "UPDATE user_stories SET cover_image_key = ?, updated_at = ? WHERE id = ?"
+    ).bind(key, now, target.storyId).run();
+  }
+  return json({ ok: true, imageUrl: storyImageUrl(key) });
+}
+
+// --- Public-facing endpoints (any logged-in user) ------------------------
+async function listPublishedStories(env) {
+  await ensureUserStoriesSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT s.id, s.title, s.summary, s.cover_image_key, s.published_at, s.user_id, " +
+    "       COALESCE(u.alias, u.display_name, 'Anonymous') AS author_name, u.avatar_image_key AS author_avatar_key " +
+    "FROM user_stories s JOIN users u ON u.id = s.user_id " +
+    "WHERE s.status = 'published' ORDER BY s.published_at DESC LIMIT 50"
+  ).all().catch(() => ({ results: [] }));
+  return json({
+    stories: (r.results || []).map((s) => ({
+      id: s.id, title: s.title, summary: s.summary,
+      coverImageUrl: storyImageUrl(s.cover_image_key),
+      author: s.author_name,
+      authorAvatarUrl: s.author_avatar_key ? `/api/u/${encodeURIComponent(s.user_id)}/avatar` : null,
+      publishedAt: s.published_at,
+    })),
+  });
+}
+
+async function getPublishedStory(env, id) {
+  await ensureUserStoriesSchema(env);
+  const story = await env.DB.prepare(
+    "SELECT s.*, COALESCE(u.alias, u.display_name, 'Anonymous') AS author_name, u.avatar_image_key AS author_avatar_key " +
+    "FROM user_stories s JOIN users u ON u.id = s.user_id " +
+    "WHERE s.id = ? AND s.status = 'published'"
+  ).bind(id).first().catch(() => null);
+  if (!story) return json({ error: "Not found" }, 404);
+  const chapters = await env.DB.prepare(
+    "SELECT id, position, heading, body, image_key FROM user_story_chapters " +
+    "WHERE story_id = ? ORDER BY position ASC"
+  ).bind(id).all().catch(() => ({ results: [] }));
+  return json({
+    story: {
+      id: story.id, title: story.title, summary: story.summary,
+      coverImageUrl: storyImageUrl(story.cover_image_key),
+      author: story.author_name,
+      authorAvatarUrl: story.author_avatar_key ? `/api/u/${encodeURIComponent(story.user_id)}/avatar` : null,
+      publishedAt: story.published_at,
+    },
+    chapters: (chapters.results || []).map((c) => ({ ...c, imageUrl: storyImageUrl(c.image_key) })),
+  });
+}
+
+// --- R2 image proxy -------------------------------------------------------
+async function serveStoryImage(env, key) {
+  if (!env.DOCS) return new Response("Not configured", { status: 503 });
+  if (!key.startsWith("stories/")) return new Response("Not found", { status: 404 });
+  const obj = await env.DOCS.get(key).catch(() => null);
+  if (!obj) return new Response("Not found", { status: 404 });
+  return new Response(obj.body, {
+    headers: {
+      "content-type": obj.httpMetadata?.contentType || "application/octet-stream",
+      "cache-control": "public, max-age=604800",
+    },
+  });
+}
+
+// --- ACP moderation -------------------------------------------------------
+async function acpListStories(env, url) {
+  await ensureUserStoriesSchema(env);
+  const status = url.searchParams.get("status") || "submitted";
+  const allowed = ["submitted","approved","rejected","published","draft","all"];
+  const s = allowed.includes(status) ? status : "submitted";
+  const where = s === "all" ? "1=1" : "s.status = ?";
+  const args = s === "all" ? [] : [s];
+  const r = await env.DB.prepare(
+    "SELECT s.id, s.title, s.summary, s.cover_image_key, s.status, s.submitted_at, s.reviewed_at, " +
+    "       s.reject_reason, s.published_at, s.user_id, " +
+    "       COALESCE(u.alias, u.display_name, u.username) AS author_name, u.username AS author_username, " +
+    "       (SELECT COUNT(*) FROM user_story_chapters WHERE story_id = s.id) AS chapter_count " +
+    "FROM user_stories s JOIN users u ON u.id = s.user_id " +
+    `WHERE ${where} ORDER BY s.submitted_at DESC, s.updated_at DESC LIMIT 100`
+  ).bind(...args).all().catch(() => ({ results: [] }));
+  return json({
+    stories: (r.results || []).map((s) => ({
+      ...s,
+      coverImageUrl: storyImageUrl(s.cover_image_key),
+    })),
+  });
+}
+
+async function acpGetStory(env, id) {
+  await ensureUserStoriesSchema(env);
+  const story = await env.DB.prepare(
+    "SELECT s.*, COALESCE(u.alias, u.display_name, u.username) AS author_name, u.username AS author_username " +
+    "FROM user_stories s JOIN users u ON u.id = s.user_id WHERE s.id = ?"
+  ).bind(id).first().catch(() => null);
+  if (!story) return json({ error: "Not found" }, 404);
+  const chapters = await env.DB.prepare(
+    "SELECT id, position, heading, body, image_key FROM user_story_chapters " +
+    "WHERE story_id = ? ORDER BY position ASC"
+  ).bind(id).all().catch(() => ({ results: [] }));
+  return json({
+    story: { ...story, coverImageUrl: storyImageUrl(story.cover_image_key) },
+    chapters: (chapters.results || []).map((c) => ({ ...c, imageUrl: storyImageUrl(c.image_key) })),
+  });
+}
+
+async function acpApproveStory(request, env, session, id) {
+  await ensureUserStoriesSchema(env);
+  const body = await readJsonSafe(request);
+  const publish = !body || body.publish !== false; // default = publish immediately
+  const now = nowSec();
+  try {
+    await env.DB.prepare(
+      "UPDATE user_stories SET status = ?, reviewed_at = ?, reviewed_by = ?, " +
+      "  published_at = CASE WHEN ? = 1 THEN ? ELSE NULL END, updated_at = ? " +
+      "WHERE id = ?"
+    ).bind(publish ? "published" : "approved", now, session.u || "admin", publish ? 1 : 0, now, now, id).run();
+  } catch { return json({ error: "Could not approve" }, 500); }
+  return json({ ok: true });
+}
+
+async function acpRejectStory(request, env, session, id) {
+  await ensureUserStoriesSchema(env);
+  const body = await readJsonSafe(request);
+  const reason = sanitizeText(body?.reason, 600) || "Needs more detail before publishing.";
+  const now = nowSec();
+  try {
+    await env.DB.prepare(
+      "UPDATE user_stories SET status = 'rejected', reject_reason = ?, reviewed_at = ?, " +
+      "  reviewed_by = ?, updated_at = ? WHERE id = ?"
+    ).bind(reason, now, session.u || "admin", now, id).run();
+  } catch { return json({ error: "Could not reject" }, 500); }
+  return json({ ok: true });
+}
+
+async function acpUnpublishStory(env, id) {
+  await ensureUserStoriesSchema(env);
+  const now = nowSec();
+  try {
+    await env.DB.prepare(
+      "UPDATE user_stories SET status = 'approved', published_at = NULL, updated_at = ? WHERE id = ?"
+    ).bind(now, id).run();
+  } catch { return json({ error: "Could not unpublish" }, 500); }
+  return json({ ok: true });
+}
+
+async function acpDeleteStory(env, id) {
+  await ensureUserStoriesSchema(env);
+  try {
+    // Clean R2
+    if (env.DOCS) {
+      const s = await env.DB.prepare("SELECT cover_image_key FROM user_stories WHERE id = ?").bind(id).first().catch(() => null);
+      const chapters = await env.DB.prepare("SELECT image_key FROM user_story_chapters WHERE story_id = ?").bind(id).all().catch(() => ({ results: [] }));
+      const keys = [s?.cover_image_key, ...(chapters.results || []).map((c) => c.image_key)].filter(Boolean);
+      for (const k of keys) { try { await env.DOCS.delete(k); } catch {} }
+    }
+    await env.DB.prepare("DELETE FROM user_story_chapters WHERE story_id = ?").bind(id).run();
+    await env.DB.prepare("DELETE FROM user_stories WHERE id = ?").bind(id).run();
+  } catch {}
+  return json({ ok: true });
+}
+
+// =============================================================================
+// COMMUNITY RESOURCES — admin-curated link library on /community.
+// Pure CMS: only admins can create/edit/delete; everyone reads.
+// =============================================================================
+let _resourcesSchemaChecked = false;
+async function ensureCommunityResourcesSchema(env) {
+  if (_resourcesSchemaChecked) return;
+  _resourcesSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS community_resources (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  category TEXT NOT NULL," +              // e.g. organisations, education, mental_health
+    "  title TEXT NOT NULL," +
+    "  summary TEXT," +
+    "  body TEXT," +                            // longer markdown notes
+    "  url TEXT," +
+    "  image_url TEXT," +
+    "  position INTEGER NOT NULL DEFAULT 0," +
+    "  is_published INTEGER NOT NULL DEFAULT 1," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL," +
+    "  updated_by TEXT" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_resources_category ON community_resources(category, position)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+  await seedDefaultResources(env);
+}
+
+const RESOURCE_CATEGORIES = [
+  { key: "organisations",  label: "Endo organisations & support",    icon: "🎗" },
+  { key: "education",      label: "Education & evidence",            icon: "📚" },
+  { key: "mental_health",  label: "Mental health & chronic illness", icon: "💗" },
+  { key: "pain",           label: "Pain management",                 icon: "⚡" },
+  { key: "nutrition",      label: "Nutrition & gut health",          icon: "🥗" },
+  { key: "fertility",      label: "Fertility & family planning",     icon: "🌱" },
+  { key: "surgery",        label: "Surgery & specialists",           icon: "🏥" },
+  { key: "advocacy",       label: "Workplace & advocacy",            icon: "📣" },
+  { key: "podcasts",       label: "Podcasts & creators",             icon: "🎧" },
+  { key: "books",          label: "Books",                           icon: "📖" },
+  { key: "crisis",         label: "Crisis & helplines",              icon: "🆘" },
+];
+
+// Curated seed. Idempotent — only inserts when the table is empty.
+async function seedDefaultResources(env) {
+  try {
+    const r = await env.DB.prepare("SELECT COUNT(*) AS n FROM community_resources").first();
+    if ((r?.n || 0) > 0) return;
+  } catch { return; }
+
+  const now = nowSec();
+  const seed = [
+    // Organisations
+    { c: "organisations", t: "Endometriosis Australia",        u: "https://endometriosisaustralia.org", s: "National charity raising awareness, funding research and supporting people with endo across Australia." },
+    { c: "organisations", t: "QENDO",                          u: "https://qendo.org.au", s: "Queensland-based support, info and helpline run by people with lived experience." },
+    { c: "organisations", t: "Endometriosis UK",               u: "https://www.endometriosis-uk.org", s: "UK charity — symptom info, support groups, helpline (0808 808 2227)." },
+    { c: "organisations", t: "Endometriosis Foundation of America", u: "https://www.endofound.org", s: "US foundation — patient education, research funding, expert speaker library." },
+    { c: "organisations", t: "Endometriose Vereniging Nederland (NL)", u: "https://endometriose.nl", s: "Dutch national patient organisation." },
+    { c: "organisations", t: "Worldwide EndoMarch",            u: "https://endomarch.org", s: "Global awareness campaigns and patient education during EndoMonth (March)." },
+    { c: "organisations", t: "Nancy's Nook (vetted info group)", u: "https://nancysnookendo.com", s: "Resources curated by Nancy Petersen RN — surgery, excision-specialists list, evidence-based education." },
+
+    // Education
+    { c: "education", t: "WHO — Endometriosis fact sheet",      u: "https://www.who.int/news-room/fact-sheets/detail/endometriosis", s: "World Health Organisation overview: prevalence, symptoms, diagnosis, management." },
+    { c: "education", t: "RANZCOG endo guideline (AU/NZ)",      u: "https://ranzcog.edu.au/statements-guidelines/", s: "Australian/NZ clinical practice guideline for endo diagnosis and management." },
+    { c: "education", t: "ESHRE endo guideline (Europe)",        u: "https://www.eshre.eu/Guideline/Endometriosis", s: "European Society of Human Reproduction and Embryology — full 2022 guideline." },
+    { c: "education", t: "NIH MedlinePlus — Endometriosis",     u: "https://medlineplus.gov/endometriosis.html", s: "Plain-language overview from the US National Library of Medicine." },
+    { c: "education", t: "ACOG patient FAQ",                    u: "https://www.acog.org/womens-health/faqs/endometriosis", s: "American College of Obstetricians and Gynecologists — patient FAQ." },
+
+    // Mental health
+    { c: "mental_health", t: "Beyond Blue (AU)",                  u: "https://www.beyondblue.org.au", s: "Mental-health support — depression, anxiety, suicide prevention. Live chat + 1300 22 4636." },
+    { c: "mental_health", t: "Lifeline (AU) — 13 11 14",          u: "https://www.lifeline.org.au", s: "24/7 crisis support and suicide prevention." },
+    { c: "mental_health", t: "Mind (UK)",                          u: "https://www.mind.org.uk", s: "UK mental-health info and support — chronic illness, anxiety, depression." },
+    { c: "mental_health", t: "Chronic-illness CBT workbook",      u: "https://www.psychologytools.com/professional/problems/chronic-illness", s: "Free clinician-grade CBT resources for living with chronic illness." },
+    { c: "mental_health", t: "Therapy for Chronic Illness — directory", u: "https://www.psychologytoday.com", s: "Find a therapist who specialises in chronic illness and pelvic pain." },
+
+    // Pain management
+    { c: "pain", t: "Pelvic Pain Foundation of Australia",        u: "https://www.pelvicpain.org.au", s: "Education, factsheets and clinician directory specifically for pelvic pain." },
+    { c: "pain", t: "Pain Australia",                              u: "https://www.painaustralia.org.au", s: "Resources, multidisciplinary pain clinic finder, advocacy for chronic-pain patients." },
+    { c: "pain", t: "TENS for pelvic pain — patient guide",       u: "https://www.healthywomen.org/condition/transcutaneous-electrical-nerve-stimulation", s: "How TENS works, electrode placement for pelvic pain, contraindications." },
+    { c: "pain", t: "Pelvic floor physio — finding one",          u: "https://www.pelvicpain.org.au/find-a-practitioner", s: "Why pelvic-floor physiotherapy matters for endo, and how to find a trained practitioner." },
+    { c: "pain", t: "Curable App",                                  u: "https://www.curablehealth.com", s: "Pain neuroscience education + mind-body techniques. Free trial, evidence-based content." },
+
+    // Nutrition
+    { c: "nutrition", t: "Monash FODMAP App",                       u: "https://www.monashfodmap.com", s: "The gold-standard low-FODMAP guide — useful for IBS/endo-belly overlap. Paid app, free intro." },
+    { c: "nutrition", t: "Endometriosis & diet — RANZCOG summary",  u: "https://ranzcog.edu.au", s: "Evidence summary on anti-inflammatory diet patterns and endo symptom relief." },
+    { c: "nutrition", t: "The Endo Belly Coach (Aileen Smith)",     u: "https://theendobellycoach.com", s: "Practical recipes and gut-health protocols for endo from a registered dietitian." },
+
+    // Fertility
+    { c: "fertility", t: "Resolve — National Infertility Association (US)", u: "https://resolve.org", s: "Support groups, advocacy, and education on infertility — significant overlap with endo." },
+    { c: "fertility", t: "IVF Australia — Endo & fertility",         u: "https://www.ivf.com.au", s: "Plain-language info on how endo affects fertility and treatment options." },
+    { c: "fertility", t: "Egg-freezing decision guide (HFEA, UK)",   u: "https://www.hfea.gov.uk/treatments/fertility-preservation/egg-freezing/", s: "Government-backed decision aid — what to expect, success rates, costs." },
+
+    // Surgery
+    { c: "surgery", t: "Finding an excision specialist",            u: "https://nancysnookendo.com/learning-library/find-a-surgeon/", s: "Vetted global list of excision (not ablation) endo surgeons — the standard of care." },
+    { c: "surgery", t: "What to ask before endo surgery",            u: "https://www.endofound.org/what-questions-should-i-ask-my-doctor", s: "EndoFound's pre-op question list — surgeon experience, technique, complications." },
+    { c: "surgery", t: "Recovery from laparoscopy — what to expect", u: "https://www.endometriosis-uk.org/recovering-laparoscopy", s: "Patient-friendly guide to typical recovery timelines." },
+
+    // Advocacy
+    { c: "advocacy", t: "Endo workplace toolkit (UK)",              u: "https://www.endometriosis-uk.org/endometriosis-friendly-employer-scheme", s: "Templates for workplace conversations, accommodations and the UK Endometriosis Friendly Employer scheme." },
+    { c: "advocacy", t: "Period and pregnancy loss leave (AU)",     u: "https://www.fairwork.gov.au", s: "Fair Work Australia — current entitlements for menstrual and miscarriage leave." },
+    { c: "advocacy", t: "How to talk to your boss about endo",       u: "https://endometriosisaustralia.org/work/", s: "Scripts, employer letters, and your rights under disability law." },
+
+    // Podcasts & creators
+    { c: "podcasts", t: "Endo Battery (podcast)",                   u: "https://www.endobattery.com", s: "Weekly interviews with patients, specialists and researchers." },
+    { c: "podcasts", t: "The Cycle (podcast, AU)",                  u: "https://qendo.org.au/podcast", s: "QENDO's podcast — lived-experience conversations." },
+    { c: "podcasts", t: "Endometriosis Education Hub (YouTube)",    u: "https://www.youtube.com/@endometriosisfoundation", s: "Free expert lectures from EndoFound's annual medical conferences." },
+
+    // Books
+    { c: "books", t: "BelowTheBelt.film — full documentary",         u: "https://www.belowthebeltfilm.com", s: "Documentary on the diagnostic odyssey and gender bias in endo care. Hosted free in some regions." },
+    { c: "books", t: "\"Heavy Flow\" — Amanda Laird",                u: "https://amandalaird.ca/heavy-flow/", s: "Plain-language book on menstrual health, hormones, and why we don't talk about periods." },
+    { c: "books", t: "\"Beating Endo\" — Iris Orbuch & Amy Stein",   u: "https://www.beatingendo.com", s: "Practical multidisciplinary playbook from a leading excision surgeon and a pelvic physical therapist." },
+
+    // Crisis
+    { c: "crisis", t: "Lifeline Australia — 13 11 14",                u: "https://www.lifeline.org.au", s: "24/7 phone, text and chat crisis support across Australia." },
+    { c: "crisis", t: "Samaritans (UK & Ireland) — 116 123",          u: "https://www.samaritans.org", s: "24/7 free emotional support." },
+    { c: "crisis", t: "988 Suicide & Crisis Lifeline (US)",            u: "https://988lifeline.org", s: "Call or text 988 in the US." },
+    { c: "crisis", t: "1800RESPECT (AU)",                              u: "https://www.1800respect.org.au", s: "24/7 national domestic/family violence and sexual assault counselling." },
+  ];
+
+  for (let i = 0; i < seed.length; i++) {
+    const row = seed[i];
+    try {
+      await env.DB.prepare(
+        "INSERT INTO community_resources (category, title, summary, url, position, is_published, created_at, updated_at, updated_by) " +
+        "VALUES (?, ?, ?, ?, ?, 1, ?, ?, 'seed')"
+      ).bind(row.c, row.t, row.s || null, row.u, i, now, now).run();
+    } catch {}
+  }
+}
+
+// Public list (groups by category).
+async function listCommunityResources(env) {
+  await ensureCommunityResourcesSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT id, category, title, summary, body, url, image_url, position " +
+    "FROM community_resources WHERE is_published = 1 ORDER BY category, position, id"
+  ).all().catch(() => ({ results: [] }));
+  return json({
+    categories: RESOURCE_CATEGORIES,
+    resources: r.results || [],
+  });
+}
+
+// --- ACP CRUD -------------------------------------------------------------
+async function acpListAllResources(env) {
+  await ensureCommunityResourcesSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT id, category, title, summary, body, url, image_url, position, is_published, updated_at, updated_by " +
+    "FROM community_resources ORDER BY category, position, id"
+  ).all().catch(() => ({ results: [] }));
+  return json({ categories: RESOURCE_CATEGORIES, resources: r.results || [] });
+}
+
+async function acpCreateResource(request, env, session) {
+  await ensureCommunityResourcesSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const category = sanitizeText(body.category, 40);
+  const title = sanitizeText(body.title, 200);
+  if (!category || !title) return json({ error: "category + title required" }, 400);
+  const allowedCats = RESOURCE_CATEGORIES.map((c) => c.key);
+  if (!allowedCats.includes(category)) return json({ error: "Invalid category" }, 400);
+  const url = sanitizeText(body.url, 600);
+  const summary = sanitizeText(body.summary, 800);
+  const longBody = sanitizeText(body.body, 4000);
+  const imageUrl = sanitizeText(body.image_url, 600);
+  const position = Number.isInteger(body.position) ? body.position : 999;
+  const isPub = body.is_published === false ? 0 : 1;
+  const now = nowSec();
+  try {
+    const r = await env.DB.prepare(
+      "INSERT INTO community_resources (category, title, summary, body, url, image_url, position, is_published, created_at, updated_at, updated_by) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
+    ).bind(category, title, summary, longBody, url, imageUrl, position, isPub, now, now, session.u || "admin").first();
+    return json({ ok: true, id: r?.id });
+  } catch (e) { return json({ error: "Could not create" }, 500); }
+}
+
+async function acpPatchResource(request, env, session, id) {
+  await ensureCommunityResourcesSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const fields = []; const args = [];
+  if (body.category !== undefined) {
+    const c = sanitizeText(body.category, 40);
+    const allowed = RESOURCE_CATEGORIES.map((c) => c.key);
+    if (!c || !allowed.includes(c)) return json({ error: "Invalid category" }, 400);
+    fields.push("category = ?"); args.push(c);
+  }
+  if (body.title !== undefined) {
+    const t = sanitizeText(body.title, 200);
+    if (!t) return json({ error: "Title required" }, 400);
+    fields.push("title = ?"); args.push(t);
+  }
+  if (body.summary !== undefined) { fields.push("summary = ?"); args.push(sanitizeText(body.summary, 800)); }
+  if (body.body !== undefined) { fields.push("body = ?"); args.push(sanitizeText(body.body, 4000)); }
+  if (body.url !== undefined) { fields.push("url = ?"); args.push(sanitizeText(body.url, 600)); }
+  if (body.image_url !== undefined) { fields.push("image_url = ?"); args.push(sanitizeText(body.image_url, 600)); }
+  if (body.position !== undefined && Number.isInteger(body.position)) { fields.push("position = ?"); args.push(body.position); }
+  if (body.is_published !== undefined) { fields.push("is_published = ?"); args.push(body.is_published ? 1 : 0); }
+  if (!fields.length) return json({ ok: true });
+  fields.push("updated_at = ?", "updated_by = ?");
+  args.push(nowSec(), session.u || "admin", id);
+  try {
+    await env.DB.prepare(
+      `UPDATE community_resources SET ${fields.join(", ")} WHERE id = ?`
+    ).bind(...args).run();
+  } catch (e) { return json({ error: "Could not update" }, 500); }
+  return json({ ok: true });
+}
+
+async function acpDeleteResource(env, id) {
+  await ensureCommunityResourcesSchema(env);
+  try {
+    await env.DB.prepare("DELETE FROM community_resources WHERE id = ?").bind(id).run();
+  } catch {}
+  return json({ ok: true });
 }
 
 // Seed a curated demo result of each kind for tom@bluerydge.com so the page

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <title>Write your story – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=1780054696" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780140323" />
+  <link rel="stylesheet" href="/write-story.css?v=1780141319" />
+  <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
+</head>
+<body class="dash-body">
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-content">
+      <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
+      <div class="page-loader-bar"></div>
+      <p class="page-loader-text">Loading your story…</p>
+    </div>
+  </div>
+
+  <header class="dash-topbar">
+    <div class="dash-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <div class="dash-spacer"></div>
+      <div class="account-menu">
+        <button class="account-toggle" id="account-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+          <div class="avatar"><svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/></svg></div>
+          <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
+        </button>
+        <div class="account-dropdown" id="account-dropdown" hidden role="menu">
+          <a href="/profile" role="menuitem">👤 Profile</a>
+          <a href="/community" role="menuitem">💬 Community</a>
+          <a href="/api/logout" role="menuitem">↪ Sign out</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-layout">
+    <aside class="dash-sidebar">
+      <nav class="side-nav">
+        <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
+        <a href="/story"><span class="ico">📖</span> Your Story</a>
+        <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/results"><span class="ico">📊</span> Results</a>
+        <a href="/my-insights"><span class="ico">✨</span> Insights</a>
+        <a href="/reports"><span class="ico">📄</span> Reports</a>
+        <a href="/buddy"><span class="ico">💬</span> Buddy</a>
+        <a href="/meds"><span class="ico">💊</span> Medications</a>
+        <a href="/food"><span class="ico">🥗</span> Food</a>
+        <a href="/appointments"><span class="ico">📅</span> Appointments</a>
+        <a href="/documents"><span class="ico">📁</span> Documents</a>
+        <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
+        <a class="active" href="/community"><span class="ico">💬</span> Community</a>
+        <a href="/recipes"><span class="ico">🍳</span> Recipes</a>
+        <a href="/explore"><span class="ico">🌌</span> Research</a>
+        <a href="/research"><span class="ico">🎗</span> Donations</a>
+      </nav>
+    </aside>
+
+    <main class="dash-main write-story-main">
+      <header class="ws-hero">
+        <a href="/community" class="back-link">← Back to community</a>
+        <h1 id="ws-title">Write your story</h1>
+        <p class="ws-lead">Share your endo journey — chapter by chapter, with photos if you want. We review every submission before it goes live so the community stays safe and supportive.</p>
+        <div class="ws-status" id="ws-status" hidden></div>
+      </header>
+
+      <section class="ws-card">
+        <h2 class="ws-section-title">Cover</h2>
+        <div class="ws-cover-row">
+          <div class="ws-cover-art" id="ws-cover-art">
+            <span class="ws-cover-placeholder">No cover image yet</span>
+          </div>
+          <div class="ws-cover-actions">
+            <label class="btn btn-ghost" for="ws-cover-file">📷 Upload cover</label>
+            <input type="file" id="ws-cover-file" accept="image/*" hidden />
+            <p class="ws-hint">JPG, PNG, WEBP, GIF. Max 5 MB.</p>
+          </div>
+        </div>
+        <label class="field">
+          <span>Title</span>
+          <input type="text" id="ws-title-input" maxlength="200" placeholder="The week I finally got my diagnosis…" />
+        </label>
+        <label class="field">
+          <span>Short summary <em>(what's this story about, in a few sentences)</em></span>
+          <textarea id="ws-summary-input" maxlength="800" rows="3" placeholder="Hint readers — what they'll take away."></textarea>
+        </label>
+        <button type="button" class="btn btn-ghost" id="ws-save-meta">Save cover &amp; details</button>
+      </section>
+
+      <section class="ws-card">
+        <div class="ws-section-head">
+          <h2 class="ws-section-title">Chapters</h2>
+          <button type="button" class="btn btn-primary" id="ws-add-chapter">+ Add chapter</button>
+        </div>
+        <ul class="ws-chapter-list" id="ws-chapters">
+          <li class="ws-empty">No chapters yet. Tap "+ Add chapter" to start.</li>
+        </ul>
+      </section>
+
+      <section class="ws-card ws-submit-card">
+        <h2 class="ws-section-title">Submit for review</h2>
+        <p class="ws-hint">Once you're ready, send it to the EndoMe team. We'll review and publish — or get back to you with feedback. You can recall a submission any time before review.</p>
+        <div class="ws-submit-actions">
+          <button type="button" class="btn btn-primary" id="ws-submit-btn">Submit for review</button>
+          <button type="button" class="btn btn-ghost" id="ws-recall-btn" hidden>Recall to draft</button>
+          <button type="button" class="btn btn-ghost ws-danger" id="ws-delete-btn">Delete story</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  <script src="/account-menu.js?v=1779934116" defer></script>
+  <script src="/write-story.js?v=1780141319" defer></script>
+</body>
+</html>

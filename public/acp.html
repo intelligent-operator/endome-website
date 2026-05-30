@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
-  <link rel="stylesheet" href="/acp.css?v=1780052889" />
+  <link rel="stylesheet" href="/acp.css?v=1780141319" />
 </head>
 <body class="acp-body">
   <header class="acp-topbar">
@@ -34,6 +34,8 @@
         <button class="acp-tab" data-tab="users"><span class="acp-tab-ico">👥</span> Users</button>
         <button class="acp-tab" data-tab="circles"><span class="acp-tab-ico">💬</span> Circles</button>
         <button class="acp-tab" data-tab="insights"><span class="acp-tab-ico">✨</span> Insights</button>
+        <button class="acp-tab" data-tab="stories"><span class="acp-tab-ico">📖</span> Stories</button>
+        <button class="acp-tab" data-tab="resources"><span class="acp-tab-ico">🔗</span> Resources</button>
         <button class="acp-tab" data-tab="system"><span class="acp-tab-ico">🛠</span> System</button>
       </nav>
     </aside>
@@ -161,6 +163,37 @@
             Changes take effect on the next run.
           </p>
           <ul class="insight-config-list" id="insight-config-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px"></ul>
+        </div>
+      </section>
+
+      <!-- ===== STORIES (moderation) ===== -->
+      <section class="acp-view" id="view-stories" hidden>
+        <header class="acp-section-head">
+          <h2>📖 User stories</h2>
+          <p>Review and publish member-submitted long-form stories.</p>
+        </header>
+        <div class="acp-filter-bar">
+          <button class="acp-pill on" data-story-filter="submitted">Awaiting review</button>
+          <button class="acp-pill" data-story-filter="published">Published</button>
+          <button class="acp-pill" data-story-filter="rejected">Rejected</button>
+          <button class="acp-pill" data-story-filter="all">All</button>
+        </div>
+        <ul class="acp-story-list" id="acp-story-list">
+          <li class="empty-state">Loading…</li>
+        </ul>
+      </section>
+
+      <!-- ===== RESOURCES (CMS) ===== -->
+      <section class="acp-view" id="view-resources" hidden>
+        <header class="acp-section-head">
+          <h2>🔗 Community resources</h2>
+          <p>Curate the resource library on the public /community page. Only admins can edit.</p>
+        </header>
+        <div class="acp-resource-toolbar">
+          <button class="btn btn-primary" id="acp-add-resource">+ Add resource</button>
+        </div>
+        <div id="acp-resources-by-cat">
+          <p class="empty-state">Loading…</p>
         </div>
       </section>
 
@@ -307,6 +340,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/acp.js?v=1780111683" defer></script>
+  <script src="/acp.js?v=1780141319" defer></script>
 </body>
 </html>

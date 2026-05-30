@@ -359,24 +359,18 @@ async function renderCyclePrediction() {
   const p = data.prediction;
   // No prediction yet — prompt to log a period start so we can start.
   if (!p) {
-    if (!data.cycles?.length) {
-      slot.innerHTML = `
-        <div class="card cycle-predict-card cycle-empty">
-          <div class="card-head wide">
-            <span><span class="ico-tile pink">🌸</span> Cycle prediction</span>
-          </div>
-          <p class="cp-empty">Log when your period starts and ends — after one cycle I can start predicting your next one.</p>
-          <a class="pill-btn full" href="/dashboard#cycle">Log period start</a>
-        </div>`;
-    } else {
-      slot.innerHTML = `
-        <div class="card cycle-predict-card cycle-empty">
-          <div class="card-head wide">
-            <span><span class="ico-tile pink">🌸</span> Cycle prediction</span>
-          </div>
-          <p class="cp-empty">One cycle logged so far. Once you log your next period start, I'll start predicting forward.</p>
-        </div>`;
-    }
+    const msg = !data.cycles?.length
+      ? "Log when your period starts — after one cycle I can start predicting your next one."
+      : "One cycle logged so far. Log your next period start and I'll begin predicting forward.";
+    slot.innerHTML = `
+      <div class="card cycle-predict-card cycle-empty">
+        <div class="card-head wide">
+          <span><span class="ico-tile pink">🌸</span> Cycle prediction</span>
+        </div>
+        <p class="cp-empty">${msg}</p>
+        <button type="button" class="pill-btn full" id="cp-log-btn">+ Log period start today</button>
+      </div>`;
+    document.getElementById("cp-log-btn")?.addEventListener("click", logPeriodStartToday);
     return;
   }
 

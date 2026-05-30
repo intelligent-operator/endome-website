@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Story – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=1780054696" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780140323" />
+  <link rel="stylesheet" href="/community.css?v=1779934116" />
+  <link rel="stylesheet" href="/read-story.css?v=1780141319" />
+  <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
+</head>
+<body class="dash-body">
+  <header class="dash-topbar">
+    <div class="dash-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <div class="dash-spacer"></div>
+      <div class="account-menu">
+        <button class="account-toggle" id="account-toggle" type="button" aria-haspopup="true">
+          <div class="avatar"><svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/></svg></div>
+          <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
+        </button>
+        <div class="account-dropdown" id="account-dropdown" hidden role="menu">
+          <a href="/profile" role="menuitem">👤 Profile</a>
+          <a href="/community" role="menuitem">💬 Community</a>
+          <a href="/api/logout" role="menuitem">↪ Sign out</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="read-story-main" id="story-root">
+    <p class="empty-state">Loading…</p>
+  </main>
+
+  <script src="/account-menu.js?v=1779934116" defer></script>
+  <script src="/read-story.js?v=1780141319" defer></script>
+</body>
+</html>

@@ -2,12 +2,14 @@
 // Server already blocks non-admins from this page; the JS just talks to /api/acp/*.
 (() => {
   const views = {
-    overview: document.getElementById("view-overview"),
-    users:    document.getElementById("view-users"),
-    circles:  document.getElementById("view-circles"),
-    circle:   document.getElementById("view-circle"),
-    insights: document.getElementById("view-insights"),
-    system:   document.getElementById("view-system"),
+    overview:  document.getElementById("view-overview"),
+    users:     document.getElementById("view-users"),
+    circles:   document.getElementById("view-circles"),
+    circle:    document.getElementById("view-circle"),
+    insights:  document.getElementById("view-insights"),
+    stories:   document.getElementById("view-stories"),
+    resources: document.getElementById("view-resources"),
+    system:    document.getElementById("view-system"),
   };
   let allUsersCache = []; // for the add-member dropdown
   let currentCircleId = null;
@@ -22,6 +24,8 @@
       if (name === "users") loadUsers();
       if (name === "circles") loadCircles();
       if (name === "insights") loadInsightsTab();
+      if (name === "stories") loadStoriesTab();
+      if (name === "resources") loadResourcesTab();
     });
   });
   function showView(name) {
@@ -29,8 +33,10 @@
     views.users.hidden    = name !== "users";
     views.circles.hidden  = name !== "circles";
     views.circle.hidden   = name !== "circle";
-    if (views.insights) views.insights.hidden = name !== "insights";
-    if (views.system)   views.system.hidden   = name !== "system";
+    if (views.insights)  views.insights.hidden  = name !== "insights";
+    if (views.stories)   views.stories.hidden   = name !== "stories";
+    if (views.resources) views.resources.hidden = name !== "resources";
+    if (views.system)    views.system.hidden    = name !== "system";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -636,9 +642,205 @@
   if (startTab === "users") loadUsers();
   if (startTab === "circles") loadCircles();
   if (startTab === "insights") loadInsightsTab();
+  if (startTab === "stories") loadStoriesTab();
+  if (startTab === "resources") loadResourcesTab();
   // Always populate the right rail on first load so it has data immediately,
   // even if the admin starts on a non-Overview tab.
   if (startTab !== "overview") loadOverview();
+
+  // ====================================================================
+  // STORY MODERATION
+  // ====================================================================
+  let storyFilter = "submitted";
+  async function loadStoriesTab() {
+    const list = document.getElementById("acp-story-list");
+    if (!list) return;
+    list.innerHTML = `<li class="empty-state">Loading…</li>`;
+    try {
+      const data = await fetchJson(`/api/acp/stories?status=${encodeURIComponent(storyFilter)}`);
+      const stories = data.stories || [];
+      if (!stories.length) {
+        list.innerHTML = `<li class="empty-state">No stories in this view.</li>`;
+        return;
+      }
+      list.innerHTML = stories.map((s) => `
+        <li class="acp-story-row" data-id="${s.id}">
+          <div class="acp-story-thumb">
+            ${s.coverImageUrl ? `<img src="${escapeHtml(s.coverImageUrl)}" alt="" />` : `<span>📖</span>`}
+          </div>
+          <div class="acp-story-body">
+            <div class="acp-story-head">
+              <strong>${escapeHtml(s.title)}</strong>
+              <span class="acp-status-pill status-${s.status}">${s.status}</span>
+            </div>
+            <div class="acp-story-meta">
+              by <strong>${escapeHtml(s.author_name)}</strong> (${escapeHtml(s.author_username || "—")})
+              · ${s.chapter_count} chapter${s.chapter_count === 1 ? "" : "s"}
+              ${s.submitted_at ? ` · submitted ${new Date(s.submitted_at * 1000).toLocaleString()}` : ""}
+            </div>
+            ${s.summary ? `<p class="acp-story-summary">${escapeHtml(s.summary)}</p>` : ""}
+            ${s.reject_reason ? `<p class="acp-reject">Reviewer: ${escapeHtml(s.reject_reason)}</p>` : ""}
+            <div class="acp-story-actions">
+              <button class="btn btn-ghost btn-small" data-act="view">👁 Preview</button>
+              ${s.status === "submitted" ? `
+                <button class="btn btn-primary btn-small" data-act="approve">✓ Approve &amp; publish</button>
+                <button class="btn btn-ghost btn-small" data-act="reject">✕ Request changes</button>
+              ` : ""}
+              ${s.status === "published" ? `<button class="btn btn-ghost btn-small" data-act="unpublish">↩ Unpublish</button>` : ""}
+              <button class="btn btn-ghost btn-small acp-danger" data-act="delete">🗑 Delete</button>
+            </div>
+          </div>
+        </li>`).join("");
+    } catch (err) {
+      list.innerHTML = `<li class="empty-state">Couldn't load: ${escapeHtml(err.message)}</li>`;
+    }
+  }
+
+  document.addEventListener("click", async (e) => {
+    const filter = e.target.closest?.("[data-story-filter]");
+    if (filter) {
+      storyFilter = filter.dataset.storyFilter;
+      document.querySelectorAll("[data-story-filter]").forEach((b) => b.classList.toggle("on", b === filter));
+      loadStoriesTab();
+      return;
+    }
+    const row = e.target.closest?.(".acp-story-row");
+    if (!row) return;
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (!act) return;
+    const id = +row.dataset.id;
+    if (act === "view") {
+      try {
+        const d = await fetchJson(`/api/acp/stories/${id}`);
+        showStoryPreview(d);
+      } catch (err) { alert("Couldn't load: " + err.message); }
+    } else if (act === "approve") {
+      if (!confirm("Approve and publish this story?")) return;
+      try { await fetchJson(`/api/acp/stories/${id}/approve`, { method: "POST", body: "{}" }); loadStoriesTab(); }
+      catch (err) { alert(err.message); }
+    } else if (act === "reject") {
+      const reason = prompt("Feedback for the author (will be visible to them):", "Needs more detail before publishing.");
+      if (!reason) return;
+      try {
+        await fetchJson(`/api/acp/stories/${id}/reject`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason }),
+        });
+        loadStoriesTab();
+      } catch (err) { alert(err.message); }
+    } else if (act === "unpublish") {
+      if (!confirm("Take this story off the public list?")) return;
+      try { await fetchJson(`/api/acp/stories/${id}/unpublish`, { method: "POST" }); loadStoriesTab(); }
+      catch (err) { alert(err.message); }
+    } else if (act === "delete") {
+      if (!confirm("Permanently delete this story?")) return;
+      try { await fetchJson(`/api/acp/stories/${id}`, { method: "DELETE" }); loadStoriesTab(); }
+      catch (err) { alert(err.message); }
+    }
+  });
+
+  function showStoryPreview(data) {
+    const { story, chapters } = data;
+    const w = window.open("", "_blank");
+    if (!w) { alert("Pop-up blocked"); return; }
+    const cov = story.coverImageUrl ? `<img style="width:100%;max-height:300px;object-fit:cover" src="${story.coverImageUrl}">` : "";
+    const body = chapters.map((c) => `
+      <section style="margin:24px 0;padding:18px;border:1px solid #eee;border-radius:10px">
+        ${c.heading ? `<h2>${escapeHtml(c.heading)}</h2>` : ""}
+        ${c.imageUrl ? `<img style="width:100%;border-radius:8px;margin:8px 0" src="${c.imageUrl}">` : ""}
+        <div>${String(c.body || "").split(/\n\n+/).map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`).join("")}</div>
+      </section>`).join("");
+    w.document.write(`<!doctype html><meta charset="utf-8"><title>${escapeHtml(story.title)}</title>
+      <body style="font-family:Poppins,sans-serif;max-width:760px;margin:24px auto;padding:0 18px;color:#2b1922">
+      ${cov}<h1>${escapeHtml(story.title)}</h1>
+      <p><em>by ${escapeHtml(story.author_name)} — status: ${story.status}</em></p>
+      ${story.summary ? `<p style="font-size:16px;color:#555">${escapeHtml(story.summary)}</p>` : ""}
+      ${body}</body>`);
+    w.document.close();
+  }
+
+  // ====================================================================
+  // COMMUNITY RESOURCES (CMS)
+  // ====================================================================
+  async function loadResourcesTab() {
+    const slot = document.getElementById("acp-resources-by-cat");
+    if (!slot) return;
+    slot.innerHTML = `<p class="empty-state">Loading…</p>`;
+    try {
+      const data = await fetchJson("/api/acp/resources");
+      const cats = data.categories || [];
+      const byCat = {};
+      for (const r of (data.resources || [])) (byCat[r.category] ||= []).push(r);
+      slot.innerHTML = cats.map((c) => `
+        <section class="acp-rcat" data-cat="${c.key}">
+          <h3>${c.icon} ${escapeHtml(c.label)} <span class="muted">${(byCat[c.key] || []).length}</span></h3>
+          ${(byCat[c.key] || []).length === 0
+            ? `<p class="empty-state small">Nothing in this category yet.</p>`
+            : `<ul class="acp-resource-list">${(byCat[c.key] || []).map((r) => `
+                <li class="acp-resource-row" data-id="${r.id}">
+                  <div class="acp-rr-body">
+                    <strong>${escapeHtml(r.title)}</strong>
+                    ${r.is_published ? "" : `<span class="acp-status-pill" style="background:#fff5d6;color:#7a5500">unpublished</span>`}
+                    ${r.summary ? `<p>${escapeHtml(r.summary)}</p>` : ""}
+                    ${r.url ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>` : ""}
+                  </div>
+                  <div class="acp-rr-actions">
+                    <button class="btn btn-ghost btn-small" data-act="edit">✏️ Edit</button>
+                    <button class="btn btn-ghost btn-small acp-danger" data-act="delete">🗑</button>
+                  </div>
+                </li>`).join("")}</ul>`}
+        </section>`).join("");
+    } catch (err) {
+      slot.innerHTML = `<p class="empty-state">Couldn't load: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  document.getElementById("acp-add-resource")?.addEventListener("click", () => openResourceEditor(null));
+
+  document.addEventListener("click", async (e) => {
+    const row = e.target.closest?.(".acp-resource-row");
+    if (!row) return;
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    const id = +row.dataset.id;
+    if (act === "delete") {
+      if (!confirm("Delete this resource?")) return;
+      try { await fetchJson(`/api/acp/resources/${id}`, { method: "DELETE" }); loadResourcesTab(); }
+      catch (err) { alert(err.message); }
+    } else if (act === "edit") {
+      // We need the full record. Fetch fresh list and grab it.
+      try {
+        const data = await fetchJson("/api/acp/resources");
+        const r = (data.resources || []).find((x) => x.id === id);
+        if (r) openResourceEditor(r);
+      } catch (err) { alert(err.message); }
+    }
+  });
+
+  function openResourceEditor(existing) {
+    // Use prompt-based editor for compact admin UX. Builds payload then saves.
+    const cats = ["organisations","education","mental_health","pain","nutrition","fertility","surgery","advocacy","podcasts","books","crisis"];
+    const isEdit = !!existing;
+    const cat = prompt(
+      `Category (one of: ${cats.join(", ")})${isEdit ? `\nCurrent: ${existing.category}` : ""}`,
+      existing?.category || "organisations"
+    );
+    if (!cat) return;
+    if (!cats.includes(cat.trim())) { alert("Invalid category"); return; }
+    const title = prompt("Title", existing?.title || "");
+    if (!title) return;
+    const summary = prompt("Summary (one or two sentences)", existing?.summary || "");
+    const url = prompt("URL (https://…)", existing?.url || "");
+    const isPub = confirm("Publish now? OK = yes, Cancel = save as draft");
+    const payload = {
+      category: cat.trim(), title: title.trim(),
+      summary: summary?.trim() || null,
+      url: url?.trim() || null,
+      is_published: isPub,
+    };
+    const promise = isEdit
+      ? fetchJson(`/api/acp/resources/${existing.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
+      : fetchJson(`/api/acp/resources`,                 { method: "POST",  headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    promise.then(() => loadResourcesTab()).catch((err) => alert(err.message));
+  }
 
   // --- Helpers ---------------------------------------------------------
   async function fetchJson(url, init = {}) {

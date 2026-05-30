@@ -38,6 +38,92 @@ console.info("EndoMe community build v2");
     paintActiveTab(tab);
     if (tab === "dashboard") loadDashboard();
     if (tab === "circles")   loadCirclesHub();
+    if (tab === "stories")   loadStoriesView();
+    if (tab === "resources") loadResourcesView();
+  }
+
+  // --- Stories view ---------------------------------------------------
+  async function loadStoriesView() {
+    const grid = document.getElementById("published-stories");
+    const countEl = document.getElementById("stories-count");
+    grid.innerHTML = `<p class="empty-state">Loading…</p>`;
+    try {
+      const data = await fetchJson("/api/community/stories");
+      const stories = data.stories || [];
+      countEl.textContent = stories.length ? `${stories.length} published` : "";
+      if (!stories.length) {
+        grid.innerHTML = `<p class="empty-state">No stories published yet — be the first to share yours.</p>`;
+      } else {
+        grid.innerHTML = stories.map((s) => `
+          <a class="story-card" href="/read-story?id=${s.id}">
+            ${s.coverImageUrl
+              ? `<div class="story-card-img"><img src="${escapeHtml(s.coverImageUrl)}" alt="" loading="lazy" /></div>`
+              : `<div class="story-card-img story-card-img-empty">📖</div>`}
+            <div class="story-card-body">
+              <h3>${escapeHtml(s.title)}</h3>
+              ${s.summary ? `<p class="story-card-summary">${escapeHtml(s.summary)}</p>` : ""}
+              <div class="story-card-foot">
+                <span class="story-card-author">${escapeHtml(s.author)}</span>
+                <span class="story-card-date">${s.publishedAt ? new Date(s.publishedAt * 1000).toLocaleDateString() : ""}</span>
+              </div>
+            </div>
+          </a>`).join("");
+      }
+    } catch (err) {
+      grid.innerHTML = `<p class="empty-state">Couldn't load stories.</p>`;
+    }
+    // Always show "my drafts" if user has any
+    try {
+      const mine = await fetchJson("/api/me/stories");
+      const list = mine.stories || [];
+      const section = document.getElementById("my-stories-section");
+      const ul = document.getElementById("my-stories");
+      if (!list.length) { section.hidden = true; return; }
+      section.hidden = false;
+      const STATUS_LBL = {
+        draft:"Draft", submitted:"Awaiting review", approved:"Approved",
+        rejected:"Needs changes", published:"Published ✨",
+      };
+      ul.innerHTML = list.map((s) => `
+        <li class="my-story-row">
+          <a href="/write-story?id=${s.id}">
+            <strong>${escapeHtml(s.title)}</strong>
+            <span class="my-story-status status-${escapeHtml(s.status)}">${STATUS_LBL[s.status] || s.status}</span>
+          </a>
+        </li>`).join("");
+    } catch {}
+  }
+
+  // --- Resources view -------------------------------------------------
+  async function loadResourcesView() {
+    const slot = document.getElementById("resources-slot");
+    slot.innerHTML = `<p class="empty-state">Loading resources…</p>`;
+    try {
+      const data = await fetchJson("/api/community/resources");
+      const cats = data.categories || [];
+      const byCat = {};
+      for (const r of (data.resources || [])) (byCat[r.category] ||= []).push(r);
+      const html = cats
+        .filter((c) => byCat[c.key]?.length)
+        .map((c) => `
+          <section class="community-section resource-cat">
+            <div class="section-head">
+              <h2>${c.icon} ${escapeHtml(c.label)}</h2>
+              <span class="section-hint">${byCat[c.key].length} link${byCat[c.key].length === 1 ? "" : "s"}</span>
+            </div>
+            <div class="resources-grid">
+              ${byCat[c.key].map((r) => `
+                <article class="resource-card">
+                  <h3>${escapeHtml(r.title)}</h3>
+                  ${r.summary ? `<p>${escapeHtml(r.summary)}</p>` : ""}
+                  ${r.url ? `<a class="resource-link" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">Visit →</a>` : ""}
+                </article>`).join("")}
+            </div>
+          </section>`).join("");
+      slot.innerHTML = html || `<p class="empty-state">No resources published yet.</p>`;
+    } catch (err) {
+      slot.innerHTML = `<p class="empty-state">Couldn't load resources.</p>`;
+    }
   }
   function goCircle(slug, push = true) {
     if (push) history.pushState({}, "", `/community?c=${encodeURIComponent(slug)}`);
