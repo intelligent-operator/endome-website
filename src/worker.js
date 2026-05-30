@@ -5043,14 +5043,20 @@ async function sendBuddyMessage(request, env, user, id) {
 
   // Conversation as a proper role-aware messages array (the right shape
   // for Claude). Skip empty content and any leading assistant turn — the
-  // API requires the first message to be 'user'.
+  // API requires the first message to be 'user' AND the last to be 'user'.
+  // Fetch the LATEST 40 (not the oldest 40) so the user's just-sent message
+  // is always included even in long conversations.
   const history = await env.DB.prepare(
-    "SELECT role, content FROM buddy_messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 40"
+    "SELECT role, content FROM buddy_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 40"
   ).bind(id).all().catch(() => ({ results: [] }));
   const rawMsgs = (history.results || [])
+    .reverse()    // back to chronological order
     .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: String(m.content || "").trim() }))
     .filter((m) => m.content);
   while (rawMsgs.length && rawMsgs[0].role !== "user") rawMsgs.shift();
+  // Drop any trailing assistant turn so the array ends with the user's most
+  // recent message (otherwise Bedrock 400s on "last message must be user").
+  while (rawMsgs.length && rawMsgs[rawMsgs.length - 1].role !== "user") rawMsgs.pop();
   // Collapse consecutive same-role messages so the array strictly alternates,
   // which is what the Anthropic API expects.
   const messages = [];
@@ -5061,22 +5067,38 @@ async function sendBuddyMessage(request, env, user, id) {
   }
   if (!messages.length) messages.push({ role: "user", content: text });
 
-  const res = await invokeClaude(env, null, {
-    model: sys.model,
-    system: systemBlock,
-    messages,
-    maxTokens: 2000,
-  });
+  let res;
+  try {
+    res = await invokeClaude(env, null, {
+      model: sys.model,
+      system: systemBlock,
+      messages,
+      maxTokens: 2000,
+    });
+  } catch (err) {
+    console.error("[buddy] invokeClaude threw:", err?.message || err);
+    res = { ok: false, error: "engine_exception: " + (err?.message || String(err)) };
+  }
   if (!res.ok) {
-    // Persist the failure as an assistant message so the user sees something
-    // useful in the chat instead of a silent hang.
-    const errText = "I couldn't reach the engine just now — please try again in a moment.";
+    // Surface the real failure reason in the assistant bubble — silent
+    // "couldn't reach the engine" hides whether it's a missing prerequisite,
+    // an oversized prompt, or a model-access error.
+    const detail = String(res.error || "Engine error").slice(0, 600);
+    console.warn("[buddy] engine call failed:", detail);
+    const errText = `Hmm, I hit a snag reaching the EndoMe engine — please try again. (${detail})`;
     await env.DB.prepare(
       "INSERT INTO buddy_messages (conversation_id, role, content, created_at) VALUES (?, 'assistant', ?, ?)"
     ).bind(id, errText, nowSec()).run();
     return json({ ok: false, error: res.error || "Engine error", reply: errText });
   }
-  const reply = String(res.text || "").trim();
+  let reply = String(res.text || "").trim();
+  // Bedrock can return success-but-empty (content filter, refusal,
+  // max-tokens hit on first token). Fall back to something useful so the
+  // user doesn't see a blank bubble.
+  if (!reply) {
+    reply = "Sorry — I didn't have a good answer for that one. Try asking again, maybe with a bit more detail about what you're feeling?";
+    console.warn("[buddy] empty Claude reply (tokens in/out:", res.inputTokens, "/", res.outputTokens, ")");
+  }
   await env.DB.prepare(
     "INSERT INTO buddy_messages (conversation_id, role, content, input_tokens, output_tokens, created_at) " +
     "VALUES (?, 'assistant', ?, ?, ?, ?)"
@@ -9242,7 +9264,7 @@ async function ctxFoodLogs(env, user, days) {
   const r = await env.DB.prepare(
     "SELECT log_date, meal, name, calories, protein_g, carbs_g, fat_g, fiber_g, servings " +
     "FROM food_logs WHERE user_id = ? AND log_date >= ? " +
-    "ORDER BY log_date DESC, logged_at ASC LIMIT 400"
+    "ORDER BY log_date DESC, logged_at ASC LIMIT 200"
   ).bind(user.id, since).all().catch(() => ({ results: [] }));
   if (!(r.results || []).length) return `### Food logs (last ${days} days)\nNothing logged.`;
 
