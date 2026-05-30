@@ -4575,23 +4575,49 @@ async function sendBuddyMessage(request, env, user, id) {
     await env.DB.prepare("UPDATE buddy_conversations SET updated_at = ? WHERE id = ?").bind(now, id).run();
   }
 
-  // Build the prompt: system prompt + recent message history. We send the
-  // last 20 messages so multi-turn context is preserved without blowing the
-  // budget. Bedrock InvokeModel doesn't natively take a "system" field for
-  // Anthropic — we prepend it to the first user turn.
+  // Build the prompt: system prompt + the user's actual logged data +
+  // recent message history. Without the data block Buddy can't answer
+  // "what does my month show?" with anything real — it'd hallucinate or
+  // hedge. We pull the same broad context the monthly insight uses.
   const sys = await buddyGetSystemPrompt(env);
+  const dataContext = await buildInsightContext(env, user, [
+    "symptoms_30d", "daily_logs_30d", "medications",
+    "medication_logs_30d", "test_results", "appointments_60d",
+  ]).catch(() => "(data lookup failed)");
+
+  // Pull endo status + research consent so Buddy can speak accurately about
+  // the user's situation ("you mentioned you haven't been diagnosed yet…").
+  let endoLine = "";
+  try {
+    const e = await env.DB.prepare(
+      "SELECT endo_status, endo_stage, wants_early_dx_support, research_share_consent " +
+      "FROM users WHERE id = ?"
+    ).bind(user.id).first();
+    if (e) {
+      const bits = [];
+      if (e.endo_status === "diagnosed") bits.push(`diagnosed${e.endo_stage ? ` (${e.endo_stage.replace("_"," ")})` : ""}`);
+      else if (e.endo_status === "unknown") bits.push("not yet diagnosed" + (e.wants_early_dx_support ? ", opted into early-dx pattern watch" : ""));
+      if (e.research_share_consent) bits.push("contributing anonymised data to EndoMe research");
+      if (bits.length) endoLine = "User status: " + bits.join("; ") + ".";
+    }
+  } catch {}
+
   const history = await env.DB.prepare(
     "SELECT role, content FROM buddy_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 20"
   ).bind(id).all().catch(() => ({ results: [] }));
   const ordered = (history.results || []).reverse();
-  // Compose a single prompt string for invokeClaude. The function takes a
-  // plain string prompt and wraps it as a single user turn; that's fine for
-  // Buddy since the engine's job is "respond to this conversation".
   const transcript = ordered.map((m) =>
     (m.role === "user" ? "User: " : "Buddy: ") + m.content
   ).join("\n\n");
   const fullPrompt =
     sys.prompt + "\n\n" +
+    (endoLine ? endoLine + "\n\n" : "") +
+    "=== The user's logged EndoMe data ===\n" +
+    "Use this to give specific, grounded answers. Cite what you see " +
+    "(\"on May 24 you logged a 7/10 pain flare with stress as a trigger…\"). " +
+    "Never invent entries that aren't here. If a relevant slice is empty, " +
+    "say so plainly and ask the user to log it.\n\n" +
+    dataContext + "\n\n" +
     "=== Conversation so far ===\n" + transcript + "\n\n" +
     "Reply as Buddy. Stay on EndoMe / health / endometriosis topics. " +
     "If the user just asked something off-topic, gently redirect.";

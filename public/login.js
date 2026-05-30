@@ -17,7 +17,15 @@
   const otpResend = $("otp-resend");
   const backCreds = $("back-to-creds");
 
-  let mode = "password";        // "password" | "passwordless"
+  // Default to the email-code flow — friendlier and the more common path.
+  // Returning users on a recognised device land here; the password toggle
+  // is still available for first-time sign-in on a fresh browser, or for
+  // anyone who prefers a password. We remember the user's last choice
+  // in localStorage so it sticks across sessions.
+  const SAVED_MODE = (() => {
+    try { return localStorage.getItem("endome:loginMode"); } catch { return null; }
+  })();
+  let mode = SAVED_MODE === "password" ? "password" : "passwordless";
   let challenge = null;
 
   function setStatus(el, text, ok = false) {
@@ -50,9 +58,14 @@
 
   toggleMode.addEventListener("click", (e) => {
     e.preventDefault();
-    setMode(mode === "password" ? "passwordless" : "password");
+    const next = mode === "password" ? "passwordless" : "password";
+    setMode(next);
+    try { localStorage.setItem("endome:loginMode", next); } catch {}
     setStatus(credsStatus, "");
   });
+
+  // Apply the saved/default mode on first paint.
+  setMode(mode);
 
   // --- Step 1 submit -------------------------------------------------------
   credsForm.addEventListener("submit", async (e) => {
