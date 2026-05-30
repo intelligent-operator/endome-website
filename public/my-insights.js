@@ -15,7 +15,7 @@ console.info("EndoMe insights build v2");
         el.textContent = me?.user?.displayName || me?.user?.username || "there";
       });
     } catch {}
-    await Promise.all([loadInsights(), loadCycleCorrelation()]);
+    await Promise.all([loadInsights(), loadCycleCorrelation(), loadTriggerCorrelation()]);
     await maybeShowAdmin();
     document.getElementById("page-loader")?.classList.add("is-hidden");
   })();
@@ -130,6 +130,109 @@ console.info("EndoMe insights build v2");
     }
 
     drawChart();
+  }
+
+  // --- Trigger correlation card -----------------------------------------
+  // Pure stats from the user's tagged symptoms. No model call. Hides
+  // itself when there isn't enough data to be meaningful.
+  async function loadTriggerCorrelation() {
+    let data;
+    try { data = await fetchJson("/api/me/trigger-correlation"); } catch { return; }
+    const section = document.getElementById("trigger-corr-section");
+    if (!data.eligible || (!data.triggers?.length && !data.reliefs?.length)) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    paintTriggerCorrelation(data);
+  }
+
+  function paintTriggerCorrelation(data) {
+    const card = document.getElementById("trigger-corr-card");
+    const triggers = data.triggers || [];
+    const reliefs  = data.reliefs || [];
+    const overall  = data.sample?.overallAvg ?? 0;
+    const flares   = data.sample?.flares ?? 0;
+    const total    = data.sample?.total ?? 0;
+
+    const maxDelta = Math.max(0.5, ...triggers.map((t) => Math.abs(t.delta)));
+
+    const triggerRows = triggers.map((t) => {
+      // Bar direction: right (red) = worse than avg, left (green) = milder
+      const pct = Math.min(100, Math.round(Math.abs(t.delta) / maxDelta * 100));
+      const tone = t.delta >= 0.3 ? "high" : t.delta <= -0.3 ? "low" : "neutral";
+      return `
+        <li class="tc-row tc-${tone}">
+          <div class="tc-head">
+            <span class="tc-emoji">${t.emoji}</span>
+            <strong>${escapeHtml(t.label)}</strong>
+            <span class="tc-pill tc-pill-${tone}">${t.delta > 0 ? "+" : ""}${t.delta.toFixed(1)} vs avg</span>
+          </div>
+          <div class="tc-bar-wrap">
+            <div class="tc-bar-axis"></div>
+            <div class="tc-bar tc-bar-${tone}" style="width:${pct}%"></div>
+          </div>
+          <div class="tc-meta">
+            <span><strong>${t.count}</strong> entr${t.count === 1 ? "y" : "ies"}</span>
+            <span>avg sev <strong>${t.avgSeverity}</strong></span>
+            ${flares > 0 ? `<span><strong>${t.flareShare}%</strong> of flares</span>` : ""}
+            ${t.topSymptom ? `<span class="tc-top">often with: ${escapeHtml(symptomLabel(t.topSymptom))}</span>` : ""}
+          </div>
+        </li>`;
+    }).join("");
+
+    const reliefMax = Math.max(1, ...reliefs.map((r) => r.count));
+    const reliefRows = reliefs.slice(0, 8).map((r) => {
+      const pct = Math.round(r.count / reliefMax * 100);
+      return `
+        <li class="tc-relief-row">
+          <span class="tc-emoji">${r.emoji}</span>
+          <strong>${escapeHtml(r.label)}</strong>
+          <div class="tc-relief-bar"><i style="width:${pct}%"></i></div>
+          <span class="tc-relief-count">${r.count}× · sev ${r.avgSeverity}</span>
+        </li>`;
+    }).join("");
+
+    // Plain-English headline — pick the standout trigger (largest +delta).
+    const top = triggers[0];
+    const headline = (top && top.delta >= 0.3)
+      ? `When you tag <strong>${escapeHtml(top.label)}</strong>, your symptoms run <strong>${(top.delta).toFixed(1)} points worse</strong> than your ${overall.toFixed(1)} average. ${top.flareShare}% of your flares mention it.`
+      : (triggers.length
+        ? `No standout trigger pattern yet — keep tagging triggers when you log symptoms and patterns will sharpen.`
+        : `No triggers tagged yet — start tagging when you log a symptom and patterns will show up here.`);
+
+    card.innerHTML = `
+      <p class="tc-headline">${headline}</p>
+      <div class="tc-stats">
+        <span><strong>${total}</strong> symptom${total === 1 ? "" : "s"} in last 90d</span>
+        <span><strong>${flares}</strong> flare${flares === 1 ? "" : "s"} (sev ≥ 4)</span>
+        <span>avg severity <strong>${overall.toFixed(1)}</strong></span>
+      </div>
+      ${triggers.length ? `
+        <h3 class="tc-sub">Triggers ranked by severity impact</h3>
+        <ul class="tc-list">${triggerRows}</ul>
+      ` : ""}
+      ${reliefs.length ? `
+        <h3 class="tc-sub">What's helped, when you've used it</h3>
+        <ul class="tc-relief-list">${reliefRows}</ul>
+      ` : ""}
+      <p class="tc-caveat">Self-reported — these are <em>your noticed patterns</em>, not causal claims.</p>
+    `;
+  }
+
+  // Symptom keys → user-friendly labels (mirrors dashboard SYMPTOM_META).
+  const SYMPTOM_LABEL_MAP = {
+    pelvic_pain:"pelvic pain", cramps:"cramps", endo_belly:"endo belly",
+    back_pain:"lower-back pain", pain:"pain", bloating:"bloating",
+    nausea:"nausea", fatigue:"fatigue", headache:"headache", headaches:"headache",
+    breast_tender:"breast tenderness", hot_flash:"hot flashes", dizziness:"dizziness",
+    spotting:"spotting", painful_urination:"painful urination",
+    painful_bowel:"painful BMs", painful_sex:"painful sex",
+    anxiety:"anxiety", brain_fog:"brain fog", sleep:"sleep issues",
+    appetite:"appetite changes",
+  };
+  function symptomLabel(k) {
+    return SYMPTOM_LABEL_MAP[k] || k.replace(/_/g, " ");
   }
 
   async function loadInsights() {

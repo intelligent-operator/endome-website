@@ -170,3 +170,71 @@
 .cycle-corr-chart circle:hover{r:5}
 .cycle-corr-caption{margin:10px 0 0;font-size:12px;color:#5a3a48;line-height:1.5;min-height:1.4em}
 .cycle-corr-caption strong{color:#2b1922}
+
+/* ===========================================================
+   Trigger correlation card — "What's setting you off"
+   ============================================================ */
+.trigger-corr-card{
+  background:#fff;border:1px solid #ffeaf2;border-radius:18px;
+  padding:18px 20px;box-shadow:0 4px 16px rgba(255,77,138,.05);
+}
+.tc-headline{
+  margin:0 0 12px;font-size:14.5px;line-height:1.55;color:#2b1922;
+  padding:12px 14px;background:linear-gradient(180deg,#fff7fb,#fff);
+  border-left:4px solid #ff4e8a;border-radius:0 12px 12px 0;
+}
+.tc-headline strong{color:#ff4e8a}
+.tc-stats{
+  display:flex;flex-wrap:wrap;gap:14px;margin:0 0 18px;padding:10px 14px;
+  background:#fff5f8;border-radius:10px;font-size:12px;color:#5a3a48;
+}
+.tc-stats strong{color:#2b1922;font-feature-settings:"tnum";font-weight:700}
+.tc-sub{
+  margin:20px 0 10px;font-size:12px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.06em;color:#7a5f6c;
+}
+.tc-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.tc-row{
+  background:#fff;border:1px solid #ffeaf2;border-radius:12px;
+  padding:10px 14px;display:flex;flex-direction:column;gap:6px;
+}
+.tc-row.tc-high{border-color:#ffd6e0;background:linear-gradient(180deg,#fff7fb,#fff)}
+.tc-row.tc-low{border-color:#cdebb8;background:linear-gradient(180deg,#f7fff0,#fff)}
+.tc-head{display:flex;align-items:center;gap:10px}
+.tc-emoji{font-size:18px;flex-shrink:0}
+.tc-row .tc-head strong{flex:1;font-size:14px;color:#2b1922}
+.tc-pill{
+  font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;
+  text-transform:uppercase;letter-spacing:.06em;font-feature-settings:"tnum";
+}
+.tc-pill-high{background:#ffe2ea;color:#c4344b}
+.tc-pill-low{background:#dff5e0;color:#2b6f1f}
+.tc-pill-neutral{background:#fff5f8;color:#7a5f6c}
+.tc-bar-wrap{position:relative;height:8px;background:#fff0f5;border-radius:999px;overflow:hidden;border:1px solid #ffeaf2}
+.tc-bar-axis{position:absolute;left:0;top:0;bottom:0;width:1px;background:#cdb9c4;opacity:.5;left:50%}
+.tc-bar{position:absolute;top:0;bottom:0;left:50%;border-radius:999px;height:100%}
+.tc-bar-high{background:linear-gradient(90deg,#ff7aa6,#c4344b)}
+.tc-bar-low{background:linear-gradient(270deg,#cdebb8,#7cbf5f);left:auto;right:50%}
+.tc-bar-neutral{background:#ffd6e0}
+.tc-meta{
+  display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:#7a5f6c;
+}
+.tc-meta strong{color:#2b1922;font-weight:700;font-feature-settings:"tnum"}
+.tc-meta .tc-top{flex:1 0 100%;font-style:italic}
+
+/* Relief bars */
+.tc-relief-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.tc-relief-row{
+  display:flex;align-items:center;gap:10px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:10px;padding:8px 12px;
+}
+.tc-relief-row strong{min-width:90px;font-size:13px;color:#2b1922;font-weight:700}
+.tc-relief-bar{flex:1;height:8px;background:#fff0f5;border-radius:999px;overflow:hidden;border:1px solid #ffeaf2}
+.tc-relief-bar > i{display:block;height:100%;background:linear-gradient(90deg,#9bd97a,#cdebb8);border-radius:999px}
+.tc-relief-count{font-size:11.5px;color:#5a3a48;font-feature-settings:"tnum";min-width:90px;text-align:right}
+
+.tc-caveat{
+  margin:14px 0 0;font-size:11.5px;color:#7a5f6c;font-style:italic;text-align:center;
+  padding-top:10px;border-top:1px dashed #ffeaf2;
+}
+.tc-caveat em{color:#5a3a48;font-style:italic}

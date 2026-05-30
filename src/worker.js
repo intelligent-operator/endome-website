@@ -286,6 +286,9 @@ export default {
           if (url.pathname === "/api/me/cycles" && request.method === "GET") {
             return jsonHeaders(await getCycles(env, user));
           }
+          if (url.pathname === "/api/me/trigger-correlation" && request.method === "GET") {
+            return jsonHeaders(await getTriggerCorrelation(env, user));
+          }
           if (url.pathname === "/api/me/cycles" && request.method === "POST") {
             return jsonHeaders(await postCycle(request, env, user));
           }
@@ -2273,6 +2276,134 @@ async function getBodyPainMap(env, user) {
     }
   }
   return json({ regions, since: startISO });
+}
+
+// --- /api/me/trigger-correlation ------------------------------------------
+// "Which triggers actually correlate with worse symptoms?"
+// Two complementary views over the user's last 90 days of symptoms:
+//
+//   1. **Direct tagging.** For each trigger tag (food, stress, …) count
+//      how many symptom entries carry it, and the average severity of
+//      those tagged entries vs. the overall average. Big positive delta
+//      = the user's own gut-feel attribution is bearing out.
+//
+//   2. **Flare association.** A "flare" = severity ≥ 4. For each trigger,
+//      compute the share of flares that mentioned it — a quick "what's
+//      tagged when things go bad?" view.
+//
+// Pure self-reported, so the framing is "patterns you've noticed yourself"
+// rather than causal — the UI copy reflects that. Returns null when the
+// user doesn't have enough data to be meaningful.
+async function getTriggerCorrelation(env, user) {
+  const today = new Date().toISOString().slice(0, 10);
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - 89);
+  const startISO = start.toISOString().slice(0, 10);
+
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT log_date, severity, symptom, triggers, relief " +
+      "FROM symptoms WHERE user_id = ? AND log_date BETWEEN ? AND ? " +
+      "ORDER BY log_date DESC LIMIT 1500"
+    ).bind(user.id, startISO, today).all();
+  } catch { return json({ eligible: false }); }
+
+  const all = rows.results || [];
+  if (all.length < 5) {
+    return json({ eligible: false, reason: "need ≥5 logged symptoms in the last 90 days" });
+  }
+
+  const overallAvg = all.reduce((s, r) => s + (r.severity || 0), 0) / all.length;
+  const flares = all.filter((r) => (r.severity || 0) >= 4);
+  const flareCount = flares.length;
+
+  const TRIGGER_LABELS = {
+    food:"Food", stress:"Stress", exercise:"Exercise", hormones:"Hormones",
+    intimacy:"Intimacy", cold:"Cold weather", sleep:"Poor sleep",
+    travel:"Travel", unknown:"Unknown",
+  };
+  const TRIGGER_EMOJI = {
+    food:"🍔", stress:"😰", exercise:"🏃", hormones:"🩸",
+    intimacy:"💞", cold:"❄️", sleep:"😴", travel:"✈️", unknown:"❓",
+  };
+
+  const buckets = {};
+  for (const key of Object.keys(TRIGGER_LABELS)) buckets[key] = { tagged: [], onFlares: 0 };
+  for (const r of all) {
+    if (!r.triggers) continue;
+    const tags = String(r.triggers).split(",").map((t) => t.trim()).filter(Boolean);
+    for (const t of tags) {
+      const b = buckets[t];
+      if (!b) continue;
+      b.tagged.push(r);
+      if ((r.severity || 0) >= 4) b.onFlares += 1;
+    }
+  }
+
+  const triggers = Object.entries(buckets)
+    .map(([key, b]) => {
+      const count = b.tagged.length;
+      if (!count) return null;
+      const avg = b.tagged.reduce((s, r) => s + (r.severity || 0), 0) / count;
+      const delta = +(avg - overallAvg).toFixed(2);
+      const flareShare = flareCount ? +(b.onFlares / flareCount * 100).toFixed(0) : 0;
+      // Top symptom seen with this trigger.
+      const symCount = {};
+      for (const r of b.tagged) symCount[r.symptom] = (symCount[r.symptom] || 0) + 1;
+      const topSym = Object.entries(symCount).sort((a, b) => b[1] - a[1])[0];
+      // Plain-English narrative the UI can drop straight in.
+      const dirWord = delta > 0.3 ? "worse than average"
+                    : delta < -0.3 ? "milder than average"
+                    : "around your average";
+      return {
+        key, label: TRIGGER_LABELS[key], emoji: TRIGGER_EMOJI[key],
+        count, avgSeverity: +avg.toFixed(1),
+        delta, dirWord,
+        flareShare, flaresWithTrigger: b.onFlares,
+        topSymptom: topSym?.[0] || null,
+        topSymptomCount: topSym?.[1] || 0,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.delta - a.delta || b.count - a.count);
+
+  // Reliefs — what's helped? Same math but cleaner because we don't
+  // care about flare overlap, just average severity when tagged.
+  const RELIEF_LABELS = {
+    heat:"Heat", tens:"TENS", rest:"Rest", medication:"Medication",
+    hydration:"Hydration", movement:"Movement", massage:"Massage", bath:"Bath", sleep:"Sleep",
+  };
+  const RELIEF_EMOJI = {
+    heat:"🔥", tens:"⚡", rest:"🛏", medication:"💊", hydration:"💧",
+    movement:"🧘", massage:"🤲", bath:"🛁", sleep:"😴",
+  };
+  const reliefBuckets = {};
+  for (const key of Object.keys(RELIEF_LABELS)) reliefBuckets[key] = [];
+  for (const r of all) {
+    if (!r.relief) continue;
+    for (const t of String(r.relief).split(",").map((s) => s.trim()).filter(Boolean)) {
+      if (reliefBuckets[t]) reliefBuckets[t].push(r);
+    }
+  }
+  const reliefs = Object.entries(reliefBuckets)
+    .map(([key, arr]) => {
+      if (!arr.length) return null;
+      const avg = arr.reduce((s, r) => s + (r.severity || 0), 0) / arr.length;
+      return {
+        key, label: RELIEF_LABELS[key], emoji: RELIEF_EMOJI[key],
+        count: arr.length, avgSeverity: +avg.toFixed(1),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.count - a.count);
+
+  return json({
+    eligible: true,
+    windowDays: 90,
+    sample: { total: all.length, flares: flareCount, overallAvg: +overallAvg.toFixed(2) },
+    triggers, reliefs,
+  });
 }
 
 // --- /api/me/report -------------------------------------------------------
