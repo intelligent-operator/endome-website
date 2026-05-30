@@ -4746,11 +4746,10 @@ async function sendBuddyMessage(request, env, user, id) {
     "",
     dataContext,
     "",
-    "=== Rules ===",
+    "=== Data-grounding rules (the editable prompt above governs tone, scope + safety) ===",
     "- NEVER say \"I don't see your data\" or \"I can't see your data\" when the block above contains entries.",
     "- If earlier messages in this conversation said you had no data, that was wrong — the data is right above. Correct course in your next reply.",
-    "- Stay strictly on EndoMe / endo / the user's health. Redirect off-topic asks politely.",
-    "- Be warm, concrete, 3-6 sentences typical. Never diagnose, never prescribe — suggest clinician conversations where useful.",
+    "- Quote the user's real entries (dates, severities, triggers) and never invent data.",
   ].filter(Boolean).join("\n");
 
   // Conversation as a proper role-aware messages array (the right shape

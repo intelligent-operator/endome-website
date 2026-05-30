@@ -12,8 +12,8 @@
   const launcher = document.createElement("button");
   launcher.className = "bw-launcher";
   launcher.type = "button";
-  launcher.setAttribute("aria-label", "Open Buddy chat");
-  launcher.innerHTML = `<span>💬</span><span>Buddy</span>`;
+  launcher.setAttribute("aria-label", "Talk to your companion");
+  launcher.innerHTML = `<span class="bw-launch-face">💬</span><span class="bw-launch-label">Talk to Buddy</span>`;
 
   const panel = document.createElement("section");
   panel.className = "bw-panel";
@@ -59,13 +59,31 @@
     document.body.appendChild(launcher);
     document.body.appendChild(panel);
     wire();
+    // Eagerly fetch the user's pet identity so the launcher reads
+    // "Talk to <petName>" and shows the pet's face before the panel opens.
+    fetchIdentity();
   }, { once: true });
+
+  async function fetchIdentity() {
+    if (identityLoaded) return;
+    identityLoaded = true;
+    try {
+      const r = await fetch("/api/me/today", { credentials: "same-origin" });
+      if (r.ok) {
+        const me = await r.json();
+        myAvatar = { url: me?.user?.avatarUrl || null, emoji: me?.user?.avatar || null };
+        if (me?.pet?.name) pet = { name: me.pet.name, type: me.pet.type || null };
+        applyPetIdentity();
+      }
+    } catch {}
+  }
 
   // ---- State -------------------------------------------------------------
   let activeConvId = null;
   let busy = false;
   let opened = false;
   let loadedOnce = false;
+  let identityLoaded = false;
   let myAvatar = { url: null, emoji: null };
   let pet = { name: "Buddy", type: null };
 
@@ -112,16 +130,7 @@
     panel.querySelector("#bw-input").focus();
     if (!loadedOnce) {
       loadedOnce = true;
-      // Grab the user's avatar + their pet identity once.
-      try {
-        const r = await fetch("/api/me/today", { credentials: "same-origin" });
-        if (r.ok) {
-          const me = await r.json();
-          myAvatar = { url: me?.user?.avatarUrl || null, emoji: me?.user?.avatar || null };
-          if (me?.pet?.name) pet = { name: me.pet.name, type: me.pet.type || null };
-          applyPetIdentity();
-        }
-      } catch {}
+      await fetchIdentity();
       await loadMostRecent();
     }
   }
@@ -261,12 +270,16 @@
       <div class="bb">${renderLite(m.content)}</div>
     </div>`;
   }
-  // Apply pet name + face to the widget header.
+  // Apply pet name + face to the widget header AND the launcher button.
   function applyPetIdentity() {
     const t = panel.querySelector(".bw-head-title strong");
     if (t) t.textContent = pet.name;
     const a = panel.querySelector(".bw-head-avatar");
     if (a) a.innerHTML = pet.type ? `<span class="bw-pet-face">${petFace()}</span>` : "💬";
+    const label = launcher.querySelector(".bw-launch-label");
+    if (label) label.textContent = `Talk to ${pet.name}`;
+    const face = launcher.querySelector(".bw-launch-face");
+    if (face) face.innerHTML = pet.type ? `<span class="bw-pet-face">${petFace()}</span>` : "💬";
   }
   function appendBubble(role, content) {
     const body = panel.querySelector("#bw-body");
