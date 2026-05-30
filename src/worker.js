@@ -4575,18 +4575,16 @@ async function sendBuddyMessage(request, env, user, id) {
     await env.DB.prepare("UPDATE buddy_conversations SET updated_at = ? WHERE id = ?").bind(now, id).run();
   }
 
-  // Build the prompt: system prompt + the user's actual logged data +
-  // recent message history. Without the data block Buddy can't answer
-  // "what does my month show?" with anything real — it'd hallucinate or
-  // hedge. We pull the same broad context the monthly insight uses.
+  // Pull the user's actual data + status. The data block goes into the
+  // system prompt where Claude weighs it heavily — concatenating it into
+  // a user turn (as we did before) made it easy for the model to claim
+  // "no data" because prior assistant messages in history said as much.
   const sys = await buddyGetSystemPrompt(env);
   const dataContext = await buildInsightContext(env, user, [
     "symptoms_30d", "daily_logs_30d", "medications",
     "medication_logs_30d", "test_results", "appointments_60d",
   ]).catch(() => "(data lookup failed)");
 
-  // Pull endo status + research consent so Buddy can speak accurately about
-  // the user's situation ("you mentioned you haven't been diagnosed yet…").
   let endoLine = "";
   try {
     const e = await env.DB.prepare(
@@ -4602,27 +4600,68 @@ async function sendBuddyMessage(request, env, user, id) {
     }
   } catch {}
 
-  const history = await env.DB.prepare(
-    "SELECT role, content FROM buddy_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 20"
-  ).bind(id).all().catch(() => ({ results: [] }));
-  const ordered = (history.results || []).reverse();
-  const transcript = ordered.map((m) =>
-    (m.role === "user" ? "User: " : "Buddy: ") + m.content
-  ).join("\n\n");
-  const fullPrompt =
-    sys.prompt + "\n\n" +
-    (endoLine ? endoLine + "\n\n" : "") +
-    "=== The user's logged EndoMe data ===\n" +
-    "Use this to give specific, grounded answers. Cite what you see " +
-    "(\"on May 24 you logged a 7/10 pain flare with stress as a trigger…\"). " +
-    "Never invent entries that aren't here. If a relevant slice is empty, " +
-    "say so plainly and ask the user to log it.\n\n" +
-    dataContext + "\n\n" +
-    "=== Conversation so far ===\n" + transcript + "\n\n" +
-    "Reply as Buddy. Stay on EndoMe / health / endometriosis topics. " +
-    "If the user just asked something off-topic, gently redirect.";
+  // Per-turn data freshness check — figure out whether the user actually
+  // has anything logged so we can tell Claude "yes, they do" definitively.
+  // Without this Claude tends to play it safe and say "I can't see your
+  // data". The cheap check is whether dataContext contains real entries
+  // (every empty slice produces "Nothing logged.").
+  const hasAnyData = !/^(### .+\n(Nothing logged|None tracked|None yet|None\.))(\n\n### .+\n(Nothing logged|None tracked|None yet|None\.))*$/m.test(dataContext)
+    && dataContext !== "(no data logged yet)"
+    && dataContext !== "(data lookup failed)";
 
-  const res = await invokeClaude(env, fullPrompt, sys.model);
+  // Build a strict system prompt: guardrails + status + the actual data
+  // block, with explicit instructions to use it and override any earlier
+  // hedging. Claude on Bedrock supports a top-level `system` field —
+  // content here is weighted as instructions, not chat content.
+  const systemBlock = [
+    sys.prompt,
+    endoLine,
+    "",
+    "=== The user's CURRENT logged EndoMe data ===",
+    hasAnyData
+      ? "The user HAS data logged below. You DO have access to it. " +
+        "Read every section carefully and quote specific entries when relevant " +
+        "(e.g. \"on 2026-05-24 you logged painful_urination at severity 3 with stress as a trigger\"). " +
+        "Use real dates, severities and notes from the data. Never invent entries. " +
+        "Only a section that literally says \"Nothing logged.\" is empty — speak to that section honestly."
+      : "The user has no entries yet in any section below. Gently encourage them " +
+        "to do a daily check-in, and offer to walk them through it.",
+    "",
+    dataContext,
+    "",
+    "=== Rules ===",
+    "- NEVER say \"I don't see your data\" or \"I can't see your data\" when the block above contains entries.",
+    "- If earlier messages in this conversation said you had no data, that was wrong — the data is right above. Correct course in your next reply.",
+    "- Stay strictly on EndoMe / endo / the user's health. Redirect off-topic asks politely.",
+    "- Be warm, concrete, 3-6 sentences typical. Never diagnose, never prescribe — suggest clinician conversations where useful.",
+  ].filter(Boolean).join("\n");
+
+  // Conversation as a proper role-aware messages array (the right shape
+  // for Claude). Skip empty content and any leading assistant turn — the
+  // API requires the first message to be 'user'.
+  const history = await env.DB.prepare(
+    "SELECT role, content FROM buddy_messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 40"
+  ).bind(id).all().catch(() => ({ results: [] }));
+  const rawMsgs = (history.results || [])
+    .map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: String(m.content || "").trim() }))
+    .filter((m) => m.content);
+  while (rawMsgs.length && rawMsgs[0].role !== "user") rawMsgs.shift();
+  // Collapse consecutive same-role messages so the array strictly alternates,
+  // which is what the Anthropic API expects.
+  const messages = [];
+  for (const m of rawMsgs) {
+    const last = messages[messages.length - 1];
+    if (last && last.role === m.role) last.content += "\n\n" + m.content;
+    else messages.push(m);
+  }
+  if (!messages.length) messages.push({ role: "user", content: text });
+
+  const res = await invokeClaude(env, null, {
+    model: sys.model,
+    system: systemBlock,
+    messages,
+    maxTokens: 1500,
+  });
   if (!res.ok) {
     // Persist the failure as an assistant message so the user sees something
     // useful in the chat instead of a silent hang.
@@ -8268,12 +8307,26 @@ async function seedInsightDefaults(env) {
 const DEFAULT_BEDROCK_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0";
 const DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022";
 
-async function invokeClaude(env, prompt, model) {
+// Invoke Claude with either a single prompt OR a full conversation.
+//   opts.model    — model id override
+//   opts.system   — top-level system prompt (the right place for guardrails
+//                   + grounding data — Claude weights it far higher than
+//                   content concatenated into a user turn)
+//   opts.messages — full [{role, content}, ...] array. Overrides `prompt`.
+//   opts.maxTokens — response cap (default 1500)
+async function invokeClaude(env, prompt, modelOrOpts, maybeSystem) {
+  const opts = (modelOrOpts && typeof modelOrOpts === "object")
+    ? modelOrOpts
+    : { model: modelOrOpts, system: maybeSystem };
+  const model = opts.model || null;
+  const system = opts.system || null;
+  const messages = opts.messages || (prompt != null ? [{ role: "user", content: String(prompt) }] : []);
+  const maxTokens = opts.maxTokens || 1500;
   if (env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.AWS_BEDROCK_REGION) {
-    return invokeBedrock(env, prompt, model || env.BEDROCK_MODEL_ID || DEFAULT_BEDROCK_MODEL);
+    return invokeBedrock(env, { messages, system, maxTokens }, model || env.BEDROCK_MODEL_ID || DEFAULT_BEDROCK_MODEL);
   }
   if (env.ANTHROPIC_API_KEY) {
-    return invokeAnthropicDirect(env, prompt, model || env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL);
+    return invokeAnthropicDirect(env, { messages, system, maxTokens }, model || env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL);
   }
   return {
     ok: false,
@@ -8492,8 +8545,16 @@ async function getAdminDashboard(env) {
   });
 }
 
-async function invokeAnthropicDirect(env, prompt, model) {
+async function invokeAnthropicDirect(env, payload, model) {
+  // Accept either the legacy string-prompt shape OR the new
+  // { messages, system, maxTokens } object so existing callers keep working.
+  const { messages, system, maxTokens } =
+    (payload && typeof payload === "object" && !Array.isArray(payload) && "messages" in payload)
+      ? payload
+      : { messages: [{ role: "user", content: String(payload || "") }], system: null, maxTokens: 1500 };
   try {
+    const reqBody = { model, max_tokens: maxTokens || 1500, messages };
+    if (system) reqBody.system = system;
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -8501,11 +8562,7 @@ async function invokeAnthropicDirect(env, prompt, model) {
         "x-api-key": env.ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: 1500,
-        messages: [{ role: "user", content: prompt }],
-      }),
+      body: JSON.stringify(reqBody),
     });
     if (!res.ok) {
       const t = await res.text();
@@ -8527,15 +8584,22 @@ async function invokeAnthropicDirect(env, prompt, model) {
 // AWS Bedrock InvokeModel endpoint, signed with SigV4. The Bedrock body for
 // an Anthropic model is the standard messages-shaped JSON with an extra
 // "anthropic_version" field instead of the HTTP header.
-async function invokeBedrock(env, prompt, model) {
+async function invokeBedrock(env, payload, model) {
   const region = env.AWS_BEDROCK_REGION;
   const host = `bedrock-runtime.${region}.amazonaws.com`;
   const path = `/model/${encodeURIComponent(model)}/invoke`;
-  const body = JSON.stringify({
+  // Accept either a legacy string prompt or { messages, system, maxTokens }.
+  const { messages, system, maxTokens } =
+    (payload && typeof payload === "object" && !Array.isArray(payload) && "messages" in payload)
+      ? payload
+      : { messages: [{ role: "user", content: String(payload || "") }], system: null, maxTokens: 1500 };
+  const bodyObj = {
     anthropic_version: "bedrock-2023-05-31",
-    max_tokens: 1500,
-    messages: [{ role: "user", content: prompt }],
-  });
+    max_tokens: maxTokens || 1500,
+    messages,
+  };
+  if (system) bodyObj.system = system;
+  const body = JSON.stringify(bodyObj);
 
   try {
     const headers = await sigv4Sign({
