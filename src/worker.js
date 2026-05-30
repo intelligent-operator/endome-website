@@ -335,6 +335,18 @@ export default {
           }
           if (url.pathname === "/api/me/endo" && request.method === "GET")  return jsonHeaders(await getEndoStatus(env, user));
           if (url.pathname === "/api/me/endo" && request.method === "PUT")  return jsonHeaders(await updateEndoStatus(request, env, user));
+
+          // --- Buddy chatbot ----------------------------------------------
+          if (url.pathname === "/api/me/buddy/conversations" && request.method === "GET")  return jsonHeaders(await listBuddyConversations(env, user));
+          if (url.pathname === "/api/me/buddy/conversations" && request.method === "POST") return jsonHeaders(await createBuddyConversation(env, user));
+          const buddyConvMatch = url.pathname.match(/^\/api\/me\/buddy\/conversations\/(\d+)$/);
+          if (buddyConvMatch) {
+            const cid = +buddyConvMatch[1];
+            if (request.method === "GET")    return jsonHeaders(await getBuddyConversation(env, user, cid));
+            if (request.method === "DELETE") return jsonHeaders(await deleteBuddyConversation(env, user, cid));
+          }
+          const buddyMsgMatch = url.pathname.match(/^\/api\/me\/buddy\/conversations\/(\d+)\/messages$/);
+          if (buddyMsgMatch && request.method === "POST") return jsonHeaders(await sendBuddyMessage(request, env, user, +buddyMsgMatch[1]));
           if (url.pathname === "/api/me/avatar" && request.method === "POST") {
             return jsonHeaders(await uploadAvatar(request, env, user));
           }
@@ -477,6 +489,7 @@ export default {
       url.pathname === "/u"           || url.pathname.startsWith("/u/") ||
       url.pathname === "/meds"        || url.pathname.startsWith("/meds/") ||
       url.pathname === "/food"        || url.pathname.startsWith("/food/") ||
+      url.pathname === "/buddy"       || url.pathname.startsWith("/buddy/") ||
       url.pathname === "/documents"   || url.pathname.startsWith("/documents/") ||
       url.pathname === "/security"    || url.pathname.startsWith("/security/") ||
       url.pathname === "/research"    || url.pathname.startsWith("/research/") ||
@@ -1423,6 +1436,7 @@ async function bootstrapSchema(env) {
       ensureDonationsSchema(env),
       ensureRecipeSchema(env),
       ensureFoodSchema(env),
+      ensureBuddySchema(env),
       ensureAppointmentSchema(env),
       ensureReadSchema(env),
       ensureEmailLogSchema(env),
@@ -4404,7 +4418,204 @@ async function deleteMyAccount(request, env, user) {
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
 }
 
-// --- Endometriosis status (set during onboarding, editable from /profile) ---
+// =============================================================================
+// BUDDY — health-focused chatbot. Each user has many conversations; each
+// conversation has many messages. System prompt is sourced from the
+// insight_configs row with slug='buddy-system' so admins can tune it
+// through the same /acp UI that drives insight prompts.
+// =============================================================================
+const BUDDY_DEFAULT_SYSTEM_PROMPT =
+  "You are Buddy — an EndoMe companion focused entirely on the user's health, " +
+  "the EndoMe app, and endometriosis specifically.\n\n" +
+  "Stay strictly on these topics:\n" +
+  "  • the user's symptoms, cycle, daily check-ins, medications, food, test results\n" +
+  "  • endometriosis — what it is, how it presents, how it's diagnosed, treatment options\n" +
+  "  • how to use EndoMe (logging, insights, story progress, pet, community)\n" +
+  "  • supporting the user in finding their next clinical step or partnering with their doctor\n" +
+  "  • the EndoMe research mission to find a cure\n\n" +
+  "If the user asks about anything else — coding, math, news, recipes for fun, " +
+  "general life advice, celebrity gossip, etc. — politely redirect: " +
+  "\"I'm here for your endometriosis journey and the EndoMe app — let's stay on that. " +
+  "What's on your mind health-wise today?\" Do not answer off-topic questions.\n\n" +
+  "Be warm, plain-spoken, and concise (3-6 sentences typical). Never diagnose, " +
+  "never prescribe; suggest discussing things with a clinician where appropriate. " +
+  "Use the user's own logged data when it's relevant.";
+
+let _buddySchemaChecked = false;
+async function ensureBuddySchema(env) {
+  if (_buddySchemaChecked) return;
+  _buddySchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS buddy_conversations (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  title TEXT," +
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_buddy_conv_user ON buddy_conversations(user_id, updated_at DESC)",
+    "CREATE TABLE IF NOT EXISTS buddy_messages (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  conversation_id INTEGER NOT NULL," +
+    "  role TEXT NOT NULL," +                      // 'user' | 'assistant'
+    "  content TEXT NOT NULL," +
+    "  input_tokens INTEGER," +
+    "  output_tokens INTEGER," +
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_buddy_msg_conv ON buddy_messages(conversation_id, created_at)",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+  // Seed the system-prompt row in insight_configs so admins can edit it via
+  // /acp → Insights → Configure. We re-use that table to keep the prompt
+  // admin surface in one place.
+  try { await ensureInsightSchema(env); } catch {}
+  const now = nowSec();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO insight_configs (slug, title, emoji, description, prompt_template, " +
+      "  data_scope_json, refresh_hours, model, sort_order, enabled, created_at, updated_at) " +
+      "VALUES ('buddy-system', 'Buddy — system prompt', '💬', " +
+      "  'Drives the Buddy chatbot. Edit to tighten the topic guardrails or change the tone.', " +
+      "  ?, '[]', 24, NULL, 1000, 1, ?, ?) ON CONFLICT(slug) DO NOTHING"
+    ).bind(BUDDY_DEFAULT_SYSTEM_PROMPT, now, now).run();
+  } catch {}
+}
+
+async function buddyGetSystemPrompt(env) {
+  try {
+    const row = await env.DB.prepare(
+      "SELECT prompt_template, model FROM insight_configs WHERE slug = 'buddy-system'"
+    ).first();
+    return {
+      prompt: row?.prompt_template || BUDDY_DEFAULT_SYSTEM_PROMPT,
+      model:  row?.model || null,
+    };
+  } catch {
+    return { prompt: BUDDY_DEFAULT_SYSTEM_PROMPT, model: null };
+  }
+}
+
+async function listBuddyConversations(env, user) {
+  await ensureBuddySchema(env);
+  const r = await env.DB.prepare(
+    "SELECT c.id, c.title, c.created_at, c.updated_at, " +
+    "       (SELECT COUNT(*) FROM buddy_messages WHERE conversation_id = c.id) AS message_count " +
+    "FROM buddy_conversations c WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  return json({
+    conversations: (r.results || []).map((c) => ({
+      id: c.id, title: c.title || "New chat", messageCount: c.message_count,
+      createdAt: c.created_at, updatedAt: c.updated_at,
+    })),
+  });
+}
+async function createBuddyConversation(env, user) {
+  await ensureBuddySchema(env);
+  const now = nowSec();
+  const r = await env.DB.prepare(
+    "INSERT INTO buddy_conversations (user_id, title, created_at, updated_at) VALUES (?, NULL, ?, ?)"
+  ).bind(user.id, now, now).run();
+  return json({ id: r.meta?.last_row_id, ok: true });
+}
+async function getBuddyConversation(env, user, id) {
+  await ensureBuddySchema(env);
+  const conv = await env.DB.prepare(
+    "SELECT id, title, created_at, updated_at FROM buddy_conversations WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!conv) return json({ error: "Not found" }, 404);
+  const msgs = await env.DB.prepare(
+    "SELECT id, role, content, input_tokens, output_tokens, created_at " +
+    "FROM buddy_messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 200"
+  ).bind(id).all().catch(() => ({ results: [] }));
+  return json({
+    conversation: { id: conv.id, title: conv.title, createdAt: conv.created_at, updatedAt: conv.updated_at },
+    messages: (msgs.results || []).map((m) => ({
+      id: m.id, role: m.role, content: m.content,
+      inputTokens: m.input_tokens || null, outputTokens: m.output_tokens || null,
+      createdAt: m.created_at,
+    })),
+  });
+}
+async function deleteBuddyConversation(env, user, id) {
+  await ensureBuddySchema(env);
+  // Verify ownership first to keep DELETE scoped.
+  const own = await env.DB.prepare(
+    "SELECT 1 FROM buddy_conversations WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!own) return json({ error: "Not found" }, 404);
+  await env.DB.prepare("DELETE FROM buddy_messages WHERE conversation_id = ?").bind(id).run();
+  await env.DB.prepare("DELETE FROM buddy_conversations WHERE id = ?").bind(id).run();
+  return json({ ok: true });
+}
+async function sendBuddyMessage(request, env, user, id) {
+  await ensureBuddySchema(env);
+  const body = await readJsonSafe(request);
+  const text = sanitizeText(body?.content, 4000);
+  if (!text) return json({ error: "Empty message" }, 400);
+
+  const conv = await env.DB.prepare(
+    "SELECT id, title FROM buddy_conversations WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!conv) return json({ error: "Conversation not found" }, 404);
+
+  // Persist the user message first so the conversation feels responsive even
+  // if the model call fails.
+  const now = nowSec();
+  await env.DB.prepare(
+    "INSERT INTO buddy_messages (conversation_id, role, content, created_at) VALUES (?, 'user', ?, ?)"
+  ).bind(id, text, now).run();
+
+  // Auto-title the conversation from the first user message (first 60 chars).
+  if (!conv.title) {
+    const newTitle = text.replace(/\s+/g, " ").slice(0, 60);
+    await env.DB.prepare("UPDATE buddy_conversations SET title = ?, updated_at = ? WHERE id = ?")
+      .bind(newTitle, now, id).run();
+  } else {
+    await env.DB.prepare("UPDATE buddy_conversations SET updated_at = ? WHERE id = ?").bind(now, id).run();
+  }
+
+  // Build the prompt: system prompt + recent message history. We send the
+  // last 20 messages so multi-turn context is preserved without blowing the
+  // budget. Bedrock InvokeModel doesn't natively take a "system" field for
+  // Anthropic — we prepend it to the first user turn.
+  const sys = await buddyGetSystemPrompt(env);
+  const history = await env.DB.prepare(
+    "SELECT role, content FROM buddy_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 20"
+  ).bind(id).all().catch(() => ({ results: [] }));
+  const ordered = (history.results || []).reverse();
+  // Compose a single prompt string for invokeClaude. The function takes a
+  // plain string prompt and wraps it as a single user turn; that's fine for
+  // Buddy since the engine's job is "respond to this conversation".
+  const transcript = ordered.map((m) =>
+    (m.role === "user" ? "User: " : "Buddy: ") + m.content
+  ).join("\n\n");
+  const fullPrompt =
+    sys.prompt + "\n\n" +
+    "=== Conversation so far ===\n" + transcript + "\n\n" +
+    "Reply as Buddy. Stay on EndoMe / health / endometriosis topics. " +
+    "If the user just asked something off-topic, gently redirect.";
+
+  const res = await invokeClaude(env, fullPrompt, sys.model);
+  if (!res.ok) {
+    // Persist the failure as an assistant message so the user sees something
+    // useful in the chat instead of a silent hang.
+    const errText = "I couldn't reach the engine just now — please try again in a moment.";
+    await env.DB.prepare(
+      "INSERT INTO buddy_messages (conversation_id, role, content, created_at) VALUES (?, 'assistant', ?, ?)"
+    ).bind(id, errText, nowSec()).run();
+    return json({ ok: false, error: res.error || "Engine error", reply: errText });
+  }
+  const reply = String(res.text || "").trim();
+  await env.DB.prepare(
+    "INSERT INTO buddy_messages (conversation_id, role, content, input_tokens, output_tokens, created_at) " +
+    "VALUES (?, 'assistant', ?, ?, ?, ?)"
+  ).bind(id, reply, res.inputTokens || null, res.outputTokens || null, nowSec()).run();
+  await env.DB.prepare("UPDATE buddy_conversations SET updated_at = ? WHERE id = ?").bind(nowSec(), id).run();
+  return json({ ok: true, reply, inputTokens: res.inputTokens, outputTokens: res.outputTokens });
+}
+
+
 const ENDO_STATUSES = new Set(["diagnosed", "unknown"]);
 const ENDO_STAGES = new Set(["stage_1", "stage_2", "stage_3", "stage_4", "unsure"]);
 
@@ -6661,22 +6872,21 @@ async function acpListUsers(env, url) {
   const q = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 60);
   let rows = { results: [] };
   try {
+    const cols =
+      "u.id, u.username, u.email, u.display_name, u.created_at, " +
+      "u.endo_status, u.endo_stage, u.research_share_consent, " +
+      "(SELECT COUNT(*) FROM circle_members m WHERE m.user_id = u.id) AS circle_count, " +
+      "(SELECT COUNT(*) FROM symptoms s WHERE s.user_id = u.id) AS symptom_count";
     if (q) {
       const like = `%${q.replace(/[%_]/g, (c) => "\\" + c)}%`;
       rows = await env.DB.prepare(
-        "SELECT u.id, u.username, u.email, u.display_name, u.created_at, " +
-        "       (SELECT COUNT(*) FROM circle_members m WHERE m.user_id = u.id) AS circle_count, " +
-        "       (SELECT COUNT(*) FROM symptoms s WHERE s.user_id = u.id) AS symptom_count " +
-        "FROM users u " +
+        "SELECT " + cols + " FROM users u " +
         "WHERE LOWER(u.username) LIKE ? ESCAPE '\\' OR LOWER(u.email) LIKE ? ESCAPE '\\' OR LOWER(u.display_name) LIKE ? ESCAPE '\\' " +
         "ORDER BY u.created_at DESC LIMIT 200"
       ).bind(like, like, like).all();
     } else {
       rows = await env.DB.prepare(
-        "SELECT u.id, u.username, u.email, u.display_name, u.created_at, " +
-        "       (SELECT COUNT(*) FROM circle_members m WHERE m.user_id = u.id) AS circle_count, " +
-        "       (SELECT COUNT(*) FROM symptoms s WHERE s.user_id = u.id) AS symptom_count " +
-        "FROM users u ORDER BY u.created_at DESC LIMIT 200"
+        "SELECT " + cols + " FROM users u ORDER BY u.created_at DESC LIMIT 200"
       ).all();
     }
   } catch (err) {
@@ -6687,6 +6897,9 @@ async function acpListUsers(env, url) {
       id: u.id, username: u.username, email: u.email || null,
       displayName: u.display_name || null, createdAt: u.created_at,
       circleCount: u.circle_count || 0, symptomCount: u.symptom_count || 0,
+      endoStatus:           u.endo_status || null,
+      endoStage:            u.endo_stage  || null,
+      researchShareConsent: u.research_share_consent ? 1 : 0,
     })),
   });
 }
@@ -8518,9 +8731,13 @@ async function ctxAppointments(env, user, days) {
 // =============================================================================
 async function listInsights(env, user) {
   await ensureInsightSchema(env);
+  // 'buddy-system' is the Buddy chatbot's system prompt — it lives in
+  // insight_configs so admins can edit it from /acp but should never show
+  // up on /my-insights as a card the user could try to "run".
   const cfgs = await env.DB.prepare(
     "SELECT slug, title, emoji, description, refresh_hours, sort_order, updated_at " +
-    "FROM insight_configs WHERE enabled = 1 ORDER BY sort_order ASC, slug ASC"
+    "FROM insight_configs WHERE enabled = 1 AND slug != 'buddy-system' " +
+    "ORDER BY sort_order ASC, slug ASC"
   ).all().catch(() => ({ results: [] }));
   const slugs = (cfgs.results || []).map((c) => c.slug);
   let runs = { results: [] };

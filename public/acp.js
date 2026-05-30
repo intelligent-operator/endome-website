@@ -166,13 +166,26 @@
       card.innerHTML = `
         <table class="acp-table">
           <thead><tr>
-            <th>User</th><th>Email</th><th>Joined</th><th>Circles</th><th>Symptoms</th>
+            <th>User</th><th>Email</th><th>Joined</th><th>Endo</th><th>Research</th><th>Circles</th><th>Symptoms</th>
           </tr></thead>
           <tbody>${allUsersCache.map(userRow).join("")}</tbody>
         </table>`;
     } catch (err) {
       card.innerHTML = `<p class="acp-empty">Couldn't load users: ${escapeHtml(err.message || "")}</p>`;
     }
+  }
+  function endoBadge(u) {
+    if (u.endoStatus === "diagnosed") {
+      const stageLabel = ({ stage_1:"S1", stage_2:"S2", stage_3:"S3", stage_4:"S4", unsure:"?" })[u.endoStage] || "";
+      return `<span class="acp-pill" style="background:#ffe6ef;color:#a3174f">Dx${stageLabel ? ` · ${stageLabel}` : ""}</span>`;
+    }
+    if (u.endoStatus === "unknown") return `<span class="acp-pill" style="background:#fff5e6;color:#a16213">Watching</span>`;
+    return `<span class="acp-meta">—</span>`;
+  }
+  function researchBadge(u) {
+    return u.researchShareConsent
+      ? `<span class="acp-pill" style="background:#dff5e0;color:#2b6f1f">✓ Sharing</span>`
+      : `<span class="acp-meta">—</span>`;
   }
   function userRow(u) {
     return `<tr>
@@ -182,6 +195,8 @@
       </td>
       <td>${escapeHtml(u.email || "—")}</td>
       <td>${fmtDate(u.createdAt)}</td>
+      <td>${endoBadge(u)}</td>
+      <td>${researchBadge(u)}</td>
       <td>${u.circleCount}</td>
       <td>${u.symptomCount}</td>
     </tr>`;

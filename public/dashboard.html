@@ -65,6 +65,7 @@
         <a href="/tests"><span class="ico">🧪</span> Tests</a>
         <a href="/results"><span class="ico">📊</span> Results</a>
         <a href="/my-insights"><span class="ico">✨</span> Insights</a>
+        <a href="/buddy"><span class="ico">💬</span> Buddy</a>
         <a href="/meds"><span class="ico">💊</span> Medications</a>
         <a href="/food"><span class="ico">🥗</span> Food</a>
         <a href="/appointments"><span class="ico">📅</span> Appointments</a>
@@ -274,13 +275,17 @@
     </aside>
   </div>
 
-  <!-- Floating "Log Symptom" button -->
+  <!-- Floating "Log Symptom" button + Buddy companion shortcut -->
   <button id="fab-log" class="fab" type="button" aria-label="Log a symptom" data-modal="symptom">
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
       <path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
     </svg>
     <span>Log symptom</span>
   </button>
+  <link rel="stylesheet" href="/buddy.css?v=1780111683" />
+  <a class="fab-buddy" href="/buddy" aria-label="Open Buddy chat">
+    <span>💬</span><span>Buddy</span>
+  </a>
 
   <!-- Notification dropdown (anchored to the bell) -->
   <div id="notif-dropdown" class="notif-dropdown" hidden role="dialog" aria-label="Notifications">
