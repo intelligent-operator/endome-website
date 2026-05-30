@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
-  <link rel="stylesheet" href="/dashboard.css?v=1780053763" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780116415" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -99,6 +99,10 @@
       <!-- Doses due — populated by dashboard.js from /api/me/doses-due.
            Shows up only when there's at least one dose pending today. -->
       <div id="doses-due-slot"></div>
+
+      <!-- Early-diagnosis pattern watch — only renders when the user is on
+           the "watching" path AND 3+ markers are present. -->
+      <div id="endo-watch-slot"></div>
 
       <!-- Welcome banner -->
       <section class="welcome-banner">
@@ -909,7 +913,7 @@
 
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
-  <script src="/dashboard.js?v=1780094730" defer></script>
+  <script src="/dashboard.js?v=1780116415" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780114587" />
   <script src="/buddy-widget.js?v=1780114587" defer></script>
 </body>

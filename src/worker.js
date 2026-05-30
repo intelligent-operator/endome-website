@@ -335,6 +335,7 @@ export default {
           }
           if (url.pathname === "/api/me/endo" && request.method === "GET")  return jsonHeaders(await getEndoStatus(env, user));
           if (url.pathname === "/api/me/endo" && request.method === "PUT")  return jsonHeaders(await updateEndoStatus(request, env, user));
+          if (url.pathname === "/api/me/early-dx-watch" && request.method === "GET") return jsonHeaders(await getEndoPatternWatch(env, user));
 
           // --- Buddy chatbot ----------------------------------------------
           if (url.pathname === "/api/me/buddy/conversations" && request.method === "GET")  return jsonHeaders(await listBuddyConversations(env, user));
@@ -1615,6 +1616,131 @@ async function suggestCycleForDate(env, userId, date) {
   if (elapsed < 1 || elapsed > 60) return null;
   const day = Math.min(60, prior.cycle_day + elapsed);
   return { day, phase: prior.cycle_phase || null };
+}
+
+// =============================================================================
+// EARLY-DIAGNOSIS PATTERN WATCH
+//
+// For users on the "not yet diagnosed, please watch" path (endo_status =
+// 'unknown' AND wants_early_dx_support = 1), compare their last 60 days of
+// logged data against the recognised endometriosis symptom cluster. Each
+// marker is a deterministic check the user can audit. If 3+ are present
+// over a meaningful window, we surface "What we're noticing" — a card on
+// /dashboard, a payload Buddy reads, and a narrative insight Claude writes.
+//
+// Markers (10) are drawn from clinical reviews of endo presentation:
+//   - cyclical pelvic pain         - painful periods
+//   - heavy bleeding               - painful urination
+//   - painful bowel movements      - painful sex
+//   - chronic fatigue              - bloating / endo belly
+//   - back pain                    - cyclical GI symptoms
+//
+// NOT a diagnosis — explicitly framed as "patterns we're seeing".
+// =============================================================================
+const ENDO_PATTERN_DEFINITIONS = [
+  { key: "pelvic_pain_recurring", label: "Recurring pelvic pain",
+    why: "Pelvic pain logged on multiple days is the hallmark presentation of endo." },
+  { key: "severe_pain",            label: "Severe pain episodes",
+    why: "High-severity pain (4-5/5) on more than one day suggests this isn't a one-off." },
+  { key: "cyclical_pain",          label: "Pain clustering around your period",
+    why: "Pain concentrated in the menstrual phase is one of the strongest endo signals." },
+  { key: "heavy_bleeding",         label: "Heavy menstrual bleeding",
+    why: "Heavy flow alongside pelvic pain is a recognised endo pattern." },
+  { key: "painful_urination",      label: "Painful urination",
+    why: "Endometriosis can affect the bladder; painful urination is a known marker." },
+  { key: "painful_bowel",          label: "Painful bowel movements",
+    why: "Endo can affect the bowel; painful BMs (especially cyclical) are a known marker." },
+  { key: "painful_sex",            label: "Painful sex (dyspareunia)",
+    why: "Deep painful intercourse is one of the most specific endo symptoms." },
+  { key: "chronic_fatigue",        label: "Chronic fatigue",
+    why: "Persistent fatigue (beyond what your sleep/iron explain) is common with endo." },
+  { key: "endo_belly_bloating",    label: "Bloating / 'endo belly'",
+    why: "Recurring abdominal distension that worsens through the day fits the endo pattern." },
+  { key: "back_pain",              label: "Recurring lower back pain",
+    why: "Cyclical lower-back pain often accompanies pelvic endo." },
+];
+
+async function computeEndoPatternWatch(env, user) {
+  // Eligibility — only run for users on the "watching" path.
+  const u = await env.DB.prepare(
+    "SELECT endo_status, wants_early_dx_support FROM users WHERE id = ?"
+  ).bind(user.id).first().catch(() => null);
+  const eligible = u && u.endo_status === "unknown" && u.wants_early_dx_support === 1;
+
+  const sinceSec = nowSec() - 60 * 86400;
+  const sinceDate = new Date(sinceSec * 1000).toISOString().slice(0, 10);
+
+  // Two cheap pulls — symptoms + daily logs over the window.
+  const [sympRes, dailyRes] = await Promise.all([
+    env.DB.prepare(
+      "SELECT log_date, symptom, severity, triggers " +
+      "FROM symptoms WHERE user_id = ? AND logged_at >= ?"
+    ).bind(user.id, sinceSec).all().catch(() => ({ results: [] })),
+    env.DB.prepare(
+      "SELECT log_date, cycle_phase, flow, morning_pain, afternoon_pain, evening_overall " +
+      "FROM daily_logs WHERE user_id = ? AND log_date >= ?"
+    ).bind(user.id, sinceDate).all().catch(() => ({ results: [] })),
+  ]);
+  const symps = sympRes.results || [];
+  const dailies = dailyRes.results || [];
+  const totalSyms = symps.length;
+  const totalDailies = dailies.length;
+
+  // --- Marker detection -------------------------------------------------
+  const hits = (key) => symps.filter((s) => s.symptom === key);
+  const distinctDays = (rows) => new Set(rows.map((r) => r.log_date)).size;
+  const markers = new Set();
+
+  // 1. Pelvic pain on >= 3 distinct days OR cramps on >= 3 days.
+  if (distinctDays(hits("pelvic_pain")) >= 3 || distinctDays(hits("cramps")) >= 3) {
+    markers.add("pelvic_pain_recurring");
+  }
+  // 2. Severe pain (severity 4 or 5 on a 1-5 scale).
+  const severeRows = symps.filter((s) =>
+    ["pelvic_pain", "cramps", "back_pain", "painful_urination", "painful_bowel", "painful_sex"].includes(s.symptom)
+    && (s.severity || 0) >= 4
+  );
+  if (distinctDays(severeRows) >= 2) markers.add("severe_pain");
+  // 3. Cyclical pain — pain symptoms on menstrual-phase days.
+  const menstrualDates = new Set(dailies.filter((d) => d.cycle_phase === "menstrual").map((d) => d.log_date));
+  const painOnMenstrual = symps.filter((s) =>
+    ["pelvic_pain", "cramps", "back_pain"].includes(s.symptom) && menstrualDates.has(s.log_date)
+  );
+  if (menstrualDates.size >= 2 && distinctDays(painOnMenstrual) >= 2) markers.add("cyclical_pain");
+  // 4. Heavy bleeding on >= 2 days.
+  if (dailies.filter((d) => d.flow === "heavy").length >= 2) markers.add("heavy_bleeding");
+  // 5. Painful urination ever.
+  if (hits("painful_urination").length >= 1) markers.add("painful_urination");
+  // 6. Painful bowel ever.
+  if (hits("painful_bowel").length >= 1) markers.add("painful_bowel");
+  // 7. Painful sex ever.
+  if (hits("painful_sex").length >= 1) markers.add("painful_sex");
+  // 8. Chronic fatigue — fatigue on >= 6 distinct days (~1/wk) in 60d.
+  if (distinctDays(hits("fatigue")) >= 6) markers.add("chronic_fatigue");
+  // 9. Bloating / endo belly on >= 3 days.
+  if (distinctDays(hits("endo_belly")) >= 3 || distinctDays(hits("bloating")) >= 4) {
+    markers.add("endo_belly_bloating");
+  }
+  // 10. Back pain on >= 3 distinct days.
+  if (distinctDays(hits("back_pain")) >= 3) markers.add("back_pain");
+
+  const detected = ENDO_PATTERN_DEFINITIONS.filter((p) => markers.has(p.key));
+  const score = detected.length;
+
+  return {
+    eligible: !!eligible,
+    score,
+    threshold: 3,
+    flagged: eligible && score >= 3,
+    sample: { symptomCount: totalSyms, dailyLogCount: totalDailies, windowDays: 60 },
+    markers: detected,
+    candidateMarkers: ENDO_PATTERN_DEFINITIONS,
+    generatedAt: nowSec(),
+  };
+}
+
+async function getEndoPatternWatch(env, user) {
+  return json(await computeEndoPatternWatch(env, user));
 }
 
 // Virtual reminders synthesised from medication_schedules. Returns notification
@@ -4716,6 +4842,19 @@ async function sendBuddyMessage(request, env, user, id) {
     }
   } catch {}
 
+  // Early-diagnosis pattern watch — if the user is on the "watching" path
+  // and we've flagged 3+ endo markers in their data, tell Buddy explicitly
+  // so they can bring it up proactively in conversation (warm, not alarming).
+  let watchLine = "";
+  try {
+    const w = await computeEndoPatternWatch(env, user);
+    if (w.eligible && w.flagged) {
+      const names = w.markers.map((m) => m.label).join("; ");
+      watchLine = `Early-dx pattern watch (flagged): ${w.score} of 10 known endometriosis markers detected in their last 60 days — ${names}. ` +
+        `Bring this up GENTLY when relevant (\"I've been noticing a pattern in your logs…\"), be specific about which markers and which entries support each, and frame as something WORTH knowing — not a diagnosis.`;
+    }
+  } catch {}
+
   // Per-turn data freshness check — figure out whether the user actually
   // has anything logged so we can tell Claude "yes, they do" definitively.
   // Without this Claude tends to play it safe and say "I can't see your
@@ -4733,6 +4872,7 @@ async function sendBuddyMessage(request, env, user, id) {
     sys.prompt,
     petPersona,
     endoLine,
+    watchLine,
     "",
     "=== The user's CURRENT logged EndoMe data ===",
     hasAnyData
@@ -8347,6 +8487,27 @@ async function seedInsightDefaults(env) {
         "DATA:\n{context}",
     },
     {
+      slug: "endo-pattern-watch", emoji: "🔭", sort_order: 8,
+      title: "What we're noticing",
+      description: "For users on the early-diagnosis watch — flags the endo-pattern markers we can see in your logs and what they typically mean.",
+      data_scope: ["symptoms_30d", "daily_logs_30d"],
+      prompt_template:
+        "You are EndoMe — a warm, knowledgeable companion writing the user's 'What we're noticing' report. " +
+        "This user is on our early-diagnosis pattern watch (status: not yet diagnosed, opted-in). " +
+        "Below is their last 30 days of symptoms + daily check-ins. The well-known endometriosis symptom cluster " +
+        "includes: recurring pelvic pain, severe pain episodes, pain clustering around the period, heavy " +
+        "menstrual bleeding, painful urination, painful bowel movements, painful sex (dyspareunia), chronic " +
+        "fatigue, bloating / 'endo belly', and recurring lower-back pain. " +
+        "Walk through which of those markers you can SEE in their data, citing real dates / severities / triggers. " +
+        "Be honest about markers that AREN'T present. " +
+        "Then explain in plain language why the present pattern is worth knowing — not as a diagnosis (you can't " +
+        "diagnose), but as something to track + raise with their care team if they choose to. " +
+        "End with 2-3 specific things they could log over the next month to sharpen the picture (e.g. flow level " +
+        "during their period, bowel symptoms during menses, fatigue severity rating). " +
+        "Warm, plain, specific. Render as markdown. Never alarmist.\n\n" +
+        "DATA:\n{context}",
+    },
+    {
       slug: "food-flares", emoji: "🍽", sort_order: 35,
       title: "What's on your plate",
       description: "Pairs your food log with your symptoms to spot which foods seem to precede flare days.",
@@ -9030,22 +9191,34 @@ async function listInsights(env, user) {
 
   const aiConfigured = !!(env.AWS_ACCESS_KEY_ID || env.ANTHROPIC_API_KEY);
 
+  // The "endo-pattern-watch" card only makes sense for users on the
+  // early-diagnosis watching path. Hide it for everyone else.
+  let showEndoWatch = false;
+  try {
+    const u = await env.DB.prepare(
+      "SELECT endo_status, wants_early_dx_support FROM users WHERE id = ?"
+    ).bind(user.id).first();
+    showEndoWatch = !!(u && u.endo_status === "unknown" && u.wants_early_dx_support === 1);
+  } catch {}
+
   return json({
     aiConfigured,
     aiBackend: env.AWS_ACCESS_KEY_ID && env.AWS_BEDROCK_REGION ? "bedrock"
              : env.ANTHROPIC_API_KEY ? "anthropic" : null,
-    insights: (cfgs.results || []).map((c) => {
-      const run = runMap.get(c.slug);
-      return {
-        slug: c.slug, title: c.title, emoji: c.emoji || "✨",
-        description: c.description, refreshHours: c.refresh_hours,
-        latest: run ? {
-          status: run.status, outputMd: run.output_md || null,
-          error: run.error || null, generatedAt: run.generated_at,
-          inputTokens: run.input_tokens, outputTokens: run.output_tokens,
-        } : null,
-      };
-    }),
+    insights: (cfgs.results || [])
+      .filter((c) => c.slug !== "endo-pattern-watch" || showEndoWatch)
+      .map((c) => {
+        const run = runMap.get(c.slug);
+        return {
+          slug: c.slug, title: c.title, emoji: c.emoji || "✨",
+          description: c.description, refreshHours: c.refresh_hours,
+          latest: run ? {
+            status: run.status, outputMd: run.output_md || null,
+            error: run.error || null, generatedAt: run.generated_at,
+            inputTokens: run.input_tokens, outputTokens: run.output_tokens,
+          } : null,
+        };
+      }),
   });
 }
 

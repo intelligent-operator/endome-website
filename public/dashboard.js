@@ -114,6 +114,46 @@ function render() {
   renderStreakWeek();
   renderStoryMini();
   renderDosesDue();
+  renderEndoWatch();
+}
+
+// --- Early-diagnosis pattern watch ---------------------------------------
+// Shows up only for users on the "not yet diagnosed, please watch" path
+// once 3+ endo markers are present in their last 60 days. Warm, plain,
+// not alarmist — and always framed as "patterns we're noticing", never
+// as a diagnosis.
+async function renderEndoWatch() {
+  const slot = document.getElementById("endo-watch-slot");
+  if (!slot) return;
+  let data;
+  try {
+    const r = await fetch("/api/me/early-dx-watch", { credentials: "same-origin" });
+    if (!r.ok) { slot.innerHTML = ""; return; }
+    data = await r.json();
+  } catch { slot.innerHTML = ""; return; }
+
+  if (!data.eligible || !data.flagged) { slot.innerHTML = ""; return; }
+
+  const markerList = data.markers.map((m) => `<li>
+    <span class="ew-check">✓</span>
+    <div><strong>${escapeHtml(m.label)}</strong><span>${escapeHtml(m.why)}</span></div>
+  </li>`).join("");
+
+  slot.innerHTML = `
+    <section class="endo-watch-card">
+      <header class="ew-head">
+        <div class="ew-emoji">🔭</div>
+        <div class="ew-title">
+          <h3>What we're noticing</h3>
+          <span>${data.score} of 10 endo-pattern markers in your last ${data.sample.windowDays} days · not a diagnosis</span>
+        </div>
+        <a class="ew-cta" href="/my-insights">Read full write-up →</a>
+      </header>
+      <ul class="ew-list">${markerList}</ul>
+      <footer class="ew-foot">
+        <p>This is patterns we're seeing in your logs — your call what to do with it. Turn this off any time in <a href="/profile">Profile → Endometriosis</a>.</p>
+      </footer>
+    </section>`;
 }
 
 // --- Doses due banner ----------------------------------------------------
