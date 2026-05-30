@@ -4269,6 +4269,10 @@ async function ensureProfileSchema(env) {
     "ALTER TABLE users ADD COLUMN endo_status TEXT",
     "ALTER TABLE users ADD COLUMN endo_stage TEXT",
     "ALTER TABLE users ADD COLUMN wants_early_dx_support INTEGER NOT NULL DEFAULT 0",
+    // Research consent — opt-in only. ZERO data leaves EndoMe; researchSharedAt
+    // records the moment of consent so the consent record is auditable.
+    "ALTER TABLE users ADD COLUMN research_share_consent INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN research_consent_at INTEGER",
     "CREATE TABLE IF NOT EXISTS friendships (" +
     "  user_id_a    TEXT    NOT NULL," +
     "  user_id_b    TEXT    NOT NULL," +
@@ -4407,25 +4411,42 @@ const ENDO_STAGES = new Set(["stage_1", "stage_2", "stage_3", "stage_4", "unsure
 async function getEndoStatus(env, user) {
   await ensureProfileSchema(env);
   const row = await env.DB.prepare(
-    "SELECT endo_status, endo_stage, wants_early_dx_support FROM users WHERE id = ?"
+    "SELECT endo_status, endo_stage, wants_early_dx_support, " +
+    "       research_share_consent, research_consent_at FROM users WHERE id = ?"
   ).bind(user.id).first().catch(() => null);
   return json({
     status:                row?.endo_status || null,
     stage:                 row?.endo_stage  || null,
     wantsEarlyDxSupport:   row?.wants_early_dx_support ? 1 : 0,
+    researchShareConsent:  row?.research_share_consent ? 1 : 0,
+    researchConsentAt:     row?.research_consent_at || null,
   });
 }
 async function updateEndoStatus(request, env, user) {
   await ensureProfileSchema(env);
   const body = await readJsonSafe(request);
   if (!body) return json({ error: "Invalid body" }, 400);
-  const status = body.status && ENDO_STATUSES.has(body.status) ? body.status : null;
-  const stage  = body.stage  && ENDO_STAGES.has(body.stage)   ? body.stage  : null;
-  const wants  = body.wantsEarlyDxSupport ? 1 : 0;
-  await env.DB.prepare(
-    "UPDATE users SET endo_status = ?, endo_stage = ?, wants_early_dx_support = ? WHERE id = ?"
-  ).bind(status, status === "diagnosed" ? stage : null, status === "unknown" ? wants : 0, user.id).run();
-  return json({ ok: true, status, stage: status === "diagnosed" ? stage : null, wantsEarlyDxSupport: status === "unknown" ? wants : 0 });
+  // Status / stage / early-dx — only updated when the request actually
+  // names them, so the profile + research-consent forms can each save
+  // independently without clobbering the other's fields.
+  const sets = []; const binds = [];
+  if ("status" in body) {
+    const status = body.status && ENDO_STATUSES.has(body.status) ? body.status : null;
+    sets.push("endo_status = ?");           binds.push(status);
+    sets.push("endo_stage = ?");            binds.push(status === "diagnosed" && ENDO_STAGES.has(body.stage) ? body.stage : null);
+    sets.push("wants_early_dx_support = ?"); binds.push(status === "unknown" && body.wantsEarlyDxSupport ? 1 : 0);
+  }
+  if ("researchShareConsent" in body) {
+    const consent = body.researchShareConsent ? 1 : 0;
+    sets.push("research_share_consent = ?"); binds.push(consent);
+    // Stamp the consent moment when granting; null it when withdrawing,
+    // so the audit row only reflects an *active* consent timestamp.
+    sets.push("research_consent_at = ?");    binds.push(consent ? nowSec() : null);
+  }
+  if (!sets.length) return json({ error: "Nothing to update" }, 400);
+  binds.push(user.id);
+  await env.DB.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).bind(...binds).run();
+  return getEndoStatus(env, user);
 }
 
 async function getMyProfile(env, user) {

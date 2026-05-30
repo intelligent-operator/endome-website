@@ -306,6 +306,44 @@ console.info("EndoMe profile build v1");
   });
   loadEndo();
 
+  // --- Research-share consent (sits in the same /api/me/endo store) ----
+  async function loadResearchConsent() {
+    try {
+      const data = await fetchJson("/api/me/endo");
+      const cb = document.getElementById("research-consent");
+      if (cb) cb.checked = !!data.researchShareConsent;
+      const since = document.getElementById("research-consent-since");
+      if (since) {
+        if (data.researchShareConsent && data.researchConsentAt) {
+          const d = new Date(data.researchConsentAt * 1000);
+          since.textContent = `Sharing since ${d.toLocaleDateString()}.`;
+          since.hidden = false;
+        } else {
+          since.hidden = true;
+        }
+      }
+    } catch {}
+  }
+  document.getElementById("research-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const checked = document.getElementById("research-consent").checked ? 1 : 0;
+    const statusEl = document.getElementById("research-status");
+    statusEl.textContent = "Saving…"; statusEl.className = "form-status";
+    try {
+      await fetchJson("/api/me/endo", {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ researchShareConsent: checked }),
+      });
+      statusEl.textContent = checked ? "Sharing enabled — thank you." : "Sharing turned off.";
+      statusEl.className = "form-status ok";
+      toast("Updated", "ok");
+      loadResearchConsent();
+    } catch (err) {
+      statusEl.textContent = err.message || "Couldn't save."; statusEl.className = "form-status err";
+    }
+  });
+  loadResearchConsent();
+
   // --- Helpers ---------------------------------------------------------
   async function fetchJson(url, init = {}) {
     const res = await fetch(url, { credentials: "same-origin", ...init });

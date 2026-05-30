@@ -4,7 +4,7 @@
 
   let step = 1;
   let selectedPet = "luna";
-  const MAX_STEP = 4;
+  const MAX_STEP = 5;
 
   // --- Endo status step: toggle stage / opt-in blocks on radio change ---
   function refreshEndoBlocks() {
@@ -86,6 +86,29 @@
         return;
       }
       if (step === 3) {
+        // Persist research-consent answer before advancing.
+        const cont = $("research-continue");
+        cont.disabled = true;
+        cont.textContent = "Saving…";
+        try {
+          const checked = $("research-consent").checked ? 1 : 0;
+          const res = await fetch("/api/me/endo", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ researchShareConsent: checked }),
+            credentials: "same-origin",
+          });
+          if (!res.ok) throw new Error("save failed");
+          showStep(4);
+        } catch {
+          alert("Could not save right now. Try again.");
+        } finally {
+          cont.disabled = false;
+          cont.textContent = "Continue →";
+        }
+        return;
+      }
+      if (step === 4) {
         // Persist pet selection before advancing.
         const cont = $("pet-continue");
         cont.disabled = true;
@@ -99,7 +122,7 @@
             credentials: "same-origin",
           });
           if (!res.ok) throw new Error("save failed");
-          showStep(4);
+          showStep(5);
         } catch {
           alert("Could not save your pet. Try again.");
         } finally {

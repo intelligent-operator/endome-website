@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
-  <link rel="stylesheet" href="/onboarding.css?v=1780110562" />
+  <link rel="stylesheet" href="/onboarding.css?v=1780110852" />
 </head>
 <body class="ob-body">
   <div id="page-loader" class="page-loader">
@@ -35,6 +35,7 @@
         <span class="ob-dot" data-dot="2"></span>
         <span class="ob-dot" data-dot="3"></span>
         <span class="ob-dot" data-dot="4"></span>
+        <span class="ob-dot" data-dot="5"></span>
       </div>
       <a href="/dashboard" class="ob-skip">Skip for now</a>
     </header>
@@ -110,8 +111,37 @@
       </div>
     </section>
 
-    <!-- STEP 3: pick a pet -->
+    <!-- STEP 3: research data-sharing consent -->
     <section class="ob-step" data-step="3" hidden>
+      <header class="ob-step-h">
+        <h1>Help fund a cure</h1>
+        <p class="ob-lead">Endometriosis research is chronically underfunded. The biggest thing missing isn't money — it's <strong>data</strong>. By opting in, your logs (symptoms, cycle, daily check-ins, results) help our EndoMe research team spot patterns that lead to better treatments and one day, a cure.</p>
+      </header>
+
+      <ul class="ob-research-pillars">
+        <li><span>🔒</span><div><strong>Always anonymous</strong><p>Your name, email, username and any identifying details are stripped before anything reaches a researcher.</p></div></li>
+        <li><span>🏥</span><div><strong>EndoMe team only</strong><p>Data is used solely by EndoMe researchers. It is never sold, shared with insurers, advertisers, or any third party.</p></div></li>
+        <li><span>🛑</span><div><strong>Reversible any time</strong><p>Withdraw consent in <strong>Profile → Research</strong> and we stop including your data in the next batch.</p></div></li>
+      </ul>
+
+      <label class="ob-research-optin" id="research-optin-card">
+        <input type="checkbox" id="research-consent" />
+        <span>
+          <strong>Yes, share my anonymised data with EndoMe research</strong>
+          <em>I understand my data will be de-identified and used only by EndoMe researchers to advance endometriosis treatment and find a cure. I can withdraw any time.</em>
+        </span>
+      </label>
+
+      <p class="ob-endo-foot">You can change this in <strong>Profile → Research</strong> whenever you want.</p>
+
+      <div class="ob-actions split">
+        <button class="btn btn-ghost" data-prev>← Back</button>
+        <button class="btn btn-primary" data-next id="research-continue">Continue →</button>
+      </div>
+    </section>
+
+    <!-- STEP 4: pick a pet -->
+    <section class="ob-step" data-step="4" hidden>
       <header class="ob-step-h">
         <h1>Pick your EndoPet</h1>
         <p class="ob-lead">Your little companion on this journey. They grow with every entry.</p>
@@ -173,8 +203,8 @@
       </div>
     </section>
 
-    <!-- STEP 4: EndoMe DNA pitch -->
-    <section class="ob-step" data-step="4" hidden>
+    <!-- STEP 5: EndoMe DNA pitch -->
+    <section class="ob-step" data-step="5" hidden>
       <header class="ob-step-h">
         <h1>Meet <span class="brand-em">EndoMe DNA</span></h1>
         <p class="ob-lead">A simple at-home DNA test that maps the markers most linked to endometriosis.</p>
@@ -227,6 +257,6 @@
   <!-- Toast for "coming soon" notice on Buy click -->
   <div id="ob-toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/onboarding.js?v=1780110562" defer></script>
+  <script src="/onboarding.js?v=1780110852" defer></script>
 </body>
 </html>

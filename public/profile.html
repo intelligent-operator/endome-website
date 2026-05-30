@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780054696" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/profile.css?v=1780110562" />
+  <link rel="stylesheet" href="/profile.css?v=1780110852" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -181,6 +181,33 @@
         </form>
       </section>
 
+      <!-- Research consent (anonymous data sharing for EndoMe researchers) -->
+      <section class="community-section">
+        <div class="section-head">
+          <h2>Research</h2>
+          <span class="section-hint">Help fund a cure — anonymised, EndoMe team only.</span>
+        </div>
+        <ul class="ob-research-pillars">
+          <li><span>🔒</span><div><strong>Always anonymous</strong><p>Name, email, username and identifying details stripped before anything reaches a researcher.</p></div></li>
+          <li><span>🏥</span><div><strong>EndoMe team only</strong><p>Never sold, never shared with insurers, advertisers or any third party.</p></div></li>
+          <li><span>🛑</span><div><strong>Reversible any time</strong><p>Untick and save — we stop including your data in the next batch.</p></div></li>
+        </ul>
+        <form id="research-form" class="profile-form">
+          <label class="ob-research-optin">
+            <input type="checkbox" id="research-consent" />
+            <span>
+              <strong>Share my anonymised data with EndoMe research</strong>
+              <em>I understand my data will be de-identified and used only by EndoMe researchers to advance endometriosis treatment and find a cure.</em>
+            </span>
+          </label>
+          <p class="ob-endo-foot" id="research-consent-since" hidden></p>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <p class="form-status" id="research-status" role="status"></p>
+          </div>
+        </form>
+      </section>
+
       <!-- Friend requests + friends -->
       <section class="community-section" id="incoming-section" hidden>
         <div class="section-head">
@@ -210,6 +237,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/profile.js?v=1780110562" defer></script>
+  <script src="/profile.js?v=1780110852" defer></script>
 </body>
 </html>

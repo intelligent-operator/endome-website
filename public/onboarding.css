@@ -152,3 +152,26 @@
 .ob-endo-optin em{font-style:normal;font-size:11px;color:#5a3a48;line-height:1.45}
 
 .ob-endo-foot{margin:6px 0 18px;font-size:11px;color:#7a5f6c;text-align:center}
+
+/* ----- Research-consent step ----- */
+.ob-research-pillars{
+  list-style:none;padding:0;margin:0 0 16px;display:flex;flex-direction:column;gap:8px;
+}
+.ob-research-pillars li{
+  display:flex;gap:14px;align-items:flex-start;padding:12px 14px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:12px;
+}
+.ob-research-pillars li > span{font-size:22px;line-height:1;flex-shrink:0}
+.ob-research-pillars strong{display:block;font-size:13px;color:#2b1922;font-weight:700;margin-bottom:2px}
+.ob-research-pillars p{margin:0;font-size:12px;color:#5a3a48;line-height:1.5}
+
+.ob-research-optin{
+  display:flex;gap:12px;align-items:flex-start;padding:14px 16px;margin:0 0 12px;
+  background:linear-gradient(135deg,#fff5f8,#fff);border:1px solid #ffd6e0;border-radius:14px;
+  cursor:pointer;transition:border-color .15s,box-shadow .15s;
+}
+.ob-research-optin:has(input:checked){border-color:#ff4e8a;box-shadow:0 8px 20px rgba(255,77,138,.12);background:#fff5f8}
+.ob-research-optin input{margin-top:3px;width:18px;height:18px;accent-color:#ff4e8a;flex-shrink:0}
+.ob-research-optin span{display:flex;flex-direction:column;gap:4px}
+.ob-research-optin strong{font-size:14px;color:#2b1922;font-weight:700}
+.ob-research-optin em{font-style:normal;font-size:12px;color:#5a3a48;line-height:1.5}
