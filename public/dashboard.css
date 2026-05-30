@@ -1170,6 +1170,12 @@ body.drawer-open{overflow:hidden}
 /* =============================================================
    Period calendar modal
    ============================================================= */
+/* The period modal: shrink heading + chrome on small screens so the
+   whole calendar + action bar fit without scrolling. */
+#modal-period .modal-card{max-width:460px}
+#modal-period .modal-h{margin-bottom:8px}
+#modal-period .modal-h p{font-size:12.5px;margin:4px 0 0;color:#7a5f6c}
+
 .period-cal{margin:8px 0 4px}
 .period-cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .period-cal-head strong{font-size:15px;color:#2b1922;font-weight:700}
@@ -1183,10 +1189,19 @@ body.drawer-open{overflow:hidden}
 .period-cal-dow span{text-align:center;font-size:10px;font-weight:700;color:#a08596;text-transform:uppercase}
 .period-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .pc-cell{
-  position:relative;aspect-ratio:1;border:1px solid transparent;border-radius:10px;
+  position:relative;
+  /* Fallback min-height for browsers without aspect-ratio support
+     (older iOS Safari, < Chrome 88) — otherwise cells collapse and the
+     calendar is unusable. */
+  min-height:36px;
+  aspect-ratio:1;
+  border:1px solid transparent;border-radius:10px;
   background:#fff5f8;cursor:pointer;font-family:inherit;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   padding:0;transition:background .12s,border-color .12s,transform .1s;
+  /* Mobile Safari: stop the page from intercepting tap as a double-tap-
+     to-zoom delay. */
+  touch-action:manipulation;
 }
 .pc-cell.pc-empty{background:transparent;cursor:default;border:none}
 .pc-cell:not(.pc-empty):not(.pc-future):hover{border-color:#ff4e8a;background:#ffeaf2;transform:scale(1.04)}
@@ -1226,6 +1241,27 @@ body.drawer-open{overflow:hidden}
   font-size:13px;color:#3a2330;line-height:1.5;text-align:center;
 }
 .period-selected strong{color:#ff4e8a}
+
+/* Mobile — keep the calendar usable in a 320-wide viewport. Shrink
+   cells, headings and legend so the whole modal fits with the action
+   buttons still on screen. */
+@media (max-width:480px){
+  #modal-period .modal-card{padding:18px 12px 14px;border-radius:16px}
+  #modal-period .modal-h h3{font-size:18px}
+  #modal-period .modal-h p{font-size:11.5px;line-height:1.4}
+  .period-cal-head{margin-bottom:6px}
+  .period-cal-head strong{font-size:13px}
+  .period-cal-nav{width:30px;height:30px;font-size:16px}
+  .period-cal-dow{gap:2px;margin-bottom:4px}
+  .period-cal-dow span{font-size:9px}
+  .period-cal-grid{gap:2px}
+  .pc-cell{border-radius:8px}
+  .pc-num{font-size:12px}
+  .pc-cd{font-size:7px}
+  .period-cal-legend{gap:6px 10px;font-size:10px;margin-top:8px}
+  .leg-dot{width:9px;height:9px}
+  .period-selected{padding:8px 10px;font-size:12px;margin:10px 0 2px}
+}
 
 /* =============================================================
    Cycle prediction card — dashboard "next period" widget.

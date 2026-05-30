@@ -594,30 +594,47 @@ function daysBetweenIso(a, b) {
 }
 
 function openPeriodCalendar(cycleData) {
-  const modal = document.getElementById("modal-period");
-  if (!modal) return;
-  _periodCalState.cycleData = cycleData || null;
-  _periodCalState.start = null;
-  _periodCalState.end = null;
-  const today = todayLocalDate();
-  const td = new Date(today + "T00:00:00");
-  _periodCalState.viewYear = td.getFullYear();
-  _periodCalState.viewMonth = td.getMonth();
+  try {
+    const modal = document.getElementById("modal-period");
+    if (!modal) return;
+    _periodCalState.cycleData = cycleData || null;
+    _periodCalState.start = null;
+    _periodCalState.end = null;
+    const today = todayLocalDate();
+    const td = new Date(today + "T00:00:00");
+    _periodCalState.viewYear = td.getFullYear();
+    _periodCalState.viewMonth = td.getMonth();
 
-  paintSelectedSummary();
-  renderPeriodCalendar();
+    paintSelectedSummary();
+    renderPeriodCalendar();
 
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden", "false");
-  document.body.classList.add("modal-open");
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
 
-  // Defensive: explicitly wire close buttons in case the global delegated
-  // handler is intercepted elsewhere. Safe to call repeatedly — using
-  // onclick replaces any previous binding.
-  modal.querySelectorAll("[data-close-modal]").forEach((el) => {
-    el.onclick = () => closeAllModals();
-  });
+    // Defensive: explicitly wire close buttons + the backdrop so a
+    // tap anywhere outside the card releases the body lock, even if
+    // the global delegated handler hiccups on mobile.
+    modal.querySelectorAll("[data-close-modal]").forEach((el) => {
+      el.onclick = () => closeAllModals();
+    });
+  } catch (err) {
+    // Last-ditch safety: never leave the user with a locked body if
+    // the modal can't open for some reason.
+    console.warn("openPeriodCalendar failed:", err?.message);
+    document.body.classList.remove("modal-open");
+    toast("Couldn't open the period calendar — try refreshing the page.", "error");
+  }
 }
+
+// Global escape hatch: tap the backdrop on mobile reliably closes the
+// modal. Backdrop has data-close-modal already, but we double-bind so
+// nothing can swallow it.
+document.addEventListener("touchend", (e) => {
+  if (e.target?.classList?.contains("modal-backdrop")) {
+    closeAllModals();
+  }
+}, { passive: true });
 
 // Pre-compute the sets of days for past logged periods + predicted future
 // periods so the renderer is a tight loop.

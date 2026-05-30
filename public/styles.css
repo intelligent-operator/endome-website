@@ -615,6 +615,10 @@ body.is-signed-in .nav-when-out{display:none !important}
 .modal-card{
   position:relative;z-index:1;
   width:100%;max-width:420px;
+  /* vh fallback for older mobile browsers that don't know dvh — without
+     this, the cap silently drops and the modal becomes taller than the
+     viewport with the close button out of reach. */
+  max-height:calc(100vh - 40px);
   max-height:calc(100dvh - 40px);
   overflow-y:auto;
   -webkit-overflow-scrolling:touch;
@@ -622,6 +626,17 @@ body.is-signed-in .nav-when-out{display:none !important}
   padding:32px 28px 26px;text-align:center;
   box-shadow:0 30px 70px rgba(58,29,43,.35);
   animation:modal-pop .2s ease-out;
+}
+.modal-actions{
+  display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;
+  margin-top:16px;
+}
+.modal-actions .btn{flex:0 1 auto;min-width:96px}
+@media (max-width:480px){
+  .modal{padding:10px}
+  .modal-card{padding:22px 18px 18px;border-radius:18px}
+  .modal-actions{flex-direction:column-reverse}
+  .modal-actions .btn{width:100%}
 }
 @keyframes modal-pop{
   from{transform:translateY(8px) scale(.98);opacity:0}
