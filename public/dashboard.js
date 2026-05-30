@@ -478,12 +478,22 @@ document.addEventListener("submit", async (e) => {
 async function renderCyclePrediction() {
   const slot = document.getElementById("cycle-predict-slot");
   if (!slot) return;
+  try {
+    await _renderCyclePredictionInner(slot);
+  } catch (err) {
+    // Failing the cycle card must never break the rest of the dashboard.
+    console.warn("renderCyclePrediction failed:", err?.message);
+    slot.innerHTML = "";
+  }
+}
+async function _renderCyclePredictionInner(slot) {
   let data;
   try {
     const r = await fetch("/api/me/cycles", { credentials: "same-origin" });
     if (!r.ok) { slot.innerHTML = ""; return; }
     data = await r.json();
   } catch { slot.innerHTML = ""; return; }
+  if (!data || typeof data !== "object") { slot.innerHTML = ""; return; }
 
   const p = data.prediction;
   // No prediction yet — prompt to log a period start so we can start.
@@ -616,28 +626,39 @@ function buildPredictionMaps(cycleData) {
   const pred = cycleData?.prediction || null;
   const avgPeriodLen = cycleData?.summary?.avgPeriodLength || pred?.avgPeriodLength || 5;
 
+  // Cap every loop at 45 days (longer than any reasonable period or
+  // window) so a malformed end_date or fertile range can never lock the
+  // tab. Defense in depth — predictNextCycle should already filter out
+  // bad data, but bad data here would break the entire dashboard.
+  const SAFE = 45;
   const loggedDays = new Set();   // confirmed period days from history
   const loggedStarts = new Set(); // start dates (for the "logged" dot)
   for (const c of cycles) {
     if (!c.start_date) continue;
     loggedStarts.add(c.start_date);
-    const end = c.end_date || addDaysIso(c.start_date, Math.max(0, (c.period_length || avgPeriodLen) - 1));
+    const len = Math.max(1, Math.min(SAFE, c.period_length || avgPeriodLen || 5));
+    const computedEnd = addDaysIso(c.start_date, len - 1);
+    const end = (c.end_date && c.end_date >= c.start_date && daysBetweenIso(c.start_date, c.end_date) <= SAFE)
+      ? c.end_date : computedEnd;
     let d = c.start_date;
-    while (d <= end) { loggedDays.add(d); d = addDaysIso(d, 1); }
+    let guard = 0;
+    while (d <= end && guard++ < SAFE) { loggedDays.add(d); d = addDaysIso(d, 1); }
   }
 
   const predictedDays = new Set();
   const fertileDays = new Set();
   let ovulationDay = null;
   if (pred?.nextStart) {
-    // Two future cycles worth of predicted period days.
-    for (let i = 0; i < avgPeriodLen; i++) predictedDays.add(addDaysIso(pred.nextStart, i));
-    const next2 = addDaysIso(pred.nextStart, pred.avgCycleLength || 28);
-    for (let i = 0; i < avgPeriodLen; i++) predictedDays.add(addDaysIso(next2, i));
+    const pLen = Math.max(1, Math.min(SAFE, avgPeriodLen || 5));
+    for (let i = 0; i < pLen; i++) predictedDays.add(addDaysIso(pred.nextStart, i));
+    const cycleLen = Math.max(18, Math.min(60, pred.avgCycleLength || 28));
+    const next2 = addDaysIso(pred.nextStart, cycleLen);
+    for (let i = 0; i < pLen; i++) predictedDays.add(addDaysIso(next2, i));
   }
-  if (pred?.fertileStart && pred?.fertileEnd) {
+  if (pred?.fertileStart && pred?.fertileEnd && daysBetweenIso(pred.fertileStart, pred.fertileEnd) <= SAFE) {
     let d = pred.fertileStart;
-    while (daysBetweenIso(d, pred.fertileEnd) >= 0) { fertileDays.add(d); d = addDaysIso(d, 1); }
+    let guard = 0;
+    while (daysBetweenIso(d, pred.fertileEnd) >= 0 && guard++ < SAFE) { fertileDays.add(d); d = addDaysIso(d, 1); }
   }
   if (pred?.ovulation) ovulationDay = pred.ovulation;
 
@@ -785,6 +806,7 @@ document.getElementById("period-save-btn")?.addEventListener("click", async () =
   const btn = document.getElementById("period-save-btn");
   const prev = btn.textContent;
   btn.disabled = true; btn.textContent = "Logging…";
+  let posted = false;
   try {
     const r = await fetch("/api/me/cycles", {
       method: "POST",
@@ -792,13 +814,23 @@ document.getElementById("period-save-btn")?.addEventListener("click", async () =
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ start_date: start, end_date: end || null }),
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) {
+      let msg = r.statusText;
+      try { const j = await r.json(); msg = j.error || msg; } catch {}
+      throw new Error(msg);
+    }
+    posted = true;
     toast("Period logged 🌸");
-    closeAllModals();
-    renderCyclePrediction();
   } catch (err) {
     toast(`Couldn't log: ${err.message || err}`, "error");
+  } finally {
+    // Always reset the button. Always close on success. Never let a
+    // render error leave the user stuck inside the modal.
     btn.disabled = false; btn.textContent = prev;
+    if (posted) {
+      try { closeAllModals(); } catch {}
+      try { await renderCyclePrediction(); } catch (e) { console.warn(e); }
+    }
   }
 });
 

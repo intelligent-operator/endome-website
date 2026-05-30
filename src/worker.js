@@ -9134,6 +9134,11 @@ async function ensureCycleSchema(env) {
 // consecutive bleeding day before a 2+ day gap.
 // Cheap, idempotent — UNIQUE(user_id, start_date) prevents duplicates.
 async function reconcileCyclesFromLogs(env, user) {
+  // Wrap the whole thing — this is a best-effort backfill, never a hard
+  // requirement. Returning silently on any failure means a callsite like
+  // getCycles or ctxCycles can't be brought down by a transient D1
+  // hiccup or a schema mismatch.
+  try {
   await ensureCycleSchema(env);
   let rows = { results: [] };
   try {
@@ -9200,7 +9205,8 @@ async function reconcileCyclesFromLogs(env, user) {
     "  heaviest_flow = COALESCE(cycles.heaviest_flow, excluded.heaviest_flow), " +
     "  updated_at = excluded.updated_at"
   ).bind(user.id, c.start, c.end, c.cycle_length, c.period_length, c.heaviest, now, now));
-  try { await env.DB.batch(stmts); } catch {}
+  try { await env.DB.batch(stmts); } catch (e) { console.warn("reconcile batch:", e?.message); }
+  } catch (e) { console.warn("reconcileCyclesFromLogs failed:", e?.message); }
 }
 
 // Prediction. Take the last 6 closed cycles (cycle_length not null),
@@ -9256,27 +9262,35 @@ function predictNextCycle(cycles) {
 }
 
 // GET /api/me/cycles
+// Wrapped end-to-end so it can always return a usable empty payload —
+// the dashboard's cycle-prediction card depends on this and would
+// render nothing if we returned a 500.
 async function getCycles(env, user) {
-  await ensureCycleSchema(env);
-  await reconcileCyclesFromLogs(env, user);
+  try {
+    await ensureCycleSchema(env);
+  } catch (e) { console.warn("ensureCycleSchema:", e?.message); }
+  // Best-effort backfill — never let it block the read.
+  try { await reconcileCyclesFromLogs(env, user); } catch (e) { console.warn("reconcile in getCycles:", e?.message); }
   let rows = { results: [] };
   try {
     rows = await env.DB.prepare(
       "SELECT id, start_date, end_date, cycle_length, period_length, heaviest_flow, notes, source " +
       "FROM cycles WHERE user_id = ? ORDER BY start_date DESC LIMIT 36"
     ).bind(user.id).all();
-  } catch {}
+  } catch (e) { console.warn("cycles select:", e?.message); }
   const cycles = rows.results || [];
   // Period-length and cycle-length averages across the last 6 closed cycles.
   const periodLens = cycles.filter((c) => c.period_length).slice(0, 6).map((c) => c.period_length);
   const avgPeriod = periodLens.length ? Math.round(periodLens.reduce((a, b) => a + b, 0) / periodLens.length) : null;
+  let prediction = null;
+  try { prediction = predictNextCycle(cycles); } catch (e) { console.warn("predictNextCycle:", e?.message); }
   return json({
     cycles,
     summary: {
       total: cycles.length,
       avgPeriodLength: avgPeriod,
     },
-    prediction: predictNextCycle(cycles),
+    prediction,
   });
 }
 
@@ -9288,6 +9302,8 @@ async function postCycle(request, env, user) {
   const start = parseDateParam(body.start_date);
   if (!start) return json({ error: "start_date (YYYY-MM-DD) required" }, 400);
   const end = parseDateParam(body.end_date);
+  // Don't allow end < start — safer than failing later.
+  if (end && end < start) return json({ error: "end_date can't be before start_date" }, 400);
   const heaviest = ["spotting","light","medium","heavy"].includes(body.heaviest_flow) ? body.heaviest_flow : null;
   const notes = sanitizeText(body.notes, 500);
   const now = nowSec();
@@ -9304,9 +9320,11 @@ async function postCycle(request, env, user) {
       "  source = 'manual', updated_at = excluded.updated_at"
     ).bind(user.id, start, end, periodLen, heaviest, notes, now, now).run();
   } catch (e) {
+    console.warn("postCycle insert failed:", e?.message);
     return json({ error: "Could not save cycle" }, 500);
   }
-  // Recompute cycle_length on the cycle before this one.
+  // Recompute cycle_length on the cycle before this one. Best-effort —
+  // never let it fail the whole request.
   try {
     await env.DB.prepare(
       "UPDATE cycles SET cycle_length = " +
@@ -9314,8 +9332,12 @@ async function postCycle(request, env, user) {
       "WHERE user_id = ? AND start_date < ? " +
       "  AND start_date = (SELECT MAX(start_date) FROM cycles WHERE user_id = ? AND start_date < ?)"
     ).bind(start, now, user.id, start, user.id, start).run();
-  } catch {}
-  return getCycles(env, user);
+  } catch (e) { console.warn("postCycle recompute failed:", e?.message); }
+  // Return a minimal ack. The client refetches /api/me/cycles separately
+  // — keeping POST simple stops a slow reconcile from blocking the
+  // save-confirm and (worse) propagating its errors up to the page.
+  return json({ ok: true, id: null });
+}
 }
 
 // PATCH /api/me/cycles/:id
