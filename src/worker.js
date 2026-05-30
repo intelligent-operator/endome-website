@@ -4683,7 +4683,7 @@ async function sendBuddyMessage(request, env, user, id) {
   const sys = await buddyGetSystemPrompt(env);
   const dataContext = await buildInsightContext(env, user, [
     "symptoms_30d", "daily_logs_30d", "medications",
-    "medication_logs_30d", "test_results", "appointments_60d",
+    "medication_logs_30d", "food_logs_30d", "test_results", "appointments_60d",
   ]).catch(() => "(data lookup failed)");
 
   // The companion speaks AS the user's EndoPet — using the name they chose
@@ -8335,7 +8335,7 @@ async function seedInsightDefaults(env) {
       slug: "whats-working", emoji: "💚", sort_order: 30,
       title: "What's working",
       description: "Looks at the meds, supplements and lifestyle moves you've logged and ranks what seems to be helping.",
-      data_scope: ["symptoms_30d", "medications", "medication_logs_30d", "daily_logs_30d"],
+      data_scope: ["symptoms_30d", "medications", "medication_logs_30d", "daily_logs_30d", "food_logs_30d"],
       prompt_template:
         "You are reviewing the user's medications, supplements and what-helped tags from the last 30 days. " +
         "Rank the interventions by the strength of the apparent association with lower pain / better mood / better energy logs. " +
@@ -8347,10 +8347,29 @@ async function seedInsightDefaults(env) {
         "DATA:\n{context}",
     },
     {
+      slug: "food-flares", emoji: "🍽", sort_order: 35,
+      title: "What's on your plate",
+      description: "Pairs your food log with your symptoms to spot which foods seem to precede flare days.",
+      data_scope: ["symptoms_30d", "food_logs_30d", "daily_logs_30d"],
+      prompt_template:
+        "You are reviewing the user's food log alongside their symptoms and daily check-ins for the past 30 days. " +
+        "Endo flares are often driven by inflammatory + FODMAP-style food triggers — common offenders include " +
+        "dairy, gluten, alcohol, refined sugar, ultra-processed food, high omega-6 seed oils, and high-FODMAP " +
+        "vegetables/fruit/legumes for those with 'endo belly'. " +
+        "Your job: pair flare days (higher pain, lower mood/energy, bloating, bowel symptoms) with what they ate " +
+        "in the prior 24–48 hours. Call out specific patterns you can SEE in their data (e.g. \"every Sunday flare " +
+        "this month followed Saturday-night alcohol\", \"dairy appeared in food log on 3 of the 4 worst pain days\"). " +
+        "Then suggest ONE specific elimination trial worth running this month (e.g. \"cut dairy for 14 days, " +
+        "we'll re-check the pattern\") with the mechanism in one sentence. " +
+        "If the food log is sparse, say so honestly and encourage tracking. " +
+        "Be evidence-aware, specific, warm, and never preach. Render as markdown.\n\n" +
+        "DATA:\n{context}",
+    },
+    {
       slug: "next-steps", emoji: "🎯", sort_order: 40,
       title: "Your next 3 steps",
       description: "Cuts through everything you've logged + the results we have on file and gives you the 3 highest-leverage moves this month.",
-      data_scope: ["symptoms_30d", "daily_logs_30d", "medications", "test_results", "appointments_60d"],
+      data_scope: ["symptoms_30d", "daily_logs_30d", "medications", "food_logs_30d", "test_results", "appointments_60d"],
       prompt_template:
         "You are an evidence-aware care navigator for someone with endometriosis. " +
         "Below is everything we have on them — symptoms, daily check-ins, current medications, recent test results, and upcoming appointments. " +
@@ -8365,10 +8384,10 @@ async function seedInsightDefaults(env) {
       slug: "monthly-summary", emoji: "📅", sort_order: 5,
       refresh_hours: 720,
       title: "This month in review",
-      description: "A warm, narrative monthly write-up of how things are tracking — symptoms, daily check-ins, medications, results and what's coming up next.",
+      description: "A warm, narrative monthly write-up of how things are tracking — symptoms, daily check-ins, medications, food, results and what's coming up next.",
       data_scope: [
         "symptoms_30d", "daily_logs_30d", "medications", "medication_logs_30d",
-        "test_results", "appointments_60d",
+        "food_logs_30d", "test_results", "appointments_60d",
       ],
       prompt_template:
         "You are EndoMe — a calm, evidence-aware companion writing a one-page monthly summary for someone living with endometriosis. " +
@@ -8835,6 +8854,7 @@ async function buildInsightContext(env, user, scope) {
       else if (s === "medication_logs_30d") chunk = await ctxMedLogs(env, user, 30);
       else if (s === "test_results")   chunk = await ctxTestResults(env, user);
       else if (s === "appointments_60d") chunk = await ctxAppointments(env, user, 60);
+      else if (s === "food_logs_30d")  chunk = await ctxFoodLogs(env, user, 30);
     } catch (err) {
       chunk = `(${s}: read failed — ${err?.message || "unknown"})`;
     }
@@ -8901,6 +8921,51 @@ async function ctxMedLogs(env, user, days) {
   for (const x of r.results) counts.set(x.name, (counts.get(x.name) || 0) + 1);
   const lines = [...counts.entries()].sort((a,b) => b[1] - a[1]).map(([n,c]) => `- ${n}: ${c} doses`).join("\n");
   return `### Dose adherence (last ${days} days)\n${lines}`;
+}
+
+// Food logs aren't just calories — for endo the value is spotting which
+// foods cluster on flare days. We dump every meal entry chronologically
+// (date + meal + name + macros) so Claude can pair them with symptom dates.
+async function ctxFoodLogs(env, user, days) {
+  await ensureFoodSchema(env);
+  const since = new Date(Date.now() - days * 86400 * 1000).toISOString().slice(0, 10);
+  const r = await env.DB.prepare(
+    "SELECT log_date, meal, name, calories, protein_g, carbs_g, fat_g, fiber_g, servings " +
+    "FROM food_logs WHERE user_id = ? AND log_date >= ? " +
+    "ORDER BY log_date DESC, logged_at ASC LIMIT 400"
+  ).bind(user.id, since).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) return `### Food logs (last ${days} days)\nNothing logged.`;
+
+  // Group by date for a compact, scannable layout.
+  const byDate = new Map();
+  let totalCal = 0;
+  for (const f of r.results) {
+    if (!byDate.has(f.log_date)) byDate.set(f.log_date, []);
+    const mult = +f.servings || 1;
+    const kcal = Math.round((f.calories || 0) * mult);
+    totalCal += kcal;
+    const macros = [
+      f.protein_g != null ? `P${Math.round(f.protein_g * mult)}g` : null,
+      f.carbs_g   != null ? `C${Math.round(f.carbs_g   * mult)}g` : null,
+      f.fat_g     != null ? `F${Math.round(f.fat_g     * mult)}g` : null,
+      f.fiber_g   != null ? `Fib${Math.round(f.fiber_g * mult)}g` : null,
+    ].filter(Boolean).join(" ");
+    byDate.get(f.log_date).push(
+      `${f.meal}: ${f.name}${mult !== 1 ? ` ×${mult}` : ""}` +
+      (kcal ? ` (${kcal}kcal${macros ? " " + macros : ""})` : "")
+    );
+  }
+  const days7avg = Math.round(totalCal / Math.max(1, byDate.size));
+  const lines = [...byDate.entries()].map(([date, entries]) =>
+    `- ${date}:\n  ${entries.join("\n  ")}`
+  ).join("\n");
+  // Also pull the user's daily calorie target so prompts can frame % of target.
+  const prefs = await env.DB.prepare(
+    "SELECT daily_calorie_target FROM user_food_prefs WHERE user_id = ?"
+  ).bind(user.id).first().catch(() => null);
+  const target = prefs?.daily_calorie_target || 2000;
+  return `### Food logs (last ${days} days, ${r.results.length} entries across ${byDate.size} days)\n` +
+         `Daily average ~${days7avg}kcal (target ${target}kcal).\n${lines}`;
 }
 
 async function ctxTestResults(env, user) {
