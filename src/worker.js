@@ -9703,7 +9703,6 @@ async function postCycle(request, env, user) {
   // save-confirm and (worse) propagating its errors up to the page.
   return json({ ok: true, id: null });
 }
-}
 
 // PATCH /api/me/cycles/:id
 async function patchCycle(request, env, user, id) {
