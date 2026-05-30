@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate" />
+  <title>Food – EndoMe</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/logo-final.png" />
+  <meta name="theme-color" content="#ff4e8a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css?v=1780100000" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780100000" />
+  <link rel="stylesheet" href="/meds.css?v=1780100000" />
+  <link rel="stylesheet" href="/food.css?v=1780100000" />
+  <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
+</head>
+<body class="dash-body">
+  <div id="page-loader" class="page-loader">
+    <div class="page-loader-content">
+      <img src="/logo-final.png" alt="EndoMe" class="page-loader-logo" />
+      <div class="page-loader-bar"></div>
+      <p class="page-loader-text">Loading your food diary…</p>
+    </div>
+  </div>
+
+  <header class="dash-topbar">
+    <div class="dash-topbar-inner">
+      <a href="/" class="logo">
+        <img src="/logo-final.png" alt="" class="logo-mark" width="32" height="32" />
+        <span class="logo-text">EndoMe</span>
+      </a>
+      <div class="dash-spacer"></div>
+      <div class="dash-user">
+        <div class="account-menu">
+        <button class="account-toggle" id="account-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+          <div class="avatar"><svg viewBox="0 0 40 40" width="36" height="36"><circle cx="20" cy="20" r="20" fill="#ffd6e0"/><circle cx="20" cy="16" r="7" fill="#8a4a2a"/><path d="M6 36c2-8 8-12 14-12s12 4 14 12" fill="#f5c69b"/><circle cx="20" cy="16" r="6" fill="#f5c69b"/></svg></div>
+          <span class="profile-name">Hi, <span data-bind="displayName">there</span></span>
+          <svg class="account-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M6 9l6 6 6-6" stroke="#3a2330" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="account-dropdown" id="account-dropdown" hidden role="menu">
+          <a href="/profile" role="menuitem"><span class="acm-ico">👤</span> Profile</a>
+          <a href="/security" role="menuitem"><span class="acm-ico">🔒</span> Security &amp; password</a>
+          <a href="/documents" role="menuitem"><span class="acm-ico">📁</span> My documents</a>
+          <a href="/meds" role="menuitem"><span class="acm-ico">💊</span> My medications</a>
+          <div class="account-divider"></div>
+          <a href="/api/logout" role="menuitem"><span class="acm-ico">↪</span> Sign out</a>
+        </div>
+      </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-layout food-layout">
+    <aside class="dash-sidebar">
+      <nav class="side-nav">
+        <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
+        <a href="/story"><span class="ico">📖</span> Your Story</a>
+        <a href="/tests"><span class="ico">🧪</span> Tests</a>
+        <a href="/results"><span class="ico">📊</span> Results</a>
+        <a href="/my-insights"><span class="ico">✨</span> Insights</a>
+        <a href="/meds"><span class="ico">💊</span> Medications</a>
+        <a class="active" href="/food"><span class="ico">🥗</span> Food</a>
+        <a href="/documents"><span class="ico">📁</span> Documents</a>
+        <a href="/pet"><span class="ico">🐾</span> EndoPet</a>
+        <a href="/community"><span class="ico">💬</span> Community</a>
+        <a href="/recipes"><span class="ico">🍳</span> Recipes</a>
+        <a href="/explore"><span class="ico">🌌</span> Research</a>
+        <a href="/research"><span class="ico">🎗</span> Donations</a>
+      </nav>
+    </aside>
+
+    <main class="dash-main community-main">
+      <header class="community-hero soft food-hero">
+        <div>
+          <p class="hero-eyebrow">Food diary</p>
+          <h1>What you ate, how you felt.</h1>
+          <p class="hero-lead">Log meals, track calories + macros, and spot which foods help or trigger flares. Plan your week so good days are easier to repeat.</p>
+        </div>
+        <div class="food-hero-actions">
+          <button class="btn btn-primary" id="btn-add-food">+ Add food</button>
+          <button class="btn btn-ghost" id="btn-quick-log">🥗 Quick log</button>
+        </div>
+      </header>
+
+      <!-- Sub-nav -->
+      <nav class="page-subnav" role="tablist" aria-label="Food view">
+        <button type="button" class="subnav-tab on" role="tab" aria-selected="true" data-tab-target="today">
+          <span class="subnav-emoji">🍽</span> Today
+        </button>
+        <button type="button" class="subnav-tab" role="tab" aria-selected="false" data-tab-target="week">
+          <span class="subnav-emoji">📅</span> This week
+        </button>
+        <button type="button" class="subnav-tab" role="tab" aria-selected="false" data-tab-target="foods">
+          <span class="subnav-emoji">🥑</span> My foods
+        </button>
+        <button type="button" class="subnav-tab" role="tab" aria-selected="false" data-tab-target="settings">
+          <span class="subnav-emoji">⚙️</span> Settings
+        </button>
+      </nav>
+
+      <!-- ===== TODAY tab ===== -->
+      <div data-tab="today">
+        <!-- Calorie ring + macro bars (top of "Today") -->
+        <section class="community-section food-summary-section">
+          <div class="food-summary">
+            <div class="food-ring-wrap">
+              <svg class="food-ring" viewBox="0 0 140 140" aria-hidden="true">
+                <circle cx="70" cy="70" r="60" fill="none" stroke="#ffe2eb" stroke-width="12"/>
+                <circle id="food-ring-progress" cx="70" cy="70" r="60" fill="none"
+                        stroke="url(#foodRingGrad)" stroke-width="12"
+                        stroke-dasharray="377" stroke-dashoffset="377" stroke-linecap="round"
+                        transform="rotate(-90 70 70)" style="transition:stroke-dashoffset .5s"/>
+                <defs>
+                  <linearGradient id="foodRingGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#ff4e8a"/>
+                    <stop offset="100%" stop-color="#ffb380"/>
+                  </linearGradient>
+                </defs>
+                <text id="food-ring-pct" x="70" y="68" text-anchor="middle" font-size="24" font-weight="700" fill="#ff4e8a" font-family="Poppins,sans-serif">0%</text>
+                <text id="food-ring-sub" x="70" y="88" text-anchor="middle" font-size="11" font-weight="500" fill="#7a5f6c" font-family="Poppins,sans-serif">0 / 2000 kcal</text>
+              </svg>
+            </div>
+            <div class="food-macros" id="food-macros">
+              <div class="macro-bar" data-macro="protein"><span>Protein</span><div class="macro-track"><div class="macro-fill"></div></div><span class="macro-val">0g</span></div>
+              <div class="macro-bar" data-macro="carbs"><span>Carbs</span><div class="macro-track"><div class="macro-fill"></div></div><span class="macro-val">0g</span></div>
+              <div class="macro-bar" data-macro="fat"><span>Fat</span><div class="macro-track"><div class="macro-fill"></div></div><span class="macro-val">0g</span></div>
+              <div class="macro-bar" data-macro="fiber"><span>Fiber</span><div class="macro-track"><div class="macro-fill"></div></div><span class="macro-val">0g</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Today's meals, grouped by breakfast/lunch/dinner/snack -->
+        <section class="community-section">
+          <div class="section-head">
+            <h2>Today's meals</h2>
+            <span class="section-hint">Tap a meal heading to log something into it</span>
+          </div>
+          <div class="meal-groups" id="meal-groups"></div>
+        </section>
+      </div>
+
+      <!-- ===== THIS WEEK tab ===== -->
+      <div data-tab="week" hidden>
+        <section class="community-section">
+          <div class="section-head">
+            <h2>Weekly meal plan</h2>
+            <span class="section-hint">Set recurring meals (e.g. oats every weekday breakfast). Plans auto-fill the day; you can override.</span>
+          </div>
+          <div class="timetable-card">
+            <div class="timetable-wrap">
+              <table class="timetable food-timetable" id="food-week" aria-label="Weekly food plan"></table>
+            </div>
+          </div>
+        </section>
+        <section class="community-section">
+          <div class="section-head">
+            <h2>Calorie trend</h2>
+            <span class="section-hint">Last 7 days vs your target</span>
+          </div>
+          <div class="food-trend" id="food-trend"></div>
+        </section>
+      </div>
+
+      <!-- ===== MY FOODS tab ===== -->
+      <div data-tab="foods" hidden>
+        <section class="community-section">
+          <div class="section-head">
+            <h2>My saved foods</h2>
+            <span class="section-hint">Add foods you eat often so logging takes one click</span>
+          </div>
+          <ul class="food-list" id="food-list">
+            <li class="empty-state">Loading…</li>
+          </ul>
+        </section>
+      </div>
+
+      <!-- ===== SETTINGS tab ===== -->
+      <div data-tab="settings" hidden>
+        <section class="community-section">
+          <div class="section-head">
+            <h2>Daily targets</h2>
+            <span class="section-hint">Used for the ring + macro bars. Tweak to whatever your clinician / dietitian recommends.</span>
+          </div>
+          <form id="food-prefs-form" class="food-prefs-form">
+            <div class="field-grid-2">
+              <label class="field"><span>Calories <em>(per day)</em></span>
+                <input type="number" name="dailyCalorieTarget" min="800" max="8000" step="50" value="2000" required />
+              </label>
+              <label class="field"><span>Protein <em>(g)</em></span>
+                <input type="number" name="proteinTargetG" min="0" max="500" step="5" placeholder="optional" />
+              </label>
+              <label class="field"><span>Carbs <em>(g)</em></span>
+                <input type="number" name="carbsTargetG" min="0" max="800" step="5" placeholder="optional" />
+              </label>
+              <label class="field"><span>Fat <em>(g)</em></span>
+                <input type="number" name="fatTargetG" min="0" max="400" step="5" placeholder="optional" />
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save targets</button>
+              <p class="form-status" id="food-prefs-status" role="status"></p>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <!-- ===== RIGHT SIDEBAR ===== -->
+    <aside class="dash-right food-right">
+      <section class="side-card">
+        <div class="section-head"><h2>🔥 This week so far</h2></div>
+        <div class="food-week-stats" id="food-week-stats">
+          <div><span>Avg kcal/day</span><strong>—</strong></div>
+          <div><span>Days logged</span><strong>—</strong></div>
+          <div><span>Best day</span><strong>—</strong></div>
+          <div><span>Streak</span><strong>—</strong></div>
+        </div>
+      </section>
+
+      <section class="side-card">
+        <div class="section-head"><h2>⚡ Quick add</h2></div>
+        <p class="side-sub">From your saved foods.</p>
+        <ul class="food-quick-list" id="food-quick-list">
+          <li class="empty-state small">Add a food to see it here.</li>
+        </ul>
+      </section>
+
+      <section class="side-card">
+        <div class="section-head"><h2>💡 Tip</h2></div>
+        <p class="side-sub" id="food-tip">Logging takes 5 seconds. Even a rough estimate beats no data — patterns appear fast.</p>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Add / Edit food modal -->
+  <div class="modal" id="food-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-food></div>
+    <div class="modal-card modal-xl">
+      <button class="modal-close" type="button" data-close-food aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🥗</span>
+        <h3 id="food-modal-title">Add a food</h3>
+        <p>Calories + macros per serving. Pick any subset — what you don't fill stays blank.</p>
+      </header>
+      <form id="food-form" novalidate>
+        <input type="hidden" name="id" />
+        <div class="field-grid-2">
+          <label class="field"><span>Name</span>
+            <input type="text" name="name" required maxlength="120" placeholder="e.g. Oats with banana" />
+          </label>
+          <label class="field"><span>Brand <em>(optional)</em></span>
+            <input type="text" name="brand" maxlength="60" />
+          </label>
+        </div>
+        <div class="field-grid-2">
+          <label class="field"><span>Calories <em>(per serving)</em></span>
+            <input type="number" name="calories" min="0" max="5000" />
+          </label>
+          <label class="field"><span>Serving size</span>
+            <input type="text" name="servingSize" maxlength="60" placeholder="1 cup, 100g, etc." />
+          </label>
+        </div>
+        <div class="field-grid-2">
+          <label class="field"><span>Protein (g)</span>
+            <input type="number" name="proteinG" min="0" max="500" step="0.1" />
+          </label>
+          <label class="field"><span>Carbs (g)</span>
+            <input type="number" name="carbsG" min="0" max="800" step="0.1" />
+          </label>
+          <label class="field"><span>Fat (g)</span>
+            <input type="number" name="fatG" min="0" max="400" step="0.1" />
+          </label>
+          <label class="field"><span>Fiber (g)</span>
+            <input type="number" name="fiberG" min="0" max="100" step="0.1" />
+          </label>
+        </div>
+        <label class="field"><span>Notes <em>(optional)</em></span>
+          <textarea name="notes" rows="2" maxlength="500"></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save food</button>
+          <button type="button" class="btn-soft" data-close-food>Cancel</button>
+          <p class="form-status" id="food-status"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Log a food modal -->
+  <div class="modal" id="food-log-modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-flog></div>
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-close-flog aria-label="Close">×</button>
+      <header class="modal-h">
+        <span class="modal-emoji">🍽</span>
+        <h3 id="flog-title">Log a food</h3>
+      </header>
+      <form id="food-log-form" novalidate>
+        <input type="hidden" name="foodId" />
+        <label class="field"><span>Food</span>
+          <select name="picker" id="flog-picker"></select>
+        </label>
+        <label class="field"><span>Or type it (overrides the picker)</span>
+          <input type="text" name="name" maxlength="120" placeholder="e.g. Apple" />
+        </label>
+        <div class="field-grid-2">
+          <label class="field"><span>Meal</span>
+            <select name="meal">
+              <option value="breakfast">🌅 Breakfast</option>
+              <option value="lunch" selected>☀️ Lunch</option>
+              <option value="dinner">🌙 Dinner</option>
+              <option value="snack">🍪 Snack</option>
+            </select>
+          </label>
+          <label class="field"><span>Servings</span>
+            <input type="number" name="servings" min="0.1" max="20" step="0.25" value="1" />
+          </label>
+        </div>
+        <details class="flog-overrides">
+          <summary>Override nutrition (free-text logs only)</summary>
+          <div class="field-grid-2">
+            <label class="field"><span>Calories</span><input type="number" name="calories" min="0" max="5000" /></label>
+            <label class="field"><span>Protein (g)</span><input type="number" name="proteinG" min="0" max="500" step="0.1" /></label>
+            <label class="field"><span>Carbs (g)</span><input type="number" name="carbsG" min="0" max="800" step="0.1" /></label>
+            <label class="field"><span>Fat (g)</span><input type="number" name="fatG" min="0" max="400" step="0.1" /></label>
+          </div>
+        </details>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Log it</button>
+          <button type="button" class="btn-soft" data-close-flog>Cancel</button>
+          <p class="form-status" id="flog-status"></p>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+  <script src="/account-menu.js?v=1779934116" defer></script>
+  <script src="/food.js?v=1780100000" defer></script>
+</body>
+</html>

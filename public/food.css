@@ -1,0 +1,152 @@
+/* =====================================================================
+   /food — food diary, calorie + macro tracking with weekly plan.
+   ===================================================================== */
+
+/* 3-col grid: sidebar | main | right rail. Mirrors the meds layout. */
+.food-layout{display:grid;grid-template-columns:220px minmax(0,1fr) 280px;gap:20px;max-width:1480px;margin:0 auto;padding:24px}
+.food-layout .dash-sidebar{position:sticky;top:74px;align-self:start}
+.food-layout .dash-right{position:sticky;top:74px;align-self:start;display:flex;flex-direction:column;gap:14px}
+@media (max-width:1180px){.food-layout{grid-template-columns:220px minmax(0,1fr)}.food-layout .dash-right{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;position:static}.food-layout .dash-right > section{flex:1 1 240px}}
+@media (max-width:760px){.food-layout{grid-template-columns:1fr;padding:14px}.food-layout .dash-sidebar{position:static}}
+
+.food-hero-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Calorie summary ring + macro bars */
+.food-summary-section{padding:0}
+.food-summary{
+  display:flex;gap:24px;align-items:center;
+  background:#fff;border:1px solid #ffeaf2;border-radius:18px;
+  padding:18px 20px;box-shadow:0 4px 16px rgba(255,77,138,.05);
+}
+.food-ring-wrap{flex-shrink:0}
+.food-ring{width:140px;height:140px}
+.food-macros{flex:1;display:flex;flex-direction:column;gap:8px}
+.macro-bar{display:grid;grid-template-columns:70px 1fr 60px;gap:10px;align-items:center;font-size:12px;color:#3a2330}
+.macro-bar > span:first-child{font-weight:600;color:#5a3a48}
+.macro-track{height:8px;background:#fff5f8;border-radius:999px;overflow:hidden}
+.macro-fill{height:100%;background:linear-gradient(90deg,#ff4e8a,#ffb380);border-radius:999px;transition:width .4s ease}
+.macro-bar[data-macro="protein"] .macro-fill{background:linear-gradient(90deg,#ff4e8a,#ff7aa6)}
+.macro-bar[data-macro="carbs"]   .macro-fill{background:linear-gradient(90deg,#ffb380,#ffd09b)}
+.macro-bar[data-macro="fat"]     .macro-fill{background:linear-gradient(90deg,#ffd700,#ffe9a3)}
+.macro-bar[data-macro="fiber"]   .macro-fill{background:linear-gradient(90deg,#9bd97a,#cdebb8)}
+.macro-val{text-align:right;font-weight:700;color:#2b1922;font-feature-settings:"tnum"}
+
+/* Meal groups (Today) */
+.meal-groups{display:flex;flex-direction:column;gap:12px}
+.meal-group{
+  background:#fff;border:1px solid #ffeaf2;border-radius:16px;overflow:hidden;
+  box-shadow:0 4px 16px rgba(255,77,138,.04);
+}
+.meal-group-head{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;background:#fff5f8;
+  border-bottom:1px solid #ffeaf2;cursor:pointer;user-select:none;
+}
+.meal-group-head h3{margin:0;font-size:14px;color:#2b1922;font-weight:700;flex:1}
+.meal-group-head .meal-emoji{font-size:18px}
+.meal-group-head .meal-total{font-size:12px;color:#7a5f6c;font-weight:600;font-feature-settings:"tnum"}
+.meal-group-head .meal-add{
+  background:#fff;border:1px solid #ffd6e0;color:#ff4e8a;
+  padding:5px 10px;border-radius:999px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;
+}
+.meal-group-head .meal-add:hover{background:#ffeaf2}
+.meal-group-list{list-style:none;margin:0;padding:0}
+.meal-group-list .empty{padding:14px 16px;font-size:12px;color:#a08596;text-align:center}
+.meal-row{
+  display:flex;gap:12px;align-items:center;padding:10px 16px;
+  border-bottom:1px solid #fff0f5;
+}
+.meal-row:last-child{border-bottom:none}
+.meal-row-info{flex:1;min-width:0}
+.meal-row-info strong{display:block;font-size:13px;color:#2b1922}
+.meal-row-meta{font-size:11px;color:#7a5f6c}
+.meal-row-cal{font-weight:700;color:#ff4e8a;font-feature-settings:"tnum"}
+.meal-row-del{
+  background:transparent;border:none;color:#cdb9c4;cursor:pointer;
+  font-size:18px;padding:4px 8px;border-radius:8px;font-family:inherit;
+}
+.meal-row-del:hover{background:#fff0f3;color:#c4344b}
+
+/* Weekly plan (mirrors meds timetable colors) */
+.food-timetable{width:100%;border-collapse:collapse;font-size:12px}
+.food-timetable th{
+  background:#fff5f8;padding:10px 8px;font-size:11px;font-weight:700;color:#5a3a48;
+  text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #ffeaf2;
+}
+.food-timetable th.is-today{background:linear-gradient(135deg,#ffe6ef,#fff5f8);color:#ff4e8a}
+.food-timetable td{vertical-align:top;padding:8px 4px;border-right:1px solid #fff0f5;min-width:120px}
+.food-timetable td:last-child{border-right:none}
+.food-timetable td.is-today{background:#fffafc}
+.food-plan-slot{
+  background:#fff;border:1px solid #ffeaf2;border-radius:10px;
+  padding:8px 10px;margin-bottom:6px;font-size:11px;
+}
+.food-plan-slot .meal-tag{
+  display:inline-block;font-size:9px;font-weight:700;color:#ff4e8a;background:#ffeaf2;
+  padding:2px 6px;border-radius:6px;letter-spacing:.04em;text-transform:uppercase;
+}
+.food-plan-slot strong{display:block;color:#2b1922;font-size:12px;margin:3px 0 2px}
+.food-plan-slot .kcal{color:#7a5f6c;font-weight:600;font-feature-settings:"tnum"}
+.food-plan-add{
+  width:100%;background:transparent;border:1px dashed #ffd6e0;color:#a08596;
+  padding:10px;border-radius:10px;font-size:11px;cursor:pointer;font-family:inherit;
+}
+.food-plan-add:hover{border-color:#ff4e8a;color:#ff4e8a;background:#fff5f8}
+
+/* Calorie trend chart (last 7 days) */
+.food-trend{
+  display:flex;gap:8px;align-items:flex-end;height:140px;
+  padding:6px 0;
+}
+.food-trend-col{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;
+  position:relative;
+}
+.food-trend-col .bar{
+  width:100%;background:linear-gradient(180deg,#ff4e8a,#ffb380);
+  border-radius:6px 6px 0 0;min-height:4px;transition:height .3s;
+}
+.food-trend-col .bar.over{background:linear-gradient(180deg,#e85c6c,#c4344b)}
+.food-trend-col .day-label{font-size:10px;color:#7a5f6c;font-family:ui-monospace,Menlo,monospace}
+.food-trend-col .day-cal{font-size:10px;color:#3a2330;font-weight:700;font-feature-settings:"tnum"}
+.food-trend-target{
+  position:absolute;left:0;right:0;border-top:1px dashed #ff9bb3;pointer-events:none;
+  z-index:1;
+}
+
+/* My foods list */
+.food-list{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.food-card{
+  background:#fff;border:1px solid #ffeaf2;border-radius:14px;
+  padding:14px;display:flex;flex-direction:column;gap:8px;
+  transition:transform .12s,box-shadow .12s,border-color .12s;
+}
+.food-card:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(255,77,138,.08);border-color:#ffd6e0}
+.food-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.food-card-head strong{display:block;font-size:14px;color:#2b1922}
+.food-card-head .food-cal{font-weight:700;color:#ff4e8a;font-size:13px;font-feature-settings:"tnum"}
+.food-card-meta{font-size:11px;color:#7a5f6c}
+.food-card-macros{display:flex;gap:8px;font-size:11px;color:#5a3a48;flex-wrap:wrap}
+.food-card-macros span{background:#fff5f8;padding:3px 8px;border-radius:8px}
+.food-card-actions{display:flex;gap:6px;margin-top:auto}
+.food-card-actions .small{padding:6px 10px;font-size:11px}
+
+/* Right rail */
+.food-week-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.food-week-stats > div{background:#fff5f8;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column}
+.food-week-stats span{font-size:10px;color:#7a5f6c;text-transform:uppercase;letter-spacing:.06em}
+.food-week-stats strong{font-size:18px;color:#2b1922;font-weight:700;margin-top:2px;font-feature-settings:"tnum"}
+.food-quick-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.food-quick-list li button{
+  width:100%;text-align:left;background:#fff;border:1px solid #ffeaf2;border-radius:10px;
+  padding:8px 10px;cursor:pointer;font-family:inherit;display:flex;justify-content:space-between;align-items:center;gap:8px;
+  transition:border-color .12s,background .12s;
+}
+.food-quick-list li button:hover{border-color:#ff4e8a;background:#fff5f8}
+.food-quick-list strong{font-size:12px;color:#2b1922;display:block}
+.food-quick-list .kcal{font-size:11px;color:#ff4e8a;font-weight:700;font-feature-settings:"tnum"}
+
+/* Settings */
+.food-prefs-form{display:flex;flex-direction:column;gap:10px;max-width:560px}
+
+.flog-overrides{margin:4px 0 10px;padding:8px 10px;background:#fff5f8;border-radius:10px;font-size:12px}
+.flog-overrides summary{cursor:pointer;font-weight:600;color:#7a5f6c}

@@ -152,6 +152,29 @@ export default {
           if (url.pathname === "/api/me/doses-due" && request.method === "GET") {
             return jsonHeaders(await getDosesDue(env, user));
           }
+
+          // --- Food diary --------------------------------------------------
+          if (url.pathname === "/api/me/foods" && request.method === "GET")  return jsonHeaders(await listFoods(env, user));
+          if (url.pathname === "/api/me/foods" && request.method === "POST") return jsonHeaders(await createFood(request, env, user));
+          const foodMatch = url.pathname.match(/^\/api\/me\/foods\/(\d+)$/);
+          if (foodMatch) {
+            const fid = +foodMatch[1];
+            if (request.method === "PUT")    return jsonHeaders(await updateFood(request, env, user, fid));
+            if (request.method === "DELETE") return jsonHeaders(await deleteFood(env, user, fid));
+          }
+          if (url.pathname === "/api/me/food-logs" && request.method === "POST") return jsonHeaders(await logFood(request, env, user));
+          if (url.pathname === "/api/me/food-logs/week" && request.method === "GET") return jsonHeaders(await getFoodWeek(env, user));
+          if (url.pathname === "/api/me/food-logs" && request.method === "GET") {
+            return jsonHeaders(await getFoodDay(env, user, url.searchParams.get("date")));
+          }
+          const flogMatch = url.pathname.match(/^\/api\/me\/food-logs\/(\d+)$/);
+          if (flogMatch && request.method === "DELETE") return jsonHeaders(await deleteFoodLog(env, user, +flogMatch[1]));
+          if (url.pathname === "/api/me/food-plans" && request.method === "GET")  return jsonHeaders(await listFoodPlans(env, user));
+          if (url.pathname === "/api/me/food-plans" && request.method === "POST") return jsonHeaders(await createFoodPlan(request, env, user));
+          const fplanMatch = url.pathname.match(/^\/api\/me\/food-plans\/(\d+)$/);
+          if (fplanMatch && request.method === "DELETE") return jsonHeaders(await deleteFoodPlan(env, user, +fplanMatch[1]));
+          if (url.pathname === "/api/me/food-prefs" && request.method === "GET") return jsonHeaders(await getFoodPrefs(env, user));
+          if (url.pathname === "/api/me/food-prefs" && request.method === "PUT") return jsonHeaders(await updateFoodPrefs(request, env, user));
           const medSchedMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)\/schedules(?:\/(\d+))?$/);
           if (medSchedMatch) {
             const medId = +medSchedMatch[1];
@@ -451,6 +474,7 @@ export default {
       url.pathname === "/profile"     || url.pathname.startsWith("/profile/") ||
       url.pathname === "/u"           || url.pathname.startsWith("/u/") ||
       url.pathname === "/meds"        || url.pathname.startsWith("/meds/") ||
+      url.pathname === "/food"        || url.pathname.startsWith("/food/") ||
       url.pathname === "/documents"   || url.pathname.startsWith("/documents/") ||
       url.pathname === "/security"    || url.pathname.startsWith("/security/") ||
       url.pathname === "/research"    || url.pathname.startsWith("/research/") ||
@@ -1396,6 +1420,7 @@ async function bootstrapSchema(env) {
       ensurePetPoopColumn(env),
       ensureDonationsSchema(env),
       ensureRecipeSchema(env),
+      ensureFoodSchema(env),
       ensureAppointmentSchema(env),
       ensureReadSchema(env),
       ensureEmailLogSchema(env),
@@ -5487,6 +5512,337 @@ async function ensureRecipeSchema(env) {
     const { n } = await env.DB.prepare("SELECT COUNT(*) AS n FROM recipe_foods").first();
     if ((n || 0) === 0) await seedRecipeFoods(env);
   } catch {}
+}
+
+// =============================================================================
+// FOOD DIARY — calorie + macro logging with weekly meal plan.
+// `foods` are the user's saved entries (one per food they eat often).
+// `food_logs` are individual eat events. `food_plans` are recurring slots
+// like "oatmeal every weekday for breakfast". `user_food_prefs` holds the
+// daily calorie / macro targets.
+// =============================================================================
+const FOOD_MEALS = new Set(["breakfast", "lunch", "dinner", "snack"]);
+let _foodSchemaChecked = false;
+async function ensureFoodSchema(env) {
+  if (_foodSchemaChecked) return;
+  _foodSchemaChecked = true;
+  const stmts = [
+    "CREATE TABLE IF NOT EXISTS foods (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  name TEXT NOT NULL," +
+    "  calories INTEGER," +                  // per serving
+    "  protein_g REAL," +
+    "  carbs_g REAL," +
+    "  fat_g REAL," +
+    "  fiber_g REAL," +
+    "  serving_size TEXT," +                 // e.g. "1 cup", "100g"
+    "  brand TEXT," +
+    "  notes TEXT," +
+    "  is_active INTEGER NOT NULL DEFAULT 1," +
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_foods_user ON foods(user_id, is_active)",
+
+    "CREATE TABLE IF NOT EXISTS food_logs (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  food_id INTEGER," +                    // nullable — quick free-text logs are OK
+    "  name TEXT NOT NULL," +                 // snapshot
+    "  meal TEXT NOT NULL," +                 // breakfast | lunch | dinner | snack
+    "  calories INTEGER," +
+    "  protein_g REAL," +
+    "  carbs_g REAL," +
+    "  fat_g REAL," +
+    "  fiber_g REAL," +
+    "  servings REAL NOT NULL DEFAULT 1," +
+    "  log_date TEXT NOT NULL," +             // YYYY-MM-DD local
+    "  logged_at INTEGER NOT NULL," +
+    "  notes TEXT" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_foodlogs_user_date ON food_logs(user_id, log_date)",
+
+    "CREATE TABLE IF NOT EXISTS food_plans (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  user_id TEXT NOT NULL," +
+    "  food_id INTEGER NOT NULL," +
+    "  meal TEXT NOT NULL," +
+    "  days_mask INTEGER NOT NULL," +         // Sun=1 .. Sat=64 (same as meds)
+    "  servings REAL NOT NULL DEFAULT 1," +
+    "  created_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_foodplans_user ON food_plans(user_id)",
+
+    "CREATE TABLE IF NOT EXISTS user_food_prefs (" +
+    "  user_id TEXT PRIMARY KEY," +
+    "  daily_calorie_target INTEGER NOT NULL DEFAULT 2000," +
+    "  protein_target_g INTEGER," +
+    "  carbs_target_g INTEGER," +
+    "  fat_target_g INTEGER," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+  ];
+  for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+}
+
+function foodRow(r) {
+  return {
+    id: r.id, name: r.name,
+    calories: r.calories || null,
+    proteinG: r.protein_g != null ? +r.protein_g : null,
+    carbsG:   r.carbs_g   != null ? +r.carbs_g   : null,
+    fatG:     r.fat_g     != null ? +r.fat_g     : null,
+    fiberG:   r.fiber_g   != null ? +r.fiber_g   : null,
+    servingSize: r.serving_size || null,
+    brand: r.brand || null,
+    notes: r.notes || null,
+  };
+}
+function foodLogRow(r) {
+  return {
+    id: r.id, foodId: r.food_id || null, name: r.name, meal: r.meal,
+    servings: +r.servings || 1,
+    calories: r.calories != null ? Math.round(r.calories * (+r.servings || 1)) : null,
+    proteinG: r.protein_g != null ? +(r.protein_g * (+r.servings || 1)).toFixed(1) : null,
+    carbsG:   r.carbs_g   != null ? +(r.carbs_g   * (+r.servings || 1)).toFixed(1) : null,
+    fatG:     r.fat_g     != null ? +(r.fat_g     * (+r.servings || 1)).toFixed(1) : null,
+    fiberG:   r.fiber_g   != null ? +(r.fiber_g   * (+r.servings || 1)).toFixed(1) : null,
+    logDate: r.log_date, loggedAt: r.logged_at, notes: r.notes || null,
+  };
+}
+
+async function listFoods(env, user) {
+  await ensureFoodSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT * FROM foods WHERE user_id = ? AND is_active = 1 ORDER BY name COLLATE NOCASE"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  return json({ foods: (r.results || []).map(foodRow) });
+}
+async function createFood(request, env, user) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body?.name) return json({ error: "Name required" }, 400);
+  const now = nowSec();
+  const r = await env.DB.prepare(
+    "INSERT INTO foods (user_id, name, calories, protein_g, carbs_g, fat_g, fiber_g, " +
+    "  serving_size, brand, notes, created_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(
+    user.id,
+    sanitizeText(body.name, 120),
+    Number.isFinite(+body.calories) ? Math.max(0, Math.min(5000, +body.calories)) : null,
+    Number.isFinite(+body.proteinG) ? +(+body.proteinG).toFixed(2) : null,
+    Number.isFinite(+body.carbsG)   ? +(+body.carbsG).toFixed(2)   : null,
+    Number.isFinite(+body.fatG)     ? +(+body.fatG).toFixed(2)     : null,
+    Number.isFinite(+body.fiberG)   ? +(+body.fiberG).toFixed(2)   : null,
+    sanitizeText(body.servingSize, 60),
+    sanitizeText(body.brand, 60),
+    sanitizeText(body.notes, 500),
+    now,
+  ).run();
+  return json({ id: r.meta?.last_row_id, ok: true });
+}
+async function updateFood(request, env, user, id) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const owned = await env.DB.prepare(
+    "SELECT 1 FROM foods WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Not found" }, 404);
+  const sets = []; const binds = [];
+  const numField = (k, col, max) => {
+    if (k in body) { sets.push(`${col} = ?`); binds.push(Number.isFinite(+body[k]) ? +(+body[k]).toFixed(2) : null); }
+  };
+  if ("name" in body)         { sets.push("name = ?"); binds.push(sanitizeText(body.name, 120)); }
+  if ("calories" in body)     { sets.push("calories = ?"); binds.push(Number.isFinite(+body.calories) ? Math.max(0, Math.min(5000, +body.calories)) : null); }
+  numField("proteinG", "protein_g");
+  numField("carbsG",   "carbs_g");
+  numField("fatG",     "fat_g");
+  numField("fiberG",   "fiber_g");
+  if ("servingSize" in body)  { sets.push("serving_size = ?"); binds.push(sanitizeText(body.servingSize, 60)); }
+  if ("brand" in body)        { sets.push("brand = ?"); binds.push(sanitizeText(body.brand, 60)); }
+  if ("notes" in body)        { sets.push("notes = ?"); binds.push(sanitizeText(body.notes, 500)); }
+  if (!sets.length) return json({ error: "Nothing to update" }, 400);
+  binds.push(id, user.id);
+  await env.DB.prepare(`UPDATE foods SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`).bind(...binds).run();
+  return json({ ok: true });
+}
+async function deleteFood(env, user, id) {
+  await ensureFoodSchema(env);
+  await env.DB.prepare("UPDATE foods SET is_active = 0 WHERE id = ? AND user_id = ?").bind(id, user.id).run();
+  return json({ ok: true });
+}
+
+async function logFood(request, env, user) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body?.name) return json({ error: "Name required" }, 400);
+  const meal = String(body.meal || "snack").toLowerCase();
+  if (!FOOD_MEALS.has(meal)) return json({ error: "Invalid meal" }, 400);
+  const now = nowSec();
+  const date = normaliseDate(body.logDate) || new Date(now * 1000).toISOString().slice(0, 10);
+  // If a food_id was supplied and it's the user's, copy its nutrition snapshot.
+  let snap = {
+    name: sanitizeText(body.name, 120),
+    calories: Number.isFinite(+body.calories) ? +body.calories : null,
+    proteinG: Number.isFinite(+body.proteinG) ? +body.proteinG : null,
+    carbsG:   Number.isFinite(+body.carbsG)   ? +body.carbsG   : null,
+    fatG:     Number.isFinite(+body.fatG)     ? +body.fatG     : null,
+    fiberG:   Number.isFinite(+body.fiberG)   ? +body.fiberG   : null,
+  };
+  if (body.foodId) {
+    const f = await env.DB.prepare(
+      "SELECT name, calories, protein_g, carbs_g, fat_g, fiber_g FROM foods WHERE id = ? AND user_id = ?"
+    ).bind(+body.foodId, user.id).first().catch(() => null);
+    if (f) {
+      snap = {
+        name: f.name, calories: f.calories,
+        proteinG: f.protein_g, carbsG: f.carbs_g, fatG: f.fat_g, fiberG: f.fiber_g,
+      };
+    }
+  }
+  const servings = Number.isFinite(+body.servings) && +body.servings > 0 ? +body.servings : 1;
+  const r = await env.DB.prepare(
+    "INSERT INTO food_logs (user_id, food_id, name, meal, calories, protein_g, carbs_g, fat_g, fiber_g, " +
+    "  servings, log_date, logged_at, notes) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).bind(
+    user.id, body.foodId ? +body.foodId : null, snap.name, meal,
+    snap.calories, snap.proteinG, snap.carbsG, snap.fatG, snap.fiberG,
+    servings, date, now, sanitizeText(body.notes, 500),
+  ).run();
+  return json({ id: r.meta?.last_row_id, ok: true });
+}
+async function deleteFoodLog(env, user, id) {
+  await ensureFoodSchema(env);
+  await env.DB.prepare("DELETE FROM food_logs WHERE id = ? AND user_id = ?").bind(id, user.id).run();
+  return json({ ok: true });
+}
+async function getFoodDay(env, user, date) {
+  await ensureFoodSchema(env);
+  const d = normaliseDate(date) || new Date().toISOString().slice(0, 10);
+  const r = await env.DB.prepare(
+    "SELECT * FROM food_logs WHERE user_id = ? AND log_date = ? ORDER BY logged_at ASC"
+  ).bind(user.id, d).all().catch(() => ({ results: [] }));
+  const logs = (r.results || []).map(foodLogRow);
+  // Totals
+  const totals = logs.reduce((acc, l) => {
+    acc.calories += l.calories || 0;
+    acc.proteinG += l.proteinG || 0;
+    acc.carbsG   += l.carbsG   || 0;
+    acc.fatG     += l.fatG     || 0;
+    acc.fiberG   += l.fiberG   || 0;
+    return acc;
+  }, { calories: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0 });
+  totals.proteinG = +totals.proteinG.toFixed(1);
+  totals.carbsG   = +totals.carbsG.toFixed(1);
+  totals.fatG     = +totals.fatG.toFixed(1);
+  totals.fiberG   = +totals.fiberG.toFixed(1);
+  return json({ date: d, logs, totals });
+}
+async function getFoodWeek(env, user) {
+  await ensureFoodSchema(env);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  // One round-trip query for the week's calorie sums.
+  const r = await env.DB.prepare(
+    "SELECT log_date, " +
+    "       SUM(calories * servings) AS calories, " +
+    "       SUM(protein_g * servings) AS protein_g, " +
+    "       SUM(carbs_g * servings) AS carbs_g, " +
+    "       SUM(fat_g * servings) AS fat_g " +
+    "FROM food_logs WHERE user_id = ? AND log_date BETWEEN ? AND ? " +
+    "GROUP BY log_date"
+  ).bind(user.id, days[0], days[6]).all().catch(() => ({ results: [] }));
+  const byDate = new Map((r.results || []).map((row) => [row.log_date, row]));
+  return json({
+    days: days.map((d) => {
+      const row = byDate.get(d) || {};
+      return {
+        date: d,
+        calories: Math.round(row.calories || 0),
+        proteinG: row.protein_g != null ? +(+row.protein_g).toFixed(1) : 0,
+        carbsG:   row.carbs_g   != null ? +(+row.carbs_g).toFixed(1)   : 0,
+        fatG:     row.fat_g     != null ? +(+row.fat_g).toFixed(1)     : 0,
+      };
+    }),
+  });
+}
+async function listFoodPlans(env, user) {
+  await ensureFoodSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT p.id, p.food_id, p.meal, p.days_mask, p.servings, f.name, f.calories, " +
+    "       f.protein_g, f.carbs_g, f.fat_g " +
+    "FROM food_plans p JOIN foods f ON f.id = p.food_id " +
+    "WHERE p.user_id = ? AND f.is_active = 1"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  return json({
+    plans: (r.results || []).map((p) => ({
+      id: p.id, foodId: p.food_id, name: p.name, meal: p.meal,
+      daysMask: p.days_mask, servings: +p.servings,
+      calories: p.calories != null ? Math.round(p.calories * (+p.servings || 1)) : null,
+    })),
+  });
+}
+async function createFoodPlan(request, env, user) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body?.foodId || !body?.meal || !body?.daysMask) {
+    return json({ error: "foodId, meal, daysMask required" }, 400);
+  }
+  const meal = String(body.meal).toLowerCase();
+  if (!FOOD_MEALS.has(meal)) return json({ error: "Invalid meal" }, 400);
+  const owned = await env.DB.prepare("SELECT 1 FROM foods WHERE id = ? AND user_id = ?")
+    .bind(+body.foodId, user.id).first().catch(() => null);
+  if (!owned) return json({ error: "Food not found" }, 404);
+  const servings = Number.isFinite(+body.servings) && +body.servings > 0 ? +body.servings : 1;
+  const r = await env.DB.prepare(
+    "INSERT INTO food_plans (user_id, food_id, meal, days_mask, servings, created_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(user.id, +body.foodId, meal, +body.daysMask, servings, nowSec()).run();
+  return json({ id: r.meta?.last_row_id, ok: true });
+}
+async function deleteFoodPlan(env, user, id) {
+  await ensureFoodSchema(env);
+  await env.DB.prepare("DELETE FROM food_plans WHERE id = ? AND user_id = ?").bind(id, user.id).run();
+  return json({ ok: true });
+}
+async function getFoodPrefs(env, user) {
+  await ensureFoodSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT * FROM user_food_prefs WHERE user_id = ?"
+  ).bind(user.id).first().catch(() => null);
+  return json({
+    dailyCalorieTarget: r?.daily_calorie_target || 2000,
+    proteinTargetG: r?.protein_target_g || null,
+    carbsTargetG:   r?.carbs_target_g   || null,
+    fatTargetG:     r?.fat_target_g     || null,
+  });
+}
+async function updateFoodPrefs(request, env, user) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const cal = Number.isFinite(+body.dailyCalorieTarget) ? Math.max(800, Math.min(8000, +body.dailyCalorieTarget)) : 2000;
+  const p = Number.isFinite(+body.proteinTargetG) ? Math.max(0, Math.min(500, +body.proteinTargetG)) : null;
+  const c = Number.isFinite(+body.carbsTargetG)   ? Math.max(0, Math.min(800, +body.carbsTargetG))   : null;
+  const f = Number.isFinite(+body.fatTargetG)     ? Math.max(0, Math.min(400, +body.fatTargetG))     : null;
+  const now = nowSec();
+  await env.DB.prepare(
+    "INSERT INTO user_food_prefs (user_id, daily_calorie_target, protein_target_g, carbs_target_g, fat_target_g, updated_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET " +
+    "  daily_calorie_target = ?, protein_target_g = ?, carbs_target_g = ?, fat_target_g = ?, updated_at = ?"
+  ).bind(user.id, cal, p, c, f, now, cal, p, c, f, now).run();
+  return json({ ok: true, dailyCalorieTarget: cal, proteinTargetG: p, carbsTargetG: c, fatTargetG: f });
 }
 
 async function seedRecipeFoods(env) {
