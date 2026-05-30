@@ -162,17 +162,52 @@ async function renderEndoWatch() {
 // Interactive silhouette: each named region has a hotspot for click-to-log
 // and (when a recent symptom exists at that location) a glowing red dot
 // sized by how many entries hit it in the last 30 days.
+// Each region: [key, cx, cy, hotR, glowR, label]
+// Coordinates target the new 220x520 viewBox. Paired regions have
+// distinct Left/Right entries so users can tap directly on the side
+// that hurts — left ovary vs right ovary, left knee vs right knee,
+// etc. — and the modal then offers sub-spots for further granularity
+// (e.g. "Both" / specific quadrant).
 const BODY_MAP_REGIONS = [
-  // [key, cx, cy, hotR, glowR, label]
-  ["Lower abdomen", 110, 195, 18, 14, "Lower abdomen"],
-  ["Pelvis",        110, 230, 18, 14, "Pelvis"],
-  ["Ovaries",        92, 218, 12, 10, "Ovaries"],
-  ["Uterus",        110, 218, 10,  9, "Uterus"],
-  ["Bladder",       110, 240, 10,  9, "Bladder"],
-  ["Rectum",        110, 258, 10,  9, "Rectum"],
-  ["Lower back",    110, 200, 16, 13, "Lower back"], // overlapping the abdomen visually is fine — it's a front view but we still need a spot
-  ["Legs",          110, 370, 22, 16, "Legs"],
-  ["Other",         110,  85, 14, 11, "Other"],
+  // Head & neck
+  ["Head",            110,  40, 22, 16, "Head"],
+  ["Jaw",             110,  66, 10,  8, "Jaw"],
+  ["Neck",            110,  72, 11,  9, "Neck"],
+  // Shoulders + arms (paired)
+  ["Left shoulder",    78,  92, 14, 10, "Left shoulder"],
+  ["Right shoulder",  142,  92, 14, 10, "Right shoulder"],
+  ["Left arm",         66, 150, 12, 10, "Left arm"],
+  ["Right arm",       154, 150, 12, 10, "Right arm"],
+  ["Left elbow",       62, 204, 10,  8, "Left elbow"],
+  ["Right elbow",     158, 204, 10,  8, "Right elbow"],
+  ["Left hand",        64, 304, 11,  9, "Left hand"],
+  ["Right hand",      156, 304, 11,  9, "Right hand"],
+  // Torso
+  ["Chest",           110, 120, 18, 13, "Chest"],
+  ["Left breast",      94, 130, 12,  9, "Left breast"],
+  ["Right breast",    126, 130, 12,  9, "Right breast"],
+  ["Upper abdomen",   110, 180, 16, 12, "Upper abdomen"],
+  ["Lower abdomen",   110, 220, 17, 13, "Lower abdomen"],
+  // Pelvic region (the core endo zone)
+  ["Pelvis",          110, 268, 18, 14, "Pelvis"],
+  ["Left ovary",       92, 264, 11,  9, "Left ovary"],
+  ["Right ovary",     128, 264, 11,  9, "Right ovary"],
+  ["Uterus",          110, 274, 11,  9, "Uterus"],
+  ["Bladder",         110, 296, 11,  9, "Bladder"],
+  ["Rectum",          110, 312, 10,  8, "Rectum"],
+  ["Lower back",      110, 250, 13, 10, "Lower back"], // front-view, sits behind torso
+  // Hips
+  ["Left hip",         78, 308, 12, 10, "Left hip"],
+  ["Right hip",       142, 308, 12, 10, "Right hip"],
+  // Legs (each side: thigh, knee, calf, foot)
+  ["Left thigh",       85, 370, 14, 11, "Left thigh"],
+  ["Right thigh",     135, 370, 14, 11, "Right thigh"],
+  ["Left knee",        86, 420, 12, 10, "Left knee"],
+  ["Right knee",      134, 420, 12, 10, "Right knee"],
+  ["Left calf",        86, 462, 12, 10, "Left calf"],
+  ["Right calf",      134, 462, 12, 10, "Right calf"],
+  ["Left foot",        88, 510, 13, 10, "Left foot"],
+  ["Right foot",      132, 510, 13, 10, "Right foot"],
 ];
 
 async function renderBodyMap() {
@@ -224,33 +259,86 @@ async function renderBodyMap() {
   }
 }
 
-// Region → sub-spots offered when the user taps that region. Lets the
-// user say "left ovary" / "right ovary" / "both" instead of just "Ovaries".
-// Keys MUST match the region labels rendered by the body map.
+// Region → optional sub-spots offered after tapping. For paired body
+// parts that already have explicit Left/Right entries on the silhouette
+// we don't repeat the side here — sub-spots are for further granularity
+// (e.g. front/back of knee, specific quadrant). For non-paired centre
+// regions we still offer left/right/both/centre.
 const PAIN_SUBSPOTS = {
-  "Ovaries":       ["Left ovary", "Right ovary", "Both ovaries"],
-  "Pelvis":        ["Left pelvis", "Right pelvis", "Centre", "Whole pelvis"],
-  "Lower abdomen": ["Left lower", "Right lower", "Centre", "Whole"],
-  "Lower back":    ["Left lower back", "Right lower back", "Centre"],
-  "Legs":          ["Left leg", "Right leg", "Both legs"],
-  "Uterus":        [],
-  "Bladder":       [],
-  "Rectum":        [],
-  "Other":         [],
+  "Head":            ["Forehead", "Top of head", "Back of head", "Temples", "Behind eyes"],
+  "Jaw":             ["Left side", "Right side", "Both sides", "Front (TMJ)"],
+  "Neck":            ["Front", "Back", "Left side", "Right side"],
+  "Chest":           ["Centre", "Left side", "Right side"],
+  "Upper abdomen":   ["Centre", "Left upper", "Right upper", "Whole"],
+  "Lower abdomen":   ["Centre", "Left lower", "Right lower", "Whole"],
+  "Pelvis":          ["Centre", "Left pelvis", "Right pelvis", "Whole pelvis"],
+  "Lower back":      ["Left", "Right", "Centre", "Across"],
+  "Left arm":        ["Upper arm", "Elbow", "Forearm", "Whole arm"],
+  "Right arm":       ["Upper arm", "Elbow", "Forearm", "Whole arm"],
+  "Left thigh":      ["Front", "Back", "Inner", "Outer"],
+  "Right thigh":     ["Front", "Back", "Inner", "Outer"],
+  "Left knee":       ["Front", "Back", "Inner", "Outer"],
+  "Right knee":      ["Front", "Back", "Inner", "Outer"],
+  "Left calf":       ["Front (shin)", "Back (calf)", "Inner", "Outer"],
+  "Right calf":      ["Front (shin)", "Back (calf)", "Inner", "Outer"],
+  "Left foot":       ["Top", "Sole", "Heel", "Toes", "Ankle"],
+  "Right foot":      ["Top", "Sole", "Heel", "Toes", "Ankle"],
+  // No sub-spots for explicit pinpoint locations
+  "Uterus":          [],
+  "Bladder":         [],
+  "Rectum":          [],
+  "Left ovary":      [],
+  "Right ovary":     [],
+  "Left breast":     [],
+  "Right breast":    [],
+  "Left shoulder":   [],
+  "Right shoulder":  [],
+  "Left elbow":      [],
+  "Right elbow":     [],
+  "Left hand":       ["Palm", "Back", "Fingers", "Wrist"],
+  "Right hand":      ["Palm", "Back", "Fingers", "Wrist"],
+  "Left hip":        [],
+  "Right hip":       [],
 };
 
 // Pick the canonical symptom key based on which region the user tapped,
 // so the row lands in the right bucket on the symptom-frequency chart.
+// We have explicit endo-relevant keys for the core regions and fall
+// back to "pain" for limbs / extremities.
 const REGION_TO_SYMPTOM = {
-  "Ovaries":       "pelvic_pain",
-  "Pelvis":        "pelvic_pain",
-  "Uterus":        "pelvic_pain",
-  "Bladder":       "pelvic_pain",
-  "Rectum":        "painful_bowel",
-  "Lower abdomen": "endo_belly",
-  "Lower back":    "back_pain",
-  "Legs":          "pain",
-  "Other":         "pain",
+  "Head":            "headache",
+  "Jaw":             "pain",
+  "Neck":            "pain",
+  "Chest":           "pain",
+  "Left breast":     "breast_tender",
+  "Right breast":    "breast_tender",
+  "Left shoulder":   "pain",
+  "Right shoulder":  "pain",
+  "Left arm":        "pain",
+  "Right arm":       "pain",
+  "Left elbow":      "pain",
+  "Right elbow":     "pain",
+  "Left hand":       "pain",
+  "Right hand":      "pain",
+  "Upper abdomen":   "pain",
+  "Lower abdomen":   "endo_belly",
+  "Pelvis":          "pelvic_pain",
+  "Left ovary":      "pelvic_pain",
+  "Right ovary":     "pelvic_pain",
+  "Uterus":          "pelvic_pain",
+  "Bladder":         "painful_urination",
+  "Rectum":          "painful_bowel",
+  "Lower back":      "back_pain",
+  "Left hip":        "pelvic_pain",
+  "Right hip":       "pelvic_pain",
+  "Left thigh":      "pain",
+  "Right thigh":     "pain",
+  "Left knee":       "pain",
+  "Right knee":      "pain",
+  "Left calf":       "pain",
+  "Right calf":      "pain",
+  "Left foot":       "pain",
+  "Right foot":      "pain",
 };
 
 function openPainModal(region) {
@@ -267,12 +355,17 @@ function openPainModal(region) {
   // Region
   modal.querySelector("#pain-region-input").value = region;
   modal.querySelector("#pain-region-display").textContent = region;
-  // Sub-spot chips for this region
+  // Sub-spot chips for this region. Hide the whole section if the
+  // region is a specific pinpoint (Left ovary, Uterus, etc.) — the
+  // user already named the exact spot by tapping it.
   const subGroup = modal.querySelector("#pain-subspot-group");
+  const subSection = subGroup.closest(".modal-section");
   const subs = PAIN_SUBSPOTS[region] || [];
   if (!subs.length) {
-    subGroup.innerHTML = `<span class="seg-sublabel" style="font-size:12px;color:#7a5f6c">No sub-spots for this region.</span>`;
+    subSection.hidden = true;
+    subGroup.innerHTML = "";
   } else {
+    subSection.hidden = false;
     subGroup.innerHTML = subs.map((s) => `<button type="button" data-val="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join("");
   }
   subGroup.dataset.value = "";

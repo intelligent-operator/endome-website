@@ -1108,15 +1108,23 @@ body.drawer-open{overflow:hidden}
 .body-map-card{padding:14px 18px}
 .card-head-cta-static{margin-left:auto;font-size:11px;color:#a08596;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .body-map-wrap{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
-.body-map-svg{width:200px;height:auto;max-height:420px;flex-shrink:0;display:block}
-.body-map-svg .body-silhouette path,.body-map-svg .body-silhouette ellipse{transition:fill .2s}
+.body-map-svg{
+  width:220px;height:auto;max-height:560px;
+  flex-shrink:0;display:block;
+}
+.body-map-svg .body-silhouette path,
+.body-map-svg .body-silhouette ellipse,
+.body-map-svg .body-silhouette circle{transition:fill .2s}
 .body-map-hotspots circle{
-  fill:transparent;stroke:#ffd6e0;stroke-width:1;stroke-dasharray:2 2;opacity:0;cursor:pointer;
-  transition:opacity .15s,fill .15s,stroke .15s;
+  fill:transparent;stroke:#ffd6e0;stroke-width:1;stroke-dasharray:2 2;opacity:.4;cursor:pointer;
+  transition:opacity .12s,fill .12s,stroke .12s;
   pointer-events:all;
 }
 .body-map-svg:hover .body-map-hotspots circle{opacity:.7}
-.body-map-hotspots circle:hover{fill:rgba(255,77,138,.15);stroke:#ff4e8a;stroke-dasharray:none;opacity:1}
+.body-map-hotspots circle:hover,
+.body-map-hotspots circle:focus{
+  fill:rgba(255,77,138,.18);stroke:#ff4e8a;stroke-width:1.4;stroke-dasharray:none;opacity:1;outline:none;
+}
 .body-map-glows circle{pointer-events:none;mix-blend-mode:multiply}
 .body-map-glows circle.glow-core{
   animation:bodyMapPulse 2.2s ease-in-out infinite;
@@ -1145,7 +1153,7 @@ body.drawer-open{overflow:hidden}
 .body-map-row .meta{font-size:11px;color:#7a5f6c;font-feature-settings:"tnum"}
 @media (max-width:640px){
   .body-map-wrap{justify-content:center}
-  .body-map-svg{width:170px}
+  .body-map-svg{width:200px}
   .body-map-legend{min-width:0;width:100%}
 }
 

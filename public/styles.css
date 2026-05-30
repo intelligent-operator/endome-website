@@ -615,6 +615,9 @@ body.is-signed-in .nav-when-out{display:none !important}
 .modal-card{
   position:relative;z-index:1;
   width:100%;max-width:420px;
+  max-height:calc(100dvh - 40px);
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
   background:#fff;border-radius:22px;
   padding:32px 28px 26px;text-align:center;
   box-shadow:0 30px 70px rgba(58,29,43,.35);
