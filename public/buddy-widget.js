@@ -43,7 +43,12 @@
         </div>
         <ul class="bw-drawer-list" id="bw-drawer-list"></ul>
       </aside>
-      <div class="bw-body" id="bw-body"></div>
+      <div class="bw-body" id="bw-body">
+        <div class="bw-welcome">
+          <h3>👋 Say hi to your companion.</h3>
+          <p>Ask anything about your symptoms, your data, or how you're feeling.</p>
+        </div>
+      </div>
     </div>
     <form class="bw-input-row" id="bw-form">
       <textarea id="bw-input" rows="1" placeholder="Ask Buddy…" maxlength="4000"></textarea>
@@ -135,8 +140,19 @@
     launcher.hidden = true;
     backdrop.hidden = false;
     panel.hidden = false;
+    // Always ensure the history drawer is closed on (re)open so the user
+    // lands on the conversation, not an empty drawer.
+    const drawer = panel.querySelector("#bw-drawer");
+    if (drawer) drawer.hidden = true;
     document.body.classList.add("bw-open");
-    panel.querySelector("#bw-input").focus({ preventScroll: true });
+    // Do NOT auto-focus the input on touch screens — that pops the OS
+    // keyboard instantly and shoves the panel out of view. Let the user
+    // tap when they're ready. Desktop keeps autofocus for keyboard users.
+    const isTouch = matchMedia("(max-width: 820px)").matches || ("ontouchstart" in window);
+    if (!isTouch) panel.querySelector("#bw-input").focus({ preventScroll: true });
+    // Start watching the visual viewport so the panel rides above the
+    // on-screen keyboard instead of disappearing behind it.
+    enableKeyboardTracking();
     if (!loadedOnce) {
       loadedOnce = true;
       await fetchIdentity();
@@ -150,6 +166,34 @@
     launcher.hidden = false;
     document.body.classList.remove("bw-open");
     panel.querySelector("#bw-drawer").hidden = true;
+    panel.style.bottom = "";  // reset any keyboard offset
+    disableKeyboardTracking();
+  }
+
+  // ---- iOS keyboard tracking --------------------------------------------
+  // On iOS Safari the on-screen keyboard does NOT resize the layout
+  // viewport — it just overlays the bottom. Without compensation the
+  // bottom-sheet's input row ends up behind the keyboard and users can't
+  // see what they're typing. We listen to visualViewport changes and
+  // push the sheet up by the obscured pixel count.
+  let vvHandler = null;
+  function enableKeyboardTracking() {
+    if (vvHandler || !window.visualViewport) return;
+    vvHandler = () => {
+      if (!matchMedia("(max-width: 820px)").matches) { panel.style.bottom = ""; return; }
+      const vv = window.visualViewport;
+      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      panel.style.bottom = offset + "px";
+    };
+    window.visualViewport.addEventListener("resize", vvHandler);
+    window.visualViewport.addEventListener("scroll", vvHandler);
+    vvHandler();
+  }
+  function disableKeyboardTracking() {
+    if (!vvHandler || !window.visualViewport) return;
+    window.visualViewport.removeEventListener("resize", vvHandler);
+    window.visualViewport.removeEventListener("scroll", vvHandler);
+    vvHandler = null;
   }
 
   // ---- History drawer ----------------------------------------------------

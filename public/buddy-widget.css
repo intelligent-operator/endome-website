@@ -66,14 +66,19 @@
     padding:11px 16px;font-size:13px;
   }
   .bw-panel{
-    /* Sheet: full width minus tiny side gutters, anchored to the bottom. */
+    /* Sheet: full width minus tiny side gutters, anchored to the bottom.
+       Slightly less than 70dvh so there's always a visible strip of the
+       page above the sheet — telegraphs "tap above to dismiss". When the
+       keyboard opens, buddy-widget.js shifts `bottom` so the sheet stays
+       above the keyboard. */
     left:8px;right:8px;bottom:0;top:auto;
     width:auto;max-width:none;
-    height:min(76dvh, 640px);max-height:76dvh;
+    height:min(68dvh, 560px);max-height:80dvh;
     border-radius:20px 20px 0 0;border:none;
     box-shadow:0 -20px 60px rgba(58,29,43,.35);
     padding-bottom:env(safe-area-inset-bottom,0);
     animation:bw-slide-up .22s ease-out;
+    transition:bottom .18s ease-out;
   }
 }
 @keyframes bw-pop{
