@@ -67,6 +67,17 @@
   let opened = false;
   let loadedOnce = false;
   let myAvatar = { url: null, emoji: null };
+  let pet = { name: "Buddy", type: null };
+
+  const PET_FACES = {
+    luna:  `<svg viewBox="0 0 140 140"><path d="M40 60 L26 30 L48 46 Z" fill="#ff8aab"/><path d="M100 60 L114 30 L92 46 Z" fill="#ff8aab"/><ellipse cx="70" cy="92" rx="34" ry="26" fill="#ff9bb3"/><circle cx="70" cy="72" r="32" fill="#ffb6c8"/><circle cx="59" cy="74" r="4.5" fill="#2c1320"/><circle cx="81" cy="74" r="4.5" fill="#2c1320"/><path d="M67 86 q3 3 6 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`,
+    poppy: `<svg viewBox="0 0 140 140"><ellipse cx="44" cy="80" rx="14" ry="20" fill="#e8a86a"/><ellipse cx="96" cy="80" rx="14" ry="20" fill="#e8a86a"/><circle cx="70" cy="72" r="32" fill="#f5c184"/><circle cx="59" cy="72" r="4.5" fill="#2c1320"/><circle cx="81" cy="72" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="84" rx="3.5" ry="2.5" fill="#2c1320"/><path d="M66 90 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none"/></svg>`,
+    mochi: `<svg viewBox="0 0 140 140"><ellipse cx="52" cy="34" rx="9" ry="22" fill="#dcd0f0"/><ellipse cx="88" cy="34" rx="9" ry="22" fill="#dcd0f0"/><circle cx="70" cy="72" r="30" fill="#f0e6fb"/><circle cx="60" cy="74" r="4.5" fill="#2c1320"/><circle cx="80" cy="74" r="4.5" fill="#2c1320"/><path d="M68 84 l2 2 l2 -2 z" fill="#ff7a99"/></svg>`,
+    sunny: `<svg viewBox="0 0 140 140"><path d="M40 38 L52 60 L34 56 Z" fill="#e8762a"/><path d="M100 38 L88 60 L106 56 Z" fill="#e8762a"/><circle cx="70" cy="72" r="32" fill="#f08b3a"/><path d="M70 60 Q50 72 56 92 Q70 86 70 86 Q70 86 84 92 Q90 72 70 60 Z" fill="#fff"/><circle cx="60" cy="72" r="4.5" fill="#2c1320"/><circle cx="80" cy="72" r="4.5" fill="#2c1320"/></svg>`,
+    coco:  `<svg viewBox="0 0 140 140"><circle cx="34" cy="58" r="16" fill="#9d8fc7"/><circle cx="106" cy="58" r="16" fill="#9d8fc7"/><circle cx="70" cy="68" r="30" fill="#b5a7d8"/><circle cx="60" cy="68" r="4.5" fill="#2c1320"/><circle cx="80" cy="68" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="82" rx="9" ry="7" fill="#2c1320"/></svg>`,
+    kiki:  `<svg viewBox="0 0 140 140"><ellipse cx="56" cy="34" rx="6" ry="20" fill="#d9a872"/><ellipse cx="84" cy="34" rx="6" ry="20" fill="#d9a872"/><ellipse cx="70" cy="70" rx="28" ry="26" fill="#e8b985"/><circle cx="60" cy="68" r="4.5" fill="#2c1320"/><circle cx="80" cy="68" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="80" rx="3.5" ry="2.5" fill="#2c1320"/></svg>`,
+  };
+  const petFace = () => PET_FACES[pet.type] || "💬";
 
   function wire() {
     launcher.addEventListener("click", openPanel);
@@ -101,10 +112,15 @@
     panel.querySelector("#bw-input").focus();
     if (!loadedOnce) {
       loadedOnce = true;
-      // Grab the user's avatar once so their bubbles show their photo/emoji.
+      // Grab the user's avatar + their pet identity once.
       try {
         const r = await fetch("/api/me/today", { credentials: "same-origin" });
-        if (r.ok) { const me = await r.json(); myAvatar = { url: me?.user?.avatarUrl || null, emoji: me?.user?.avatar || null }; }
+        if (r.ok) {
+          const me = await r.json();
+          myAvatar = { url: me?.user?.avatarUrl || null, emoji: me?.user?.avatar || null };
+          if (me?.pet?.name) pet = { name: me.pet.name, type: me.pet.type || null };
+          applyPetIdentity();
+        }
       } catch {}
       await loadMostRecent();
     }
@@ -209,12 +225,13 @@
     const body = panel.querySelector("#bw-body");
     body.innerHTML = `
       <div class="bw-welcome">
-        <h3>👋 Hi, I'm Buddy.</h3>
-        <p>Quick questions about your symptoms, the app, or endo? Ask away.</p>
+        <div class="bw-welcome-face">${petFace()}</div>
+        <h3>👋 Hi, I'm ${esc(pet.name)}.</h3>
+        <p>I'm right here with you. Ask about your symptoms, what your data shows, or what might help a flare.</p>
         <div class="bw-welcome-chips">
           <button type="button" data-bw-suggest="What does my symptom data show this month?">🔍 What does my data show?</button>
-          <button type="button" data-bw-suggest="How do I track a flare in the app?">📝 How do I log a flare?</button>
-          <button type="button" data-bw-suggest="What questions should I bring to my next gyno appointment?">🩺 Prep for my next appointment</button>
+          <button type="button" data-bw-suggest="What can I try for a pain flare right now?">🌡 Help with a flare</button>
+          <button type="button" data-bw-suggest="What's one thing I could try this week to feel better?">✨ One thing to try this week</button>
         </div>
       </div>`;
     body.querySelectorAll("[data-bw-suggest]").forEach((b) => {
@@ -238,11 +255,18 @@
     return "🌸";
   }
   function bubble(m) {
-    const av = m.role === "user" ? userAv() : "💬";
+    const av = m.role === "user" ? userAv() : `<span class="bw-pet-face">${petFace()}</span>`;
     return `<div class="bw-msg ${m.role}">
-      <div class="av">${av}</div>
+      <div class="av${m.role === "assistant" ? " pet" : ""}">${av}</div>
       <div class="bb">${renderLite(m.content)}</div>
     </div>`;
+  }
+  // Apply pet name + face to the widget header.
+  function applyPetIdentity() {
+    const t = panel.querySelector(".bw-head-title strong");
+    if (t) t.textContent = pet.name;
+    const a = panel.querySelector(".bw-head-avatar");
+    if (a) a.innerHTML = pet.type ? `<span class="bw-pet-face">${petFace()}</span>` : "💬";
   }
   function appendBubble(role, content) {
     const body = panel.querySelector("#bw-body");
@@ -253,7 +277,7 @@
   function showTyping() {
     const body = panel.querySelector("#bw-body");
     body.insertAdjacentHTML("beforeend", `<div class="bw-msg assistant" id="bw-typing">
-      <div class="av">💬</div>
+      <div class="av pet"><span class="bw-pet-face">${petFace()}</span></div>
       <div class="bb"><div class="bw-typing"><span class="d"></span><span class="d"></span><span class="d"></span></div></div>
     </div>`);
     body.scrollTop = body.scrollHeight;

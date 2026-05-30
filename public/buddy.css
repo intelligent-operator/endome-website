@@ -137,3 +137,13 @@
 .buddy-confirm-actions .btn-soft{flex:1;justify-content:center}
 .btn-danger{background:linear-gradient(135deg,#e85c6c,#c4344b);color:#fff;border:none}
 .btn-danger:hover{filter:brightness(1.05)}
+
+/* Pet-as-companion avatars */
+.buddy-msg .avatar.pet{background:linear-gradient(135deg,#fff0f5,#ffe6ef);overflow:hidden;padding:2px}
+.buddy-pet-face{display:inline-flex;width:100%;height:100%;align-items:center;justify-content:center}
+.buddy-pet-face svg{width:100%;height:100%;display:block}
+.buddy-pet-face.sm{width:22px;height:22px;vertical-align:middle}
+.buddy-pet-face.sm svg{width:22px;height:22px}
+.buddy-welcome-emoji.buddy-pet-face.lg{width:72px;height:72px}
+.buddy-welcome-emoji.buddy-pet-face.lg svg{width:72px;height:72px}
+.buddy-history-head h2{display:flex;align-items:center;gap:6px}

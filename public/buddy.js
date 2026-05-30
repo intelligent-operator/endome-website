@@ -6,6 +6,19 @@ console.info("EndoMe buddy build v1");
   let activeId = null;
   let busy = false;
   let myAvatar = { url: null, emoji: null };
+  let pet = { name: "Buddy", type: null };
+
+  // Compact pet face SVGs (same art as onboarding) keyed by pet type — used
+  // as the companion's avatar so Buddy looks like the user's own EndoPet.
+  const PET_FACES = {
+    luna:  `<svg viewBox="0 0 140 140"><path d="M40 60 L26 30 L48 46 Z" fill="#ff8aab"/><path d="M100 60 L114 30 L92 46 Z" fill="#ff8aab"/><ellipse cx="70" cy="92" rx="34" ry="26" fill="#ff9bb3"/><circle cx="70" cy="72" r="32" fill="#ffb6c8"/><circle cx="59" cy="74" r="4.5" fill="#2c1320"/><circle cx="81" cy="74" r="4.5" fill="#2c1320"/><path d="M67 86 q3 3 6 0" stroke="#2c1320" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`,
+    poppy: `<svg viewBox="0 0 140 140"><ellipse cx="44" cy="80" rx="14" ry="20" fill="#e8a86a"/><ellipse cx="96" cy="80" rx="14" ry="20" fill="#e8a86a"/><circle cx="70" cy="72" r="32" fill="#f5c184"/><circle cx="59" cy="72" r="4.5" fill="#2c1320"/><circle cx="81" cy="72" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="84" rx="3.5" ry="2.5" fill="#2c1320"/><path d="M66 90 q4 4 8 0" stroke="#2c1320" stroke-width="1.6" fill="none"/></svg>`,
+    mochi: `<svg viewBox="0 0 140 140"><ellipse cx="52" cy="34" rx="9" ry="22" fill="#dcd0f0"/><ellipse cx="88" cy="34" rx="9" ry="22" fill="#dcd0f0"/><circle cx="70" cy="72" r="30" fill="#f0e6fb"/><circle cx="60" cy="74" r="4.5" fill="#2c1320"/><circle cx="80" cy="74" r="4.5" fill="#2c1320"/><path d="M68 84 l2 2 l2 -2 z" fill="#ff7a99"/></svg>`,
+    sunny: `<svg viewBox="0 0 140 140"><path d="M40 38 L52 60 L34 56 Z" fill="#e8762a"/><path d="M100 38 L88 60 L106 56 Z" fill="#e8762a"/><circle cx="70" cy="72" r="32" fill="#f08b3a"/><path d="M70 60 Q50 72 56 92 Q70 86 70 86 Q70 86 84 92 Q90 72 70 60 Z" fill="#fff"/><circle cx="60" cy="72" r="4.5" fill="#2c1320"/><circle cx="80" cy="72" r="4.5" fill="#2c1320"/></svg>`,
+    coco:  `<svg viewBox="0 0 140 140"><circle cx="34" cy="58" r="16" fill="#9d8fc7"/><circle cx="106" cy="58" r="16" fill="#9d8fc7"/><circle cx="70" cy="68" r="30" fill="#b5a7d8"/><circle cx="60" cy="68" r="4.5" fill="#2c1320"/><circle cx="80" cy="68" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="82" rx="9" ry="7" fill="#2c1320"/></svg>`,
+    kiki:  `<svg viewBox="0 0 140 140"><ellipse cx="56" cy="34" rx="6" ry="20" fill="#d9a872"/><ellipse cx="84" cy="34" rx="6" ry="20" fill="#d9a872"/><ellipse cx="70" cy="70" rx="28" ry="26" fill="#e8b985"/><circle cx="60" cy="68" r="4.5" fill="#2c1320"/><circle cx="80" cy="68" r="4.5" fill="#2c1320"/><ellipse cx="70" cy="80" rx="3.5" ry="2.5" fill="#2c1320"/></svg>`,
+  };
+  const petFace = () => PET_FACES[pet.type] || "💬";
 
   (async () => {
     try {
@@ -14,10 +27,13 @@ console.info("EndoMe buddy build v1");
         el.textContent = me?.user?.displayName || me?.user?.username || "there";
       });
       myAvatar = { url: me?.user?.avatarUrl || null, emoji: me?.user?.avatar || null };
+      if (me?.pet?.name) pet = { name: me.pet.name, type: me.pet.type || null };
+      applyPetIdentity();
     } catch {}
     await loadConversations();
     // Open the most recent if any, else stay on the welcome screen.
     if (conversations.length) openConversation(conversations[0].id);
+    else showWelcome();
     document.getElementById("page-loader")?.classList.add("is-hidden");
   })();
 
@@ -89,14 +105,14 @@ console.info("EndoMe buddy build v1");
   function showWelcome() {
     document.getElementById("buddy-chat").innerHTML = `
       <div class="buddy-welcome">
-        <span class="buddy-welcome-emoji">💬</span>
-        <h1>Hi, I'm Buddy.</h1>
-        <p>I'm here for your endo journey + the EndoMe app — nothing else. Ask about your symptoms, what an insight is telling you, how to log a flare, what stage 2 means, anything health-related.</p>
+        <span class="buddy-welcome-emoji buddy-pet-face lg">${petFace()}</span>
+        <h1>Hi, I'm ${escapeHtml(pet.name)}.</h1>
+        <p>I'm right here with you on your endo journey. Ask me about your symptoms, what your data is showing, what might help a flare, or anything about EndoMe.</p>
         <div class="buddy-suggestions">
           <button type="button" data-suggest="What does my symptom data show this month?">🔍 What does my data show?</button>
-          <button type="button" data-suggest="How do I track a flare in the app?">📝 How do I log a flare?</button>
-          <button type="button" data-suggest="What questions should I bring to my next gyno appointment?">🩺 Prep for my next appointment</button>
-          <button type="button" data-suggest="What is endometriosis, in plain language?">🌸 What is endometriosis?</button>
+          <button type="button" data-suggest="What can I try for a pain flare right now?">🌡 Help with a flare</button>
+          <button type="button" data-suggest="What might be driving my symptoms based on my data?">🧩 What's driving my symptoms?</button>
+          <button type="button" data-suggest="What's one thing I could try this week to feel better?">✨ One thing to try this week</button>
         </div>
       </div>`;
     wireSuggestions();
@@ -125,11 +141,19 @@ console.info("EndoMe buddy build v1");
     return "🌸";
   }
   function msgBubble(m) {
-    const avatar = m.role === "user" ? userAvatarHtml() : "💬";
+    const avatar = m.role === "user" ? userAvatarHtml()
+      : `<span class="buddy-pet-face">${petFace()}</span>`;
     return `<div class="buddy-msg ${m.role}">
-      <div class="avatar">${avatar}</div>
+      <div class="avatar${m.role === "assistant" ? " pet" : ""}">${avatar}</div>
       <div class="bubble">${renderLite(m.content)}</div>
     </div>`;
+  }
+
+  // Apply the pet's name + face to the page chrome (history header, welcome).
+  function applyPetIdentity() {
+    document.querySelectorAll("[data-buddy-name]").forEach((el) => { el.textContent = pet.name; });
+    const histH2 = document.querySelector(".buddy-history-head h2");
+    if (histH2) histH2.innerHTML = `<span class="buddy-pet-face sm">${petFace()}</span> ${escapeHtml(pet.name)}`;
   }
   // Lightweight markdown-ish renderer for assistant bubbles: bold, italic,
   // line breaks, and links. Plain text otherwise.
@@ -150,8 +174,8 @@ console.info("EndoMe buddy build v1");
   function showTyping() {
     const chat = document.getElementById("buddy-chat");
     chat.insertAdjacentHTML("beforeend", `<div class="buddy-msg assistant" id="buddy-typing-row">
-      <div class="avatar">💬</div>
-      <div class="bubble"><div class="buddy-typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span> Buddy is thinking…</div></div>
+      <div class="avatar pet"><span class="buddy-pet-face">${petFace()}</span></div>
+      <div class="bubble"><div class="buddy-typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span> ${escapeHtml(pet.name)} is thinking…</div></div>
     </div>`);
     chat.scrollTop = chat.scrollHeight;
   }

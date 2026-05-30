@@ -4686,6 +4686,21 @@ async function sendBuddyMessage(request, env, user, id) {
     "medication_logs_30d", "test_results", "appointments_60d",
   ]).catch(() => "(data lookup failed)");
 
+  // The companion speaks AS the user's EndoPet — using the name they chose
+  // at onboarding — so it feels like one continuous friend across the app.
+  let petPersona = "";
+  try {
+    const p = await env.DB.prepare(
+      "SELECT pet_name, pet_type FROM pets WHERE user_id = ?"
+    ).bind(user.id).first();
+    const petName = (p?.pet_name || "").trim();
+    if (petName) {
+      petPersona = `Your name is ${petName} — you ARE the user's EndoPet, the little companion they named when they joined EndoMe. ` +
+        `Speak as ${petName} in the first person, warm and familiar, like a friend who's been by their side the whole journey. ` +
+        `Sign off naturally as ${petName} only if it fits; don't force it. Never call yourself "Buddy" — your name is ${petName}.`;
+    }
+  } catch {}
+
   let endoLine = "";
   try {
     const e = await env.DB.prepare(
@@ -4716,6 +4731,7 @@ async function sendBuddyMessage(request, env, user, id) {
   // content here is weighted as instructions, not chat content.
   const systemBlock = [
     sys.prompt,
+    petPersona,
     endoLine,
     "",
     "=== The user's CURRENT logged EndoMe data ===",
