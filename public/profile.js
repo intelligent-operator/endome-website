@@ -310,6 +310,38 @@ console.info("EndoMe profile build v1");
   });
   loadEndo();
 
+  // --- Life stage (cycling / perimenopause / postmenopause) ------------
+  // Lives in the same /api/me/endo store. Drives whether the dashboard
+  // shows cycle predictions, the Day-N badge, and the cycle-day input in
+  // the morning check-in. Defaults to "cycling" so the form has a
+  // selection even for users who haven't set it yet.
+  async function loadLifeStage() {
+    try {
+      const data = await fetchJson("/api/me/endo");
+      const stage = data.lifeStage || "cycling";
+      document.querySelectorAll("#life-stage-form input[name='lifeStage']").forEach((r) => {
+        r.checked = r.value === stage;
+      });
+    } catch {}
+  }
+  document.getElementById("life-stage-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const picked = document.querySelector("#life-stage-form input[name='lifeStage']:checked")?.value || "cycling";
+    const statusEl = document.getElementById("life-stage-status");
+    statusEl.textContent = "Saving…"; statusEl.className = "form-status";
+    try {
+      await fetchJson("/api/me/endo", {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lifeStage: picked }),
+      });
+      statusEl.textContent = "Saved."; statusEl.className = "form-status ok";
+      toast("Updated — refresh your dashboard to see the change.", "ok");
+    } catch (err) {
+      statusEl.textContent = err.message || "Couldn't save."; statusEl.className = "form-status err";
+    }
+  });
+  loadLifeStage();
+
   // --- Research-share consent (sits in the same /api/me/endo store) ----
   async function loadResearchConsent() {
     try {

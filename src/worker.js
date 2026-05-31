@@ -1700,6 +1700,10 @@ async function getMeToday(request, env, user, ctx) {
       avatarUrl: userRow?.avatar_image_key
         ? `/api/u/${encodeURIComponent(user.id)}/avatar`
         : null,
+      // 'cycling' | 'perimenopause' | 'postmenopause' — drives whether the
+      // dashboard renders cycle-day badges, predictions and the cycle-day
+      // input in the morning check-in. Defaults to 'cycling' for legacy users.
+      lifeStage: userRow?.life_stage || "cycling",
     },
     date,
     morning: daily?.morning_logged_at ? {
@@ -5380,6 +5384,12 @@ async function ensureProfileSchema(env) {
     "ALTER TABLE users ADD COLUMN endo_status TEXT",
     "ALTER TABLE users ADD COLUMN endo_stage TEXT",
     "ALTER TABLE users ADD COLUMN wants_early_dx_support INTEGER NOT NULL DEFAULT 0",
+    // Reproductive life stage — drives whether the dashboard shows cycle
+    // predictions, fertile windows and the cycle-day picker. In perimenopause
+    // cycles can swing 21→60+ days and skip entirely, so the standard
+    // "Day N of X" model is misleading; in postmenopause it doesn't apply
+    // at all. Values: 'cycling' (default) | 'perimenopause' | 'postmenopause'.
+    "ALTER TABLE users ADD COLUMN life_stage TEXT",
     // Research consent — opt-in only. ZERO data leaves EndoMe; researchSharedAt
     // records the moment of consent so the consent record is auditable.
     "ALTER TABLE users ADD COLUMN research_share_consent INTEGER NOT NULL DEFAULT 0",
@@ -5945,17 +5955,19 @@ async function sendBuddyMessage(request, env, user, id) {
 
 const ENDO_STATUSES = new Set(["diagnosed", "unknown"]);
 const ENDO_STAGES = new Set(["stage_1", "stage_2", "stage_3", "stage_4", "unsure"]);
+const LIFE_STAGES = new Set(["cycling", "perimenopause", "postmenopause"]);
 
 async function getEndoStatus(env, user) {
   await ensureProfileSchema(env);
   const row = await env.DB.prepare(
-    "SELECT endo_status, endo_stage, wants_early_dx_support, " +
+    "SELECT endo_status, endo_stage, wants_early_dx_support, life_stage, " +
     "       research_share_consent, research_consent_at FROM users WHERE id = ?"
   ).bind(user.id).first().catch(() => null);
   return json({
     status:                row?.endo_status || null,
     stage:                 row?.endo_stage  || null,
     wantsEarlyDxSupport:   row?.wants_early_dx_support ? 1 : 0,
+    lifeStage:             row?.life_stage  || "cycling",
     researchShareConsent:  row?.research_share_consent ? 1 : 0,
     researchConsentAt:     row?.research_consent_at || null,
   });
@@ -5973,6 +5985,10 @@ async function updateEndoStatus(request, env, user) {
     sets.push("endo_status = ?");           binds.push(status);
     sets.push("endo_stage = ?");            binds.push(status === "diagnosed" && ENDO_STAGES.has(body.stage) ? body.stage : null);
     sets.push("wants_early_dx_support = ?"); binds.push(status === "unknown" && body.wantsEarlyDxSupport ? 1 : 0);
+  }
+  if ("lifeStage" in body) {
+    const ls = LIFE_STAGES.has(body.lifeStage) ? body.lifeStage : "cycling";
+    sets.push("life_stage = ?");             binds.push(ls);
   }
   if ("researchShareConsent" in body) {
     const consent = body.researchShareConsent ? 1 : 0;
@@ -9945,10 +9961,23 @@ async function getCycles(env, user) {
   // Period-length and cycle-length averages across the last 6 closed cycles.
   const periodLens = cycles.filter((c) => c.period_length).slice(0, 6).map((c) => c.period_length);
   const avgPeriod = periodLens.length ? Math.round(periodLens.reduce((a, b) => a + b, 0) / periodLens.length) : null;
+  // Read the user's life stage so we can suppress predictions that would
+  // be misleading (perimenopause cycles can swing 21→60+ days, often skip;
+  // postmenopause means cycles have ended). Cheap one-row lookup that
+  // can't break the cycle read if it fails.
+  let lifeStage = "cycling";
+  try {
+    const u = await env.DB.prepare("SELECT life_stage FROM users WHERE id = ?")
+      .bind(user.id).first();
+    lifeStage = u?.life_stage || "cycling";
+  } catch (e) { console.warn("life_stage read:", e?.message); }
   let prediction = null;
-  try { prediction = predictNextCycle(cycles); } catch (e) { console.warn("predictNextCycle:", e?.message); }
+  if (lifeStage === "cycling") {
+    try { prediction = predictNextCycle(cycles); } catch (e) { console.warn("predictNextCycle:", e?.message); }
+  }
   return json({
     cycles,
+    lifeStage,
     summary: {
       total: cycles.length,
       avgPeriodLength: avgPeriod,

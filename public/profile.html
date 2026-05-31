@@ -183,6 +183,44 @@
         </form>
       </section>
 
+      <!-- Reproductive life stage — drives cycle predictions on the dashboard -->
+      <section class="community-section">
+        <div class="section-head">
+          <h2>Life stage</h2>
+          <span class="section-hint">Helps us decide whether to show cycle predictions and the Day-N badge. Perimenopausal cycles are too irregular to predict reliably.</span>
+        </div>
+        <form id="life-stage-form" class="profile-form">
+          <fieldset class="ob-endo-pick">
+            <legend class="sr-only">Where are you in your reproductive life?</legend>
+            <label class="ob-endo-card">
+              <input type="radio" name="lifeStage" value="cycling" />
+              <div>
+                <strong>🌙 Cycling</strong>
+                <em>Regular or mostly-regular cycles — show me predictions, fertile window and day-of-cycle.</em>
+              </div>
+            </label>
+            <label class="ob-endo-card">
+              <input type="radio" name="lifeStage" value="perimenopause" />
+              <div>
+                <strong>🌗 Perimenopause</strong>
+                <em>Cycles are getting irregular — skip predictions and the Day-N badge, but keep period logging.</em>
+              </div>
+            </label>
+            <label class="ob-endo-card">
+              <input type="radio" name="lifeStage" value="postmenopause" />
+              <div>
+                <strong>🌑 Postmenopause</strong>
+                <em>Cycles have ended (12+ months without a period) — hide the cycle UI entirely.</em>
+              </div>
+            </label>
+          </fieldset>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <p class="form-status" id="life-stage-status" role="status"></p>
+          </div>
+        </form>
+      </section>
+
       <!-- Research consent (anonymous data sharing for EndoMe researchers) -->
       <section class="community-section">
         <div class="section-head">
@@ -239,8 +277,8 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/profile.js?v=1780191415" defer></script>
+  <script src="/profile.js?v=1780199000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
-  <script src="/buddy-widget.js?v=1780180907" defer></script>
+  <script src="/buddy-widget.js?v=1780199000" defer></script>
 </body>
 </html>

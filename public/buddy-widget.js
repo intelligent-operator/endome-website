@@ -109,12 +109,16 @@
   };
   const petFace = () => PET_FACES[pet.type] || "💬";
 
+  // Any tablet (iPad portrait OR landscape) or touch-only device gets sent
+  // to the full /messages chat — the popup is awful when the OS keyboard
+  // takes over half the screen and tiny tap targets fight with browser
+  // chrome. Only a real mouse-driven desktop keeps the Intercom-style popup.
+  const isTabletOrMobile = () =>
+    matchMedia("(max-width: 1100px), (pointer: coarse)").matches;
+
   function wire() {
     launcher.addEventListener("click", () => {
-      // On tablet + mobile send the user to the dedicated /buddy page
-      // (better UX than a popup with the keyboard taking over the screen).
-      // Desktop keeps the in-place Intercom-style popup.
-      if (matchMedia("(max-width: 820px)").matches) {
+      if (isTabletOrMobile()) {
         location.href = "/messages?c=buddy";
         return;
       }

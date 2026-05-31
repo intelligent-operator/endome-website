@@ -496,6 +496,56 @@ async function _renderCyclePredictionInner(slot) {
   } catch { slot.innerHTML = ""; return; }
   if (!data || typeof data !== "object") { slot.innerHTML = ""; return; }
 
+  // Perimenopause: cycles are too irregular to predict reliably (21→60+
+  // days, occasional skips). Postmenopause: cycles have ended. Render a
+  // life-stage-aware card instead of the avg-and-confidence card, but
+  // still let the user log bleeds so we can chart trends and surface
+  // patterns to their clinician.
+  const lifeStage = state?.user?.lifeStage || data.lifeStage || "cycling";
+  if (lifeStage !== "cycling") {
+    const lastStart = data.cycles?.[0]?.start_date || null;
+    const daysSinceText = lastStart
+      ? (() => {
+          const last = new Date(lastStart + "T00:00:00");
+          const diff = Math.max(0, Math.floor((Date.now() - last.getTime()) / 86400000));
+          return diff === 0 ? "today" : `${diff} day${diff === 1 ? "" : "s"} ago`;
+        })()
+      : "not logged yet";
+    const title = lifeStage === "postmenopause" ? "Postmenopause" : "Perimenopause";
+    const blurb = lifeStage === "postmenopause"
+      ? "Cycles have ended — predictions are off. Log any unexpected bleeding so we can flag it on your next report."
+      : "Cycles can swing 21→60+ days during perimenopause, so we've turned predictions off. Keep logging when periods start — patterns still matter for your clinician.";
+    slot.innerHTML = `
+      <div class="card cycle-predict-card">
+        <div class="card-head wide">
+          <span><span class="ico-tile pink">🌗</span> Cycle — ${escapeHtml(title)}</span>
+        </div>
+        <p class="cp-empty">${escapeHtml(blurb)}</p>
+        <div class="cp-grid">
+          <div class="cp-tile">
+            <span class="cp-label">Last logged bleed</span>
+            <strong>${escapeHtml(lastStart ? formatPrettyDate(lastStart) : "—")}</strong>
+            <em>${escapeHtml(daysSinceText)}</em>
+          </div>
+          <div class="cp-tile">
+            <span class="cp-label">Logged total</span>
+            <strong>${data.cycles?.length || 0}</strong>
+            <em>over time</em>
+          </div>
+        </div>
+        <button type="button" class="pill-btn full" id="cp-log-btn">📅 Log a bleed</button>
+      </div>`;
+    document.getElementById("cp-log-btn")?.addEventListener("click", () => {
+      try { openPeriodCalendar(data); }
+      catch (err) {
+        console.warn("openPeriodCalendar throw:", err?.message);
+        document.body.classList.remove("modal-open");
+        toast("Could not open the period calendar.", "error");
+      }
+    });
+    return;
+  }
+
   const p = data.prediction;
   // No prediction yet — prompt to log a period start so we can start.
   if (!p) {
@@ -746,8 +796,11 @@ function renderPeriodCalendar() {
     if (isFuture) classes.push("pc-future");
 
     // Cycle-day badge relative to most-recent start (so user sees Day 1/2/3...).
+    // Suppressed in peri/postmenopause because Day-N is meaningless once
+    // cycles are irregular or have ended.
     let cycleDayBadge = "";
-    if (maps.lastStart && iso >= maps.lastStart) {
+    const lsForBadge = state?.user?.lifeStage || "cycling";
+    if (lsForBadge === "cycling" && maps.lastStart && iso >= maps.lastStart) {
       const cd = daysBetweenIso(maps.lastStart, iso) + 1;
       if (cd >= 1 && cd <= 45) cycleDayBadge = `<em class="pc-cd">${cd}</em>`;
     }
@@ -1064,20 +1117,25 @@ function renderCycleSnapshot() {
   if (!el) return;
   const cycle = state.cycle || {};
   const m = state.morning;
+  // Day-of-cycle is meaningless once cycles become irregular or stop,
+  // so peri/postmenopause users get the morning mood/energy panel
+  // without the "Day N · Phase" header. Cycling users keep the badge.
+  const lifeStage = state?.user?.lifeStage || "cycling";
+  const isPeri = lifeStage !== "cycling";
 
-  if (!m && !cycle.day && !cycle.phase) {
+  if (!m && !cycle.day && !cycle.phase && !isPeri) {
     el.innerHTML = `<p class="empty-state">Log this morning's check-in to see your cycle overview.</p>
       <button class="pill-btn full" data-modal="morning">Morning check-in</button>`;
     return;
   }
 
   const phase = cycle.phase ? PHASE_LABEL[cycle.phase] : null;
-  const dayLine = cycle.day
-    ? `<div class="cycle-day">Day ${cycle.day}</div>`
-    : `<div class="cycle-day">—</div>`;
-  const phaseLine = phase
-    ? `<div class="cycle-phase">${phase.icon} ${phase.label} Phase</div>`
-    : `<div class="cycle-phase">Phase not set</div>`;
+  const dayLine = isPeri
+    ? ``
+    : (cycle.day ? `<div class="cycle-day">Day ${cycle.day}</div>` : `<div class="cycle-day">—</div>`);
+  const phaseLine = isPeri
+    ? `<div class="cycle-phase">${lifeStage === "postmenopause" ? "🌑 Postmenopause" : "🌗 Perimenopause"}</div>`
+    : (phase ? `<div class="cycle-phase">${phase.icon} ${phase.label} Phase</div>` : `<div class="cycle-phase">Phase not set</div>`);
 
   let statsHtml = "";
   if (m) {
@@ -1771,6 +1829,23 @@ function prefillModal(name) {
     if (phaseGroup && !phaseGroup.dataset.value) {
       const v = cycle?.phase || suggested?.phase;
       if (v) selectChip(phaseGroup, v);
+    }
+    // Perimenopause / postmenopause: hide the cycle-day + phase grid
+    // because Day-N badges and a 4-phase cycle don't map to irregular
+    // or ended cycles. The flow picker stays — bleeding still matters.
+    // Postmenopause hides the whole cycle section since flow shouldn't
+    // be expected; any spotting should be logged as a symptom + flagged.
+    const lifeStage = state?.user?.lifeStage || "cycling";
+    const dayGrid  = modal.querySelector("[data-cycle-day-grid]");
+    const periHint = modal.querySelector("[data-cycle-peri-hint]");
+    const section  = modal.querySelector("[data-cycle-section]");
+    if (dayGrid)  dayGrid.hidden  = lifeStage !== "cycling";
+    if (periHint) periHint.hidden = lifeStage === "cycling";
+    if (section)  section.hidden  = lifeStage === "postmenopause";
+    // Clear any pre-filled values when in peri/post so nothing carries over.
+    if (lifeStage !== "cycling") {
+      if (dayInput) dayInput.value = "";
+      if (phaseGroup) { phaseGroup.dataset.value = ""; phaseGroup.querySelectorAll("button.on").forEach((b) => b.classList.remove("on")); }
     }
   }
 }
