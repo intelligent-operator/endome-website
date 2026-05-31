@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780193972" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/documents.css?v=1780220000" />
+  <link rel="stylesheet" href="/documents.css?v=1780225000" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -76,25 +76,35 @@
     </aside>
 
     <main class="dash-main docs-main">
-      <header class="docs-hero">
+      <header class="docs-hero compact">
         <div class="docs-hero-copy">
           <p class="hero-eyebrow">Documents</p>
           <h1>Your private health folder.</h1>
-          <p class="hero-lead">Ultrasounds, MRI scans, blood tests, specialist notes — organised in folders. EndoMe's AI reads each one and pulls out the key findings, so your insights and Buddy understand the full picture.</p>
+          <p class="hero-lead">Ultrasounds, MRI scans, blood tests, specialist notes — organised in folders. EndoMe's AI reviews each one so your insights and Buddy understand the full picture. <strong>Only you can see them.</strong></p>
           <div class="docs-hero-pills">
             <span class="docs-hero-pill">🔒 Private to you</span>
             <span class="docs-hero-pill">🤖 AI-reviewed</span>
             <span class="docs-hero-pill">✨ Feeds insights</span>
           </div>
         </div>
-        <button type="button" class="docs-hero-cta" id="docs-hero-upload">
-          <span class="docs-hero-cta-ico">⤴</span>
-          <span class="docs-hero-cta-text">
-            <strong>Upload a document</strong>
-            <em>JPG, PNG, PDF, TXT, CSV · up to 25 MB</em>
-          </span>
-        </button>
       </header>
+
+      <section class="docs-upload-hero">
+        <div class="upload-zone upload-zone-hero" id="upload-zone">
+          <input type="file" id="upload-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv" hidden />
+          <div class="upload-zone-ico">⤴</div>
+          <div class="upload-zone-body">
+            <strong>Drop a file here, or <button class="upload-btn" type="button" id="upload-pick">pick from your device</button></strong>
+            <span class="upload-zone-meta">JPG · PNG · WebP · GIF · PDF · TXT · CSV · up to 25 MB · 500 MB total</span>
+          </div>
+          <button type="button" class="upload-zone-cta" id="docs-hero-upload">＋ Upload</button>
+        </div>
+        <div id="upload-status" class="upload-status" hidden></div>
+        <p class="storage-warn" id="storage-warn" hidden>
+          ⚠️ Storage isn't configured. Admin needs to add the
+          <code>endome-docs</code> R2 binding.
+        </p>
+      </section>
 
       <section class="docs-content">
         <header class="docs-content-head">
@@ -148,26 +158,6 @@
           <span>Tap to filter</span>
         </header>
         <div class="docs-folders" id="docs-folders"></div>
-      </div>
-
-      <div class="docs-sidebar-card upload-card">
-        <header class="docs-sidebar-head">
-          <h2>⤴ Upload</h2>
-        </header>
-        <div class="upload-zone" id="upload-zone">
-          <input type="file" id="upload-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv" hidden />
-          <div class="upload-inner">
-            <div class="upload-emoji">📁</div>
-            <strong>Drop a file here</strong>
-            <span class="upload-hint">or <button class="upload-btn" type="button" id="upload-pick">pick from your device</button></span>
-            <span class="upload-meta">JPG · PNG · WebP · GIF · PDF · TXT · CSV<br/>Up to 25 MB, 500 MB total</span>
-          </div>
-        </div>
-        <div id="upload-status" class="upload-status" hidden></div>
-        <p class="storage-warn" id="storage-warn" hidden>
-          ⚠️ Storage isn't configured. Admin needs to add the
-          <code>endome-docs</code> R2 binding.
-        </p>
       </div>
 
       <div class="docs-sidebar-card tips-card">
@@ -280,9 +270,9 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/documents.js?v=1780215000" defer></script>
+  <script src="/documents.js?v=1780225000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
-  <script src="/log-symptom-widget.js?v=1780220000" defer></script>
+  <script src="/log-symptom-widget.js?v=1780225000" defer></script>
   <script src="/buddy-widget.js?v=1780199000" defer></script>
 </body>
 </html>

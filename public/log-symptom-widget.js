@@ -202,9 +202,6 @@
     </div>
   </div>`;
 
-  document.addEventListener("DOMContentLoaded", init, { once: true });
-  if (document.readyState !== "loading") init();
-
   const SIDE_CARD_HTML = `
     <div class="lsw-side-card" id="lsw-side-card">
       <div class="lsw-side-head"><span>📅</span> Quick log</div>
@@ -214,6 +211,11 @@
       </button>
     </div>`;
 
+  // initialised + init must be declared BEFORE the readyState-triggered
+  // init() call below. When the script runs with defer (which it does
+  // on every authed page) document.readyState is already "interactive",
+  // so init() fires immediately — if `initialised` were still in TDZ
+  // here, the whole widget would silently ReferenceError out.
   let initialised = false;
   function init() {
     if (initialised) return;
@@ -399,4 +401,9 @@
     requestAnimationFrame(() => t.classList.add("in"));
     setTimeout(() => { t.classList.remove("in"); setTimeout(() => t.remove(), 250); }, 2400);
   }
+
+  // Bootstrap last — every function + variable is now defined, so the
+  // immediate readyState check can safely call init().
+  document.addEventListener("DOMContentLoaded", init, { once: true });
+  if (document.readyState !== "loading") init();
 })();
