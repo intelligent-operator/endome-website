@@ -1741,8 +1741,46 @@ async function getMeToday(request, env, user, ctx) {
       ...(notifs.results || []),
       ...(await computeMedReminders(env, user).catch(() => [])),
       ...(await computeAppointmentReminders(env, user).catch(() => [])),
+      ...(await computeFriendRequestReminders(env, user).catch(() => [])),
     ],
   });
+}
+
+// Pending incoming friend requests surfaced in the bell so users don't
+// have to discover them by visiting /messages. Each request becomes a
+// virtual notification keyed by the requester's id; dismissed via the
+// existing dismissed_reminders table.
+async function computeFriendRequestReminders(env, user) {
+  await ensureProfileSchema(env);
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT u.id, u.username, u.display_name, u.alias, f.created_at " +
+      "FROM friendships f " +
+      "JOIN users u ON u.id = f.requested_by " +
+      "WHERE f.status = 'pending' AND f.requested_by != ? " +
+      "  AND (f.user_id_a = ? OR f.user_id_b = ?) " +
+      "ORDER BY f.created_at DESC LIMIT 10"
+    ).bind(user.id, user.id, user.id).all();
+  } catch { return []; }
+  if (!(rows.results || []).length) return [];
+  const dismissed = await getDismissedReminderKeys(env, user);
+  const out = [];
+  for (const r of rows.results) {
+    const key = `friend_req:${r.id}`;
+    if (dismissed.has(key)) continue;
+    const name = r.display_name || r.alias || "Someone";
+    out.push({
+      id: key,
+      type: "friend_request",
+      title: `🤝 ${name} wants to be friends`,
+      body: `Tap to review their request in Messages.`,
+      action_url: "/messages",
+      created_at: r.created_at || nowSec(),
+      read_at: null,
+    });
+  }
+  return out;
 }
 
 // Suggest a cycle day + phase for `date` based on the most recent past

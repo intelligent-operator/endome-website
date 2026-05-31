@@ -1737,8 +1737,15 @@ function computeNotifications() {
     // the server's dismissal table propagated, the local set still hides
     // these from the badge count.
     const locallyRead = typeof n.id === "string" && localReadKeys.has(n.id);
+    let icon = "🔔";
+    if (virtual) {
+      const id = String(n.id);
+      if (id.startsWith("appt:")) icon = "📅";
+      else if (id.startsWith("friend_req:")) icon = "🤝";
+      else icon = "💊";
+    }
     items.push({
-      icon: virtual ? (String(n.id).startsWith("appt:") ? "📅" : "💊") : "🔔",
+      icon,
       title: n.title,
       body: n.body || "",
       server: n.id,

@@ -2,22 +2,15 @@
    Buddy is pinned at the top; friend DMs are below in recency order. */
 
 .messages-main{padding:0;max-width:none;height:calc(100vh - 64px);height:calc(100dvh - 64px)}
-
-/* Use the full width on /messages — the conversation list IS the
-   navigation here, so we hide the global dash-sidebar and let the
-   chat shell stretch edge-to-edge. The dashboard sidebar still works
-   from other pages; we just don't double up on /messages. */
-.dash-body.msg-fullbleed .dash-sidebar{display:none}
-.dash-body.msg-fullbleed .dash-layout{grid-template-columns:1fr}
-.dash-body.msg-fullbleed .messages-main{height:calc(100vh - 64px);height:calc(100dvh - 64px)}
 .msg-shell{
-  display:grid;grid-template-columns:360px 1fr;
+  display:grid;grid-template-columns:320px 1fr;
   height:100%;background:#fff;
-  border:1px solid #ffeaf2;border-radius:0;margin:0;
-  overflow:hidden;box-shadow:none;
+  border:1px solid #ffeaf2;border-radius:18px;
+  margin:14px 20px 14px 14px;
+  overflow:hidden;box-shadow:0 4px 18px rgba(255,77,138,.05);
 }
 @media (min-width:1400px){
-  .msg-shell{grid-template-columns:400px 1fr}
+  .msg-shell{grid-template-columns:360px 1fr}
 }
 
 /* ============ LIST PANE ============ */
@@ -244,3 +237,16 @@
   .msg-back-btn{display:flex;align-items:center;justify-content:center}
   .msg-bubble{max-width:85%;font-size:14.5px}
 }
+
+/* Section headers inside the conversation list */
+.msg-section-head{
+  list-style:none;padding:14px 14px 4px;
+  font-size:10.5px;font-weight:800;color:#7a5f6c;
+  text-transform:uppercase;letter-spacing:.08em;
+  display:flex;align-items:center;gap:6px;
+}
+.msg-section-count{
+  font-size:10px;color:#a08596;font-weight:700;
+  background:#fff;padding:1px 7px;border-radius:999px;border:1px solid #ffeaf2;
+}
+.msg-empty-sub{font-size:11.5px;padding:8px 14px}

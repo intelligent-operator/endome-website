@@ -74,7 +74,26 @@ function paintList(){
     ul.innerHTML = `<li class="msg-empty">No conversations yet. Tap ＋ to find a friend.</li>`;
     return;
   }
-  ul.innerHTML = filtered.map((c) => convRowHtml(c)).join("");
+  // Group into Buddy (pinned), Active chats (friends with messages),
+  // and Friends (accepted but never messaged yet) so the user can see
+  // who's available to chat at a glance.
+  const buddyRow  = filtered.find((c) => c.type === "buddy");
+  const activeFriends = filtered.filter((c) => c.type === "friend" && c.lastAt);
+  const idleFriends   = filtered.filter((c) => c.type === "friend" && !c.lastAt);
+  const out = [];
+  if (buddyRow) out.push(convRowHtml(buddyRow));
+  if (activeFriends.length) {
+    out.push(`<li class="msg-section-head">Chats</li>`);
+    out.push(...activeFriends.map(convRowHtml));
+  }
+  if (idleFriends.length) {
+    out.push(`<li class="msg-section-head">Friends <span class="msg-section-count">${idleFriends.length}</span></li>`);
+    out.push(...idleFriends.map(convRowHtml));
+  }
+  if (!activeFriends.length && !idleFriends.length) {
+    out.push(`<li class="msg-empty msg-empty-sub">No friends yet. Tap ＋ to find someone by their @handle.</li>`);
+  }
+  ul.innerHTML = out.join("");
 }
 
 function convRowHtml(c){
