@@ -7559,8 +7559,12 @@ async function deleteIntimacy(env, user, id) {
 // best-effort calorie + macro estimates. Admins can re-target the model
 // + prompt via /acp → Insights → Configure → food-parser.
 // =============================================================================
-const FOOD_PARSER_HAIKU_MODEL =
-  "anthropic.claude-haiku-4-5-20251001-v1:0"; // fast, cheap, plenty good for ingredient breakdown
+// Use whatever model the rest of the app is configured with by default.
+// The /acp Insights page lets admins override per flow if they want a
+// cheaper model (Haiku) for the parser specifically. Hard-coding a
+// region-restricted Haiku id was breaking this for users on inference
+// profiles (au.anthropic.* / apac.anthropic.*).
+const FOOD_PARSER_HAIKU_MODEL = null;
 const FOOD_PARSER_DEFAULT_PROMPT = `You parse a freely-written meal description into an itemised nutrition log.
 
 Output ONLY a JSON object — no prose, no markdown — with this shape:
@@ -7611,15 +7615,32 @@ async function parseFoodFromText(request, env, user) {
   const text = sanitizeText(body?.text, 600);
   if (!text) return json({ error: "Tell me what you ate." }, 400);
   const cfg = await getFoodParserConfig(env);
-  const ai = await invokeClaude(env, null, {
+  // First try whatever the admin configured; if that fails and they
+  // had picked a specific model, retry with whatever the rest of the
+  // app uses (Buddy etc.). This keeps the parser working even when an
+  // admin sets a model id that doesn't exist in the user's Bedrock
+  // region.
+  let ai = await invokeClaude(env, null, {
     system: cfg.prompt,
     messages: [{ role: "user", content: text }],
-    model: cfg.model,
+    model: cfg.model || undefined,
     maxTokens: 700,
   });
+  if (!ai.ok && cfg.model) {
+    console.warn(`food parser model ${cfg.model} failed (${ai.error}); retrying with default model`);
+    ai = await invokeClaude(env, null, {
+      system: cfg.prompt,
+      messages: [{ role: "user", content: text }],
+      maxTokens: 700,
+    });
+  }
   if (!ai.ok) {
     console.warn("food parser failed:", ai.error);
-    return json({ error: "AI parser unavailable right now — log it manually." }, 502);
+    // Surface the real error so admins can diagnose from the toast
+    // (model unavailable, IAM permissions, throttling, etc.). Truncate
+    // so we don't leak entire AWS error envelopes into a UI toast.
+    const detail = String(ai.error || "AI parser is offline").slice(0, 180);
+    return json({ error: `AI parser unavailable — ${detail}` }, 502);
   }
   // Find the JSON object even if the model wrapped it.
   let parsed = null;
@@ -7665,13 +7686,23 @@ async function seedFoodParserConfig(env) {
   try { await ensureInsightSchema(env); } catch { return; }
   const now = nowSec();
   try {
+    // model = NULL so it inherits the app's BEDROCK_MODEL_ID. Admins
+    // can pick a cheaper Haiku model from /acp → Insights → food-parser
+    // once they know which inference profile is available in their region.
     await env.DB.prepare(
       "INSERT INTO insight_configs (slug, title, emoji, description, prompt_template, " +
       "  data_scope_json, refresh_hours, model, sort_order, enabled, created_at, updated_at) " +
       "VALUES ('food-parser', 'Food parser — break down a free-text meal', '🥗', " +
-      "  'Used by the /food Quick Log button. Turns ''bacon egg roll'' into structured items with calories + macros. Cheaper model (Haiku) by default; switch to Sonnet if you need better breakdowns.', " +
-      "  ?, '[]', 0, ?, 1100, 1, ?, ?) ON CONFLICT(slug) DO NOTHING"
-    ).bind(FOOD_PARSER_DEFAULT_PROMPT, FOOD_PARSER_HAIKU_MODEL, now, now).run();
+      "  'Used by the /food Smart Log button. Turns ''bacon egg roll'' into structured items with calories + macros. Leaves model empty by default (= app-wide BEDROCK_MODEL_ID); set a Haiku inference-profile id here to make it cheaper.', " +
+      "  ?, '[]', 0, NULL, 1100, 1, ?, ?) ON CONFLICT(slug) DO NOTHING"
+    ).bind(FOOD_PARSER_DEFAULT_PROMPT, now, now).run();
+    // Heal any older row that was seeded with the bad hard-coded
+    // Haiku id back when this shipped. Safe no-op if there's no row
+    // or the admin has already picked a valid model.
+    await env.DB.prepare(
+      "UPDATE insight_configs SET model = NULL " +
+      "WHERE slug = 'food-parser' AND model = 'anthropic.claude-haiku-4-5-20251001-v1:0'"
+    ).run();
   } catch {}
 }
 
