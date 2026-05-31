@@ -316,3 +316,39 @@
 .msg-me-body{flex:1;min-width:0;display:flex;flex-direction:column}
 .msg-me-body strong{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msg-me-body span{font-size:11.5px;color:#7a5f6c;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Pet SVG colours when shown inside the Buddy chat avatar. Mirrors the
+   colours from dashboard.css so the same SVG renders correctly here. */
+[data-pet]{filter:hue-rotate(var(--color-shift, 0deg))}
+[data-pet="poppy"]{--pet-light:#f5c184;--pet-mid:#e8a86a}
+[data-pet="mochi"]{--pet-light:#f0e6fb;--pet-mid:#dcd0f0}
+[data-pet="sunny"]{--pet-light:#f08b3a;--pet-mid:#e8762a}
+[data-pet="coco"]{--pet-light:#b5a7d8;--pet-mid:#9d8fc7}
+[data-pet="kiki"]{--pet-light:#e8b985;--pet-mid:#d9a872}
+[data-pet="luna"]{--pet-light:#ffb6c8;--pet-mid:#ff9bb3}
+.msg-thread-avatar-pet{background:#fff5f8 !important;border-color:#ffd6e0 !important;padding:2px}
+.msg-thread-avatar-pet svg, .ml-avatar-pet svg{width:100%;height:100%}
+.ml-avatar-pet{background:#fff5f8;border:1px solid #ffd6e0;padding:1px}
+
+/* Mobile/tablet nav-out controls — the dashboard sidebar is hidden on
+   /messages at this size so users need an explicit exit. */
+.msg-mobile-back{
+  display:none;text-decoration:none;color:#ff4e8a;font-weight:700;
+  font-size:22px;line-height:1;padding:4px 8px;border-radius:8px;
+}
+.msg-mobile-back:hover{background:#ffeaf2}
+.msg-home-btn{
+  margin-left:auto;display:flex;align-items:center;justify-content:center;
+  width:36px;height:36px;border-radius:50%;text-decoration:none;
+  background:#fff5f8;border:1px solid #ffd6e0;font-size:16px;
+  flex-shrink:0;color:#ff4e8a;
+}
+.msg-home-btn:hover{background:#ffeaf2;border-color:#ff4e8a}
+@media (min-width:1025px){
+  /* On full desktop we already have the dashboard sidebar — hide the
+     extra home button so it doesn't double-up. */
+  .msg-home-btn{display:none}
+}
+@media (max-width:760px){
+  .msg-mobile-back{display:flex;align-items:center;justify-content:center}
+}

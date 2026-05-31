@@ -188,3 +188,46 @@
 .cravings-chip-log button{background:transparent;border:none;color:#cdb9c4;cursor:pointer;
   font-size:14px;line-height:1;padding:0 2px;font-family:inherit}
 .cravings-chip-log button:hover{color:#c4344b}
+
+/* Mobile + small tablet: the giant hero was pushing the actual food
+   tracker (today's macros + meal groups) below the fold. Shrink the
+   hero so users land on the content, not a marketing block. */
+@media (max-width:760px){
+  .food-hero{padding:14px 16px;border-radius:18px;gap:10px;grid-template-columns:1fr}
+  .food-hero h1{font-size:20px;line-height:1.2;margin:0 0 4px}
+  .food-hero .hero-lead{display:none}     /* lead copy hides — keeps content above the fold */
+  .food-hero .hero-eyebrow{font-size:10px;margin-bottom:2px}
+  .food-hero-actions{gap:6px;flex-wrap:wrap}
+  .food-hero-actions .btn{padding:8px 12px;font-size:12px;flex:1 1 auto}
+  .page-subnav{padding:8px 4px;margin:8px 0 12px}
+  .subnav-tab{padding:8px 10px;font-size:12px}
+  .subnav-tab .subnav-emoji{font-size:14px}
+  /* Tighten the macro summary so it's visible without scrolling */
+  .food-summary{padding:14px;gap:14px}
+  .food-ring{width:110px;height:110px}
+  .macro-bar{font-size:11px}
+}
+@media (max-width:480px){
+  .food-hero{padding:12px 14px}
+  .food-hero h1{font-size:18px}
+  .food-summary{flex-direction:row;align-items:center;gap:12px}
+}
+
+/* Smart-log AI modal */
+#smart-log-modal .modal-card{max-width:560px}
+.smart-result-h{margin:14px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#7a5f6c;font-weight:800}
+.smart-result-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
+.smart-item{display:flex;gap:10px;align-items:center;background:#fff5f8;border:1px solid #ffeaf2;border-radius:10px;padding:8px 10px}
+.smart-item input[type=checkbox]{flex-shrink:0}
+.smart-item-body{flex:1;min-width:0}
+.smart-item-body strong{display:block;font-size:13px;color:#2b1922}
+.smart-item-meta{display:block;font-size:11.5px;color:#7a5f6c;margin-top:2px}
+.smart-item-meta input[type=number]{
+  width:48px;padding:2px 6px;font-family:inherit;font-size:11.5px;
+  border:1px solid #ffd6e0;border-radius:6px;background:#fff;color:#2b1922;
+}
+.smart-result-totals{
+  margin:10px 0 0;padding:8px 12px;background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+  border-radius:10px;font-size:12.5px;color:#3a2330;
+}
+.smart-result-totals strong{color:#ff4e8a}

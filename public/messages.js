@@ -174,9 +174,29 @@ async function openConversation(key, kind, userId){
 async function openBuddyThread(){
   $("#msg-thread-name").textContent = petName;
   $("#msg-thread-sub").textContent = "Your EndoMe Buddy · always here";
-  $("#msg-thread-avatar").innerHTML = "🌸";
-  $("#msg-thread-avatar").className = "msg-thread-avatar msg-thread-avatar-buddy";
+  // Render the user's actual pet (luna/poppy/mochi/...) tinted with
+  // their colorSeed. Falls back to a 🌸 emoji if /api/me/pet isn't
+  // available yet (e.g. cold start).
+  const headAvatar = $("#msg-thread-avatar");
+  headAvatar.className = "msg-thread-avatar msg-thread-avatar-pet";
+  headAvatar.innerHTML = "🌸";
   _otherAvatarHtml = `<div class="ml-avatar ml-avatar-buddy" style="width:30px;height:30px;font-size:14px">🌸</div>`;
+  try {
+    const r = await api("/api/me/pet");
+    const pet = r?.pet || r;
+    if (pet?.type && window.PET_SVGS) {
+      // Big avatar in the header
+      window.renderPetSvgInto(headAvatar, { type: pet.type, mood: pet.mood, colorSeed: pet.colorSeed });
+      // Mini avatar that paints next to each Buddy bubble. We render
+      // a fresh tiny container with the same SVG so chat rows can
+      // drop it inline.
+      const mini = document.createElement("div");
+      mini.className = "ml-avatar ml-avatar-pet";
+      mini.style.width = "30px"; mini.style.height = "30px";
+      window.renderPetSvgInto(mini, { type: pet.type, mood: pet.mood, colorSeed: pet.colorSeed });
+      _otherAvatarHtml = mini.outerHTML;
+    }
+  } catch {}
   // Find-or-create the user's most-recent buddy conversation.
   try {
     const list = await api("/api/me/buddy/conversations");

@@ -409,6 +409,108 @@ console.info("EndoMe food build v1");
   // --- Log a food modal -----------------------------------------------
   const logModal = document.getElementById("food-log-modal");
   document.getElementById("btn-quick-log").addEventListener("click", () => openLogModal({}));
+
+  // --- Smart log (AI free-text parser) --------------------------------
+  // Opens its own modal, takes "bacon egg roll" and POSTs to
+  // /api/me/food/parse — server uses Claude Haiku to itemise + cost
+  // calories/macros, then user reviews + saves each item to the diary.
+  const smartModal = document.getElementById("smart-log-modal");
+  document.getElementById("btn-smart-log")?.addEventListener("click", () => {
+    smartModal.classList.add("open");
+    smartModal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+    document.getElementById("smart-log-input").value = "";
+    document.getElementById("smart-log-result").hidden = true;
+    document.getElementById("smart-log-save-btn").disabled = true;
+    smartModal.querySelectorAll("[data-close-modal]").forEach((el) => {
+      el.onclick = () => {
+        smartModal.classList.remove("open");
+        document.body.classList.remove("modal-open");
+      };
+    });
+    setTimeout(() => document.getElementById("smart-log-input").focus(), 80);
+  });
+  document.getElementById("smart-log-parse-btn")?.addEventListener("click", async () => {
+    const text = document.getElementById("smart-log-input").value.trim();
+    if (!text) { toast("Type what you ate first", "err"); return; }
+    const btn = document.getElementById("smart-log-parse-btn");
+    btn.disabled = true; btn.textContent = "✨ Parsing…";
+    try {
+      const data = await fetchJson("/api/me/food/parse", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      paintSmartResult(data);
+      document.getElementById("smart-log-result").hidden = false;
+      document.getElementById("smart-log-save-btn").disabled = false;
+    } catch (err) {
+      toast(err.message || "Couldn't parse", "err");
+    } finally {
+      btn.disabled = false; btn.textContent = "✨ Parse";
+    }
+  });
+  function paintSmartResult(data) {
+    const list = document.getElementById("smart-result-list");
+    list.innerHTML = data.items.map((it, i) => `
+      <li class="smart-item" data-i="${i}">
+        <input type="checkbox" checked data-keep="${i}" />
+        <div class="smart-item-body">
+          <strong>${escapeHtml(it.name)}</strong>
+          <span class="smart-item-meta">
+            <input type="number" step="0.5" min="0" value="${it.servings}" data-servings="${i}" />×
+            · ${it.calories} kcal · P ${it.protein_g}g · C ${it.carbs_g}g · F ${it.fat_g}g
+          </span>
+        </div>
+      </li>`).join("");
+    list.dataset.items = JSON.stringify(data.items);
+    const t = data.totals;
+    document.getElementById("smart-result-totals").innerHTML =
+      `<strong>Total:</strong> ${Math.round(t.calories)} kcal · P ${t.protein_g}g · C ${t.carbs_g}g · F ${t.fat_g}g · Fibre ${t.fiber_g}g`;
+  }
+  document.getElementById("smart-log-save-btn")?.addEventListener("click", async () => {
+    const list = document.getElementById("smart-result-list");
+    const items = JSON.parse(list.dataset.items || "[]");
+    const mealEl = document.querySelector('#smart-meal-pick button.on');
+    const meal = mealEl?.dataset.val || "snack";
+    const btn = document.getElementById("smart-log-save-btn");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const keep = [];
+    list.querySelectorAll("[data-keep]").forEach((cb) => {
+      if (cb.checked) {
+        const i = +cb.dataset.keep;
+        const servingsInput = list.querySelector(`[data-servings="${i}"]`);
+        const servings = +servingsInput?.value || items[i].servings || 1;
+        keep.push({ ...items[i], servings });
+      }
+    });
+    if (!keep.length) { toast("Nothing selected", "err"); btn.disabled = false; btn.textContent = "Save all to diary"; return; }
+    try {
+      await Promise.all(keep.map((it) => fetchJson("/api/me/food-logs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: it.name, meal,
+          calories: it.calories, proteinG: it.protein_g, carbsG: it.carbs_g,
+          fatG: it.fat_g, fiberG: it.fiber_g, servings: it.servings,
+        }),
+      })));
+      toast(`${keep.length} item${keep.length === 1 ? "" : "s"} logged ✨`);
+      smartModal.classList.remove("open");
+      document.body.classList.remove("modal-open");
+      paintToday();
+    } catch (err) {
+      toast(err.message || "Couldn't save", "err");
+    } finally {
+      btn.disabled = false; btn.textContent = "Save all to diary";
+    }
+  });
+  // Chip toggle on meal pick
+  document.getElementById("smart-meal-pick")?.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    document.querySelectorAll("#smart-meal-pick button").forEach((x) => x.classList.toggle("on", x === b));
+  });
   function openLogModal({ foodId = null, meal = null } = {}) {
     const form = document.getElementById("food-log-form");
     form.reset();

@@ -188,6 +188,10 @@ export default {
           if (url.pathname === "/api/me/intimacy" && request.method === "POST") return jsonHeaders(await logIntimacy(request, env, user));
           const intimacyMatch = url.pathname.match(/^\/api\/me\/intimacy\/(\d+)$/);
           if (intimacyMatch && request.method === "DELETE") return jsonHeaders(await deleteIntimacy(env, user, +intimacyMatch[1]));
+          // --- Food quick-parse (AI breaks free text into ingredients) ----
+          if (url.pathname === "/api/me/food/parse" && request.method === "POST") {
+            return jsonHeaders(await parseFoodFromText(request, env, user));
+          }
           const medSchedMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)\/schedules(?:\/(\d+))?$/);
           if (medSchedMatch) {
             const medId = +medSchedMatch[1];
@@ -7457,6 +7461,9 @@ async function ensureFoodSchema(env) {
     "CREATE INDEX IF NOT EXISTS idx_intimacy_user_date ON intimacy_logs(user_id, log_date DESC)",
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+  // Seed the food-parser AI config so admins can tune the prompt + model
+  // from /acp without us needing to backfill manually.
+  await seedFoodParserConfig(env);
 }
 
 const CRAVINGS_ALLOWED = new Set([
@@ -7541,6 +7548,128 @@ async function deleteIntimacy(env, user, id) {
   await ensureFoodSchema(env);
   await env.DB.prepare("DELETE FROM intimacy_logs WHERE id = ? AND user_id = ?").bind(id, user.id).run();
   return json({ ok: true });
+}
+
+// =============================================================================
+// FOOD QUICK-PARSE — uses a cheap fast Claude model (Haiku by default)
+// to turn "bacon egg roll" into a structured list of components with
+// best-effort calorie + macro estimates. Admins can re-target the model
+// + prompt via /acp → Insights → Configure → food-parser.
+// =============================================================================
+const FOOD_PARSER_HAIKU_MODEL =
+  "anthropic.claude-haiku-4-5-20251001-v1:0"; // fast, cheap, plenty good for ingredient breakdown
+const FOOD_PARSER_DEFAULT_PROMPT = `You parse a freely-written meal description into an itemised nutrition log.
+
+Output ONLY a JSON object — no prose, no markdown — with this shape:
+{
+  "summary": "short one-line restatement of what they ate",
+  "items": [
+    {
+      "name": "string (e.g. 'Bacon, fried, 2 rashers')",
+      "servings": number (decimal; how many of that item),
+      "calories": number (kcal per serving),
+      "protein_g": number,
+      "carbs_g": number,
+      "fat_g": number,
+      "fiber_g": number
+    }, ...
+  ],
+  "totals": {
+    "calories": number, "protein_g": number, "carbs_g": number,
+    "fat_g": number, "fiber_g": number
+  }
+}
+
+Rules:
+- Use realistic Australian/UK/US typical serving sizes (e.g. 1 bacon roll = ~50g bun + 2 rashers bacon + 1 egg).
+- If a quantity isn't specified, assume 1 standard portion.
+- Round all numbers to one decimal max. No null/string numbers — use 0 if unknown.
+- "totals" must equal the SUM of items, not separate estimates.
+- Don't add commentary outside the JSON object.`;
+
+async function getFoodParserConfig(env) {
+  try {
+    await ensureInsightSchema(env);
+    const row = await env.DB.prepare(
+      "SELECT prompt_template, model FROM insight_configs WHERE slug = 'food-parser'"
+    ).bind().first();
+    return {
+      prompt: row?.prompt_template || FOOD_PARSER_DEFAULT_PROMPT,
+      model:  row?.model || FOOD_PARSER_HAIKU_MODEL,
+    };
+  } catch {
+    return { prompt: FOOD_PARSER_DEFAULT_PROMPT, model: FOOD_PARSER_HAIKU_MODEL };
+  }
+}
+
+async function parseFoodFromText(request, env, user) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  const text = sanitizeText(body?.text, 600);
+  if (!text) return json({ error: "Tell me what you ate." }, 400);
+  const cfg = await getFoodParserConfig(env);
+  const ai = await invokeClaude(env, null, {
+    system: cfg.prompt,
+    messages: [{ role: "user", content: text }],
+    model: cfg.model,
+    maxTokens: 700,
+  });
+  if (!ai.ok) {
+    console.warn("food parser failed:", ai.error);
+    return json({ error: "AI parser unavailable right now — log it manually." }, 502);
+  }
+  // Find the JSON object even if the model wrapped it.
+  let parsed = null;
+  try {
+    const t = String(ai.text || "");
+    const start = t.indexOf("{");
+    const end   = t.lastIndexOf("}");
+    if (start >= 0 && end > start) parsed = JSON.parse(t.slice(start, end + 1));
+  } catch (e) { console.warn("food parser JSON parse:", e?.message); }
+  if (!parsed || !Array.isArray(parsed.items)) {
+    return json({ error: "Could not parse the meal — try rephrasing." }, 422);
+  }
+  // Sanitise + clamp numbers.
+  const num = (v) => Number.isFinite(+v) ? Math.max(0, Math.round((+v) * 10) / 10) : 0;
+  const items = parsed.items.slice(0, 12).map((it) => ({
+    name: sanitizeText(it.name, 120) || "Item",
+    servings: num(it.servings) || 1,
+    calories: num(it.calories),
+    protein_g: num(it.protein_g),
+    carbs_g: num(it.carbs_g),
+    fat_g: num(it.fat_g),
+    fiber_g: num(it.fiber_g),
+  }));
+  const totals = items.reduce((s, it) => ({
+    calories:  s.calories  + it.calories  * it.servings,
+    protein_g: s.protein_g + it.protein_g * it.servings,
+    carbs_g:   s.carbs_g   + it.carbs_g   * it.servings,
+    fat_g:     s.fat_g     + it.fat_g     * it.servings,
+    fiber_g:   s.fiber_g   + it.fiber_g   * it.servings,
+  }), { calories:0, protein_g:0, carbs_g:0, fat_g:0, fiber_g:0 });
+  for (const k of Object.keys(totals)) totals[k] = Math.round(totals[k] * 10) / 10;
+  return json({
+    ok: true,
+    summary: sanitizeText(parsed.summary, 200) || text,
+    items, totals,
+    model: cfg.model,
+    inputTokens: ai.inputTokens, outputTokens: ai.outputTokens,
+  });
+}
+
+// Seed the food parser admin config so it's editable in /acp.
+async function seedFoodParserConfig(env) {
+  try { await ensureInsightSchema(env); } catch { return; }
+  const now = nowSec();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO insight_configs (slug, title, emoji, description, prompt_template, " +
+      "  data_scope_json, refresh_hours, model, sort_order, enabled, created_at, updated_at) " +
+      "VALUES ('food-parser', 'Food parser — break down a free-text meal', '🥗', " +
+      "  'Used by the /food Quick Log button. Turns ''bacon egg roll'' into structured items with calories + macros. Cheaper model (Haiku) by default; switch to Sonnet if you need better breakdowns.', " +
+      "  ?, '[]', 0, ?, 1100, 1, ?, ?) ON CONFLICT(slug) DO NOTHING"
+    ).bind(FOOD_PARSER_DEFAULT_PROMPT, FOOD_PARSER_HAIKU_MODEL, now, now).run();
+  } catch {}
 }
 
 function foodRow(r) {
