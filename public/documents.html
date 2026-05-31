@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780193972" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/documents.css?v=1780210000" />
+  <link rel="stylesheet" href="/documents.css?v=1780215000" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -76,50 +76,104 @@
     </aside>
 
     <main class="dash-main community-main docs-main">
-      <header class="community-hero soft">
-        <div>
+      <header class="docs-hero">
+        <div class="docs-hero-copy">
           <p class="hero-eyebrow">Documents</p>
           <h1>Your private health folder.</h1>
-          <p class="hero-lead">Ultrasounds, MRI scans, blood tests, specialist notes — keep them organised in folders. EndoMe's AI reviews each one and pulls out the key findings so your insights and Buddy understand your full picture. <strong>Only you can see them.</strong></p>
+          <p class="hero-lead">Ultrasounds, MRI scans, blood tests, specialist notes — organised in folders. EndoMe's AI reads each one and pulls out the key findings, so your insights and Buddy understand the full picture.</p>
+          <div class="docs-hero-pills">
+            <span class="docs-hero-pill">🔒 Private to you</span>
+            <span class="docs-hero-pill">🤖 AI-reviewed</span>
+            <span class="docs-hero-pill">✨ Feeds insights</span>
+          </div>
         </div>
-        <div class="docs-usage" id="docs-usage" hidden>
-          <strong id="docs-usage-text">0 / 500 MB</strong>
-          <span id="docs-usage-count">0 files</span>
-          <div class="docs-usage-bar"><span id="docs-usage-fill"></span></div>
+        <div class="docs-hero-side">
+          <div class="docs-usage-card" id="docs-usage" hidden>
+            <div class="docs-usage-ring">
+              <svg viewBox="0 0 100 100" aria-hidden="true">
+                <circle cx="50" cy="50" r="42" class="ring-track"></circle>
+                <circle cx="50" cy="50" r="42" class="ring-fill" id="docs-usage-ring-fill"></circle>
+              </svg>
+              <div class="docs-usage-ring-text">
+                <strong id="docs-usage-pct">0%</strong>
+                <span>used</span>
+              </div>
+            </div>
+            <div class="docs-usage-meta">
+              <div>
+                <strong id="docs-usage-text">0 / 500 MB</strong>
+                <span>storage</span>
+              </div>
+              <div>
+                <strong id="docs-usage-count">0 / 100</strong>
+                <span>files</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="docs-hero-cta" id="docs-hero-upload">
+            <span class="docs-hero-cta-ico">⤴</span>
+            <span class="docs-hero-cta-text">
+              <strong>Upload a document</strong>
+              <em>JPG, PNG, PDF, TXT, CSV · up to 25 MB</em>
+            </span>
+          </button>
         </div>
       </header>
 
-      <section class="community-section docs-upload-section">
-        <div class="upload-zone" id="upload-zone">
-          <input type="file" id="upload-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv" hidden />
-          <div class="upload-inner">
-            <div class="upload-emoji">📁</div>
-            <strong>Drop a file here, or <button class="upload-btn" type="button" id="upload-pick">pick from your device</button></strong>
-            <span class="upload-hint">JPG, PNG, WebP, GIF, PDF, TXT, CSV · up to 25 MB · up to 100 files · 500 MB total</span>
+      <section class="docs-grid">
+        <aside class="docs-sidebar">
+          <div class="docs-sidebar-card">
+            <header class="docs-sidebar-head">
+              <h2>📂 Folders</h2>
+              <span>Tap to filter</span>
+            </header>
+            <div class="docs-folders" id="docs-folders"></div>
           </div>
-        </div>
-        <div id="upload-status" class="upload-status" hidden></div>
-        <p class="storage-warn" id="storage-warn" hidden>
-          ⚠️ Document storage isn't fully configured yet. An admin needs to create the
-          <code>endome-docs</code> R2 bucket in the Cloudflare dashboard and redeploy.
-          Until then, uploads will be rejected.
-        </p>
-      </section>
 
-      <section class="community-section docs-shelf-section">
-        <div class="section-head">
-          <h2>Folders</h2>
-          <span class="section-hint">Tap to filter</span>
-        </div>
-        <div class="docs-folders" id="docs-folders"></div>
+          <div class="docs-sidebar-card upload-card">
+            <div class="upload-zone" id="upload-zone">
+              <input type="file" id="upload-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv" hidden />
+              <div class="upload-inner">
+                <div class="upload-emoji">📁</div>
+                <strong>Drop a file here</strong>
+                <span class="upload-hint">or <button class="upload-btn" type="button" id="upload-pick">pick from your device</button></span>
+                <span class="upload-meta">JPG · PNG · WebP · GIF · PDF · TXT · CSV<br/>Up to 25 MB, 500 MB total</span>
+              </div>
+            </div>
+            <div id="upload-status" class="upload-status" hidden></div>
+            <p class="storage-warn" id="storage-warn" hidden>
+              ⚠️ Storage isn't configured. Admin needs to add the
+              <code>endome-docs</code> R2 binding.
+            </p>
+          </div>
 
-        <div class="section-head docs-list-head">
-          <h2 id="docs-list-title">All documents</h2>
-          <span class="section-hint" id="docs-list-sub">Private to your account</span>
-        </div>
-        <ul class="doc-list" id="doc-list">
-          <li class="empty-state">Loading…</li>
-        </ul>
+          <div class="docs-sidebar-card tips-card">
+            <h3>✨ What the AI does</h3>
+            <ul>
+              <li><span class="tips-ico">📝</span>Transcribes any handwritten notes</li>
+              <li><span class="tips-ico">🩺</span>Translates jargon to plain English</li>
+              <li><span class="tips-ico">🩸</span>Lists lab values vs. reference ranges</li>
+              <li><span class="tips-ico">📍</span>Flags findings worth raising</li>
+              <li><span class="tips-ico">✏️</span>You can edit anything that's wrong</li>
+            </ul>
+          </div>
+        </aside>
+
+        <section class="docs-content">
+          <header class="docs-content-head">
+            <div>
+              <h2 id="docs-list-title">All documents</h2>
+              <p id="docs-list-sub">Private to your account</p>
+            </div>
+            <div class="docs-view-toggle" role="tablist" aria-label="View mode">
+              <button type="button" class="docs-view-btn on" data-view="grid" aria-label="Grid view">▦</button>
+              <button type="button" class="docs-view-btn" data-view="list" aria-label="List view">☰</button>
+            </div>
+          </header>
+          <ul class="doc-list" id="doc-list">
+            <li class="empty-state">Loading…</li>
+          </ul>
+        </section>
       </section>
 
       <!-- Metadata modal (set after pick, before upload) -->
@@ -205,7 +259,7 @@
                 </div>
                 <input type="text" id="viewer-ai-summary" maxlength="300" placeholder="One-line summary the AI generated" />
                 <textarea id="viewer-ai-notes" rows="10" maxlength="4000" placeholder="The detailed review will appear here. Edit anything that's wrong — your version takes over."></textarea>
-                <p class="ai-foot" id="viewer-ai-foot">Your edits will replace the AI take. These notes feed into your insights and Buddy.</p>
+                <p class="ai-foot" id="viewer-ai-foot">Your edits replace the AI take. These notes feed into your insights and Buddy.</p>
               </div>
 
               <div class="doc-viewer-actions">
@@ -221,7 +275,7 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/documents.js?v=1780210000" defer></script>
+  <script src="/documents.js?v=1780215000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780199000" defer></script>
 </body>

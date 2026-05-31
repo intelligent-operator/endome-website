@@ -61,12 +61,25 @@ console.info("EndoMe documents build v2");
     if (!wrap || !limits) return;
     const usedMb  = Math.round((limits.usedBytes || 0) / (1024 * 1024));
     const totalMb = Math.round((limits.totalBytes || 0) / (1024 * 1024));
+    const usedBytes = limits.usedBytes || 0;
+    const totalBytes = limits.totalBytes || 1;
+    const pct = Math.min(100, (usedBytes / totalBytes) * 100);
     document.getElementById("docs-usage-text").textContent  = `${usedMb} / ${totalMb} MB`;
-    document.getElementById("docs-usage-count").textContent = `${limits.usedCount || 0} / ${limits.maxCount || 100} files`;
-    const fill = document.getElementById("docs-usage-fill");
-    const pct = Math.min(100, totalMb ? (usedMb / totalMb) * 100 : 0);
-    fill.style.width = pct.toFixed(1) + "%";
-    fill.classList.toggle("warn", pct > 80);
+    document.getElementById("docs-usage-count").textContent = `${limits.usedCount || 0} / ${limits.maxCount || 100}`;
+    const pctEl = document.getElementById("docs-usage-pct");
+    if (pctEl) pctEl.textContent = Math.round(pct) + "%";
+    // SVG circle r=42 → circumference = 2 * π * 42 ≈ 264
+    const ring = document.getElementById("docs-usage-ring-fill");
+    if (ring) {
+      const C = 264;
+      ring.style.strokeDasharray = String(C);
+      ring.style.strokeDashoffset = String(C * (1 - pct / 100));
+    }
+    const ringWrap = document.querySelector(".docs-usage-ring");
+    if (ringWrap) {
+      ringWrap.classList.toggle("warn", pct > 80);
+      ringWrap.classList.toggle("full", pct >= 100);
+    }
     wrap.hidden = false;
   }
 
@@ -119,14 +132,15 @@ console.info("EndoMe documents build v2");
   function docCard(d) {
     const isImage = (d.contentType || "").startsWith("image/");
     const sizeKb  = d.sizeBytes ? Math.max(1, Math.round(d.sizeBytes / 1024)) : 0;
+    const sizeLabel = sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
     const fileUrl = `/api/me/documents/${d.id}/file`;
     const folder = FOLDER_BY_ID[d.kind] || FOLDER_BY_ID.other;
     const aiState = d.ai?.status || "skipped";
     const aiBadge = {
-      pending: `<span class="ai-pill pending">✨ AI reviewing…</span>`,
+      pending: `<span class="ai-pill pending">✨ Reviewing…</span>`,
       done:    `<span class="ai-pill done">✨ Reviewed</span>`,
-      error:   `<span class="ai-pill err">✨ Review failed</span>`,
-      skipped: `<span class="ai-pill skip">✨ Not reviewed</span>`,
+      error:   `<span class="ai-pill err">✕ Review failed</span>`,
+      skipped: `<span class="ai-pill skip">Not reviewed</span>`,
     }[aiState] || "";
     const aiSummary = d.ai?.summary
       ? `<p class="doc-ai-summary">${escapeHtml(d.ai.summary)}</p>`
@@ -138,24 +152,36 @@ console.info("EndoMe documents build v2");
         ${isImage
           ? `<img src="${fileUrl}" alt="" loading="lazy" />`
           : `<span class="doc-thumb-icon">${folder.icon}</span>`}
+        <span class="doc-thumb-tag">${folder.icon} ${escapeHtml(folder.label)}</span>
       </div>
+      <div class="doc-card-cta">›</div>
       <div class="doc-body">
         <div class="doc-head-row">
           <strong title="${escapeHtml(d.filename)}">${escapeHtml(d.filename)}</strong>
           ${aiBadge}
         </div>
-        <span class="doc-meta">${folder.icon} ${escapeHtml(folder.label)} · ${sizeKb} KB · ${relTime(d.uploadedAt)}</span>
+        <span class="doc-meta">${sizeLabel} · ${relTime(d.uploadedAt)}</span>
         ${aiSummary}
         ${d.notes ? `<p class="doc-notes"><em>Your note:</em> ${escapeHtml(d.notes)}</p>` : ""}
       </div>
-      <div class="doc-card-cta">›</div>
     </li>`;
   }
+
+  // --- View toggle -----------------------------------------------------
+  let viewMode = "grid";
+  document.querySelectorAll(".docs-view-btn").forEach((b) =>
+    b.addEventListener("click", () => {
+      viewMode = b.dataset.view;
+      document.querySelectorAll(".docs-view-btn").forEach((x) => x.classList.toggle("on", x === b));
+      document.getElementById("doc-list").classList.toggle("view-list", viewMode === "list");
+    })
+  );
 
   // --- Upload zone -----------------------------------------------------
   const zone  = document.getElementById("upload-zone");
   const input = document.getElementById("upload-input");
   document.getElementById("upload-pick").addEventListener("click", () => input.click());
+  document.getElementById("docs-hero-upload")?.addEventListener("click", () => input.click());
   input.addEventListener("change", () => {
     const files = [...input.files || []];
     input.value = "";
