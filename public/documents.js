@@ -1,21 +1,32 @@
-// /documents — private file storage backed by Cloudflare R2.
-console.info("EndoMe documents build v1");
+// /documents — private file storage backed by Cloudflare R2, plus an AI
+// reviewer that pulls structured findings out of each upload.
+console.info("EndoMe documents build v2");
 
 (() => {
-  const KIND_ICO = {
-    ultrasound: "🩻", scan: "🧠", report: "📋", lab: "🩸",
-    letter: "✉️", prescription: "💊", image: "🖼️", other: "📄",
-  };
-  const KIND_LABEL = {
-    ultrasound: "Ultrasound", scan: "MRI / CT scan", report: "Specialist report",
-    lab: "Lab results", letter: "Doctor's letter", prescription: "Prescription",
-    image: "Image", other: "Other",
-  };
-  const MAX_BYTES = 20 * 1024 * 1024;
+  // Order here drives the folder strip; matches server's ALLOWED_DOC_KINDS.
+  const FOLDERS = [
+    { id: "all",          icon: "📁", label: "All documents" },
+    { id: "ultrasound",   icon: "🩻", label: "Ultrasounds" },
+    { id: "scan",         icon: "🧠", label: "MRI / CT Scans" },
+    { id: "lab",          icon: "🩸", label: "Blood Tests" },
+    { id: "report",       icon: "📋", label: "Specialist Notes" },
+    { id: "letter",       icon: "✉️", label: "Doctor's Letters" },
+    { id: "prescription", icon: "💊", label: "Prescriptions" },
+    { id: "image",        icon: "🖼️", label: "Other Images" },
+    { id: "other",        icon: "📄", label: "Other" },
+  ];
+  const FOLDER_BY_ID = Object.fromEntries(FOLDERS.map((f) => [f.id, f]));
+  const MAX_BYTES = 25 * 1024 * 1024;
 
-  let pendingFile = null; // File picked, waiting for metadata
+  let pendingFile = null;
   let storageReady = true;
-  const metaModal = document.getElementById("meta-modal");
+  let docs = [];
+  let activeFolder = "all";
+  let viewerId = null;
+  let viewerPoll = null;
+
+  const metaModal   = document.getElementById("meta-modal");
+  const viewerModal = document.getElementById("viewer-modal");
 
   (async () => {
     try {
@@ -33,42 +44,111 @@ console.info("EndoMe documents build v1");
       const data = await fetchJson("/api/me/documents");
       storageReady = data.storageReady !== false;
       document.getElementById("storage-warn").hidden = storageReady;
-      renderDocs(data.documents || []);
+      docs = data.documents || [];
+      renderUsage(data.limits);
+      renderFolders();
+      renderDocs();
+      // If any doc is still being reviewed, poll for completion.
+      if (docs.some((d) => d.ai?.status === "pending")) schedulePoll();
     } catch (err) {
       document.getElementById("doc-list").innerHTML =
         `<li class="empty-state">${escapeHtml(err.message || "Couldn't load.")}</li>`;
     }
   }
 
-  function renderDocs(docs) {
-    const el = document.getElementById("doc-list");
-    if (!docs.length) {
-      el.innerHTML = `<li class="empty-state">No documents yet. Drop one above to get started.</li>`;
+  function renderUsage(limits) {
+    const wrap = document.getElementById("docs-usage");
+    if (!wrap || !limits) return;
+    const usedMb  = Math.round((limits.usedBytes || 0) / (1024 * 1024));
+    const totalMb = Math.round((limits.totalBytes || 0) / (1024 * 1024));
+    document.getElementById("docs-usage-text").textContent  = `${usedMb} / ${totalMb} MB`;
+    document.getElementById("docs-usage-count").textContent = `${limits.usedCount || 0} / ${limits.maxCount || 100} files`;
+    const fill = document.getElementById("docs-usage-fill");
+    const pct = Math.min(100, totalMb ? (usedMb / totalMb) * 100 : 0);
+    fill.style.width = pct.toFixed(1) + "%";
+    fill.classList.toggle("warn", pct > 80);
+    wrap.hidden = false;
+  }
+
+  function renderFolders() {
+    const counts = new Map();
+    for (const d of docs) counts.set(d.kind || "other", (counts.get(d.kind || "other") || 0) + 1);
+    const wrap = document.getElementById("docs-folders");
+    if (!wrap) return;
+    wrap.innerHTML = FOLDERS.map((f) => {
+      const n = f.id === "all" ? docs.length : (counts.get(f.id) || 0);
+      const isActive = f.id === activeFolder;
+      return `<button type="button" class="docs-folder ${isActive ? "on" : ""}" data-folder="${f.id}">
+        <span class="docs-folder-ico">${f.icon}</span>
+        <span class="docs-folder-label">${escapeHtml(f.label)}</span>
+        <span class="docs-folder-count">${n}</span>
+      </button>`;
+    }).join("");
+    wrap.querySelectorAll("[data-folder]").forEach((b) =>
+      b.addEventListener("click", () => {
+        activeFolder = b.dataset.folder;
+        renderFolders();
+        renderDocs();
+      })
+    );
+  }
+
+  function renderDocs() {
+    const list = document.getElementById("doc-list");
+    const title = document.getElementById("docs-list-title");
+    const sub = document.getElementById("docs-list-sub");
+    const folder = FOLDER_BY_ID[activeFolder] || FOLDER_BY_ID.all;
+    const filtered = activeFolder === "all" ? docs : docs.filter((d) => (d.kind || "other") === activeFolder);
+    if (title) title.textContent = folder.label;
+    if (sub) sub.textContent = filtered.length ? `${filtered.length} document${filtered.length === 1 ? "" : "s"}` : "Private to your account";
+
+    if (!filtered.length) {
+      list.innerHTML = `<li class="empty-state">
+        ${activeFolder === "all"
+          ? `No documents yet. Drop an ultrasound, blood test, or specialist letter above and the AI will start a review.`
+          : `Nothing in ${escapeHtml(folder.label)} yet.`}
+      </li>`;
       return;
     }
-    el.innerHTML = docs.map(docCard).join("");
+    list.innerHTML = filtered.map(docCard).join("");
+    list.querySelectorAll("[data-open-id]").forEach((card) =>
+      card.addEventListener("click", () => openViewer(+card.dataset.openId))
+    );
   }
 
   function docCard(d) {
     const isImage = (d.contentType || "").startsWith("image/");
     const sizeKb  = d.sizeBytes ? Math.max(1, Math.round(d.sizeBytes / 1024)) : 0;
     const fileUrl = `/api/me/documents/${d.id}/file`;
-    return `<li class="doc-card">
-      <a class="doc-thumb" href="${fileUrl}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(d.filename)}">
+    const folder = FOLDER_BY_ID[d.kind] || FOLDER_BY_ID.other;
+    const aiState = d.ai?.status || "skipped";
+    const aiBadge = {
+      pending: `<span class="ai-pill pending">✨ AI reviewing…</span>`,
+      done:    `<span class="ai-pill done">✨ Reviewed</span>`,
+      error:   `<span class="ai-pill err">✨ Review failed</span>`,
+      skipped: `<span class="ai-pill skip">✨ Not reviewed</span>`,
+    }[aiState] || "";
+    const aiSummary = d.ai?.summary
+      ? `<p class="doc-ai-summary">${escapeHtml(d.ai.summary)}</p>`
+      : (aiState === "pending"
+          ? `<p class="doc-ai-summary muted">The AI is reading this now…</p>`
+          : "");
+    return `<li class="doc-card doc-card-clickable" data-open-id="${d.id}">
+      <div class="doc-thumb">
         ${isImage
           ? `<img src="${fileUrl}" alt="" loading="lazy" />`
-          : `<span class="doc-thumb-icon">${KIND_ICO[d.kind] || "📄"}</span>`}
-      </a>
+          : `<span class="doc-thumb-icon">${folder.icon}</span>`}
+      </div>
       <div class="doc-body">
-        <strong title="${escapeHtml(d.filename)}">${escapeHtml(d.filename)}</strong>
-        <span class="doc-meta">${escapeHtml(KIND_LABEL[d.kind] || "Other")} · ${sizeKb} KB · ${relTime(d.uploadedAt)}</span>
-        ${d.notes ? `<p class="doc-notes">${escapeHtml(d.notes)}</p>` : ""}
+        <div class="doc-head-row">
+          <strong title="${escapeHtml(d.filename)}">${escapeHtml(d.filename)}</strong>
+          ${aiBadge}
+        </div>
+        <span class="doc-meta">${folder.icon} ${escapeHtml(folder.label)} · ${sizeKb} KB · ${relTime(d.uploadedAt)}</span>
+        ${aiSummary}
+        ${d.notes ? `<p class="doc-notes"><em>Your note:</em> ${escapeHtml(d.notes)}</p>` : ""}
       </div>
-      <div class="doc-actions">
-        <a class="btn-soft small" href="${fileUrl}" target="_blank" rel="noopener">View</a>
-        <a class="btn-soft small" href="${fileUrl}" download="${escapeHtml(d.filename)}">Download</a>
-        <button class="btn-soft small danger" data-delete="${d.id}">Delete</button>
-      </div>
+      <div class="doc-card-cta">›</div>
     </li>`;
   }
 
@@ -79,7 +159,7 @@ console.info("EndoMe documents build v1");
   input.addEventListener("change", () => {
     const files = [...input.files || []];
     input.value = "";
-    if (files.length) startUpload(files[0]); // one at a time keeps the meta UX clean
+    if (files.length) startUpload(files[0]);
   });
   ["dragenter", "dragover"].forEach((evt) =>
     zone.addEventListener(evt, (e) => { e.preventDefault(); zone.classList.add("is-drop"); }));
@@ -91,10 +171,22 @@ console.info("EndoMe documents build v1");
   });
 
   function startUpload(file) {
-    if (file.size > MAX_BYTES) { toast("File too big — max 20 MB.", "err"); return; }
+    if (file.size > MAX_BYTES) { toast("File too big — max 25 MB.", "err"); return; }
     pendingFile = file;
     document.getElementById("meta-filename").textContent = `${file.name} · ${Math.round(file.size / 1024)} KB`;
-    document.getElementById("meta-form").reset();
+    const form = document.getElementById("meta-form");
+    form.reset();
+    // Default folder guess based on filename.
+    const lc = file.name.toLowerCase();
+    const guess = /ultraso|tvs|tvus/.test(lc) ? "ultrasound"
+                : /\bmri\b|\bct\b|\bxray\b|scan/.test(lc) ? "scan"
+                : /\bblood\b|\bcbc\b|\bfbe\b|\blab\b|hba1c|ferritin/.test(lc) ? "lab"
+                : /\bprescrip|script|rx\b/.test(lc) ? "prescription"
+                : /letter/.test(lc) ? "letter"
+                : /report|notes/.test(lc) ? "report"
+                : file.type.startsWith("image/") ? "image"
+                : "other";
+    form.kind.value = guess;
     document.getElementById("meta-status").textContent = "";
     metaModal.classList.add("open"); metaModal.setAttribute("aria-hidden", "false");
   }
@@ -115,26 +207,28 @@ console.info("EndoMe documents build v1");
     status.textContent = "Uploading…"; status.className = "form-status";
     statusBar.hidden = false; statusBar.textContent = `Uploading ${pendingFile.name}…`;
     try {
-      await fetch("/api/me/documents", {
+      const data = await fetch("/api/me/documents", {
         method: "POST",
         credentials: "same-origin",
         headers: {
           "content-type": pendingFile.type || "application/octet-stream",
-          "x-filename": pendingFile.name,
-          "x-kind":     form.kind.value,
-          "x-notes":    form.notes.value || "",
+          "x-filename":   pendingFile.name,
+          "x-kind":       form.kind.value,
+          "x-notes":      form.notes.value || "",
         },
         body: pendingFile,
       }).then(async (r) => {
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.error || `Upload failed (${r.status})`);
-        return data;
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || `Upload failed (${r.status})`);
+        return d;
       });
-      toast(`Uploaded ${pendingFile.name}`, "ok");
+      toast(`Uploaded — AI is reviewing now`, "ok");
       pendingFile = null;
       metaModal.classList.remove("open"); metaModal.setAttribute("aria-hidden", "true");
       statusBar.hidden = true;
       await load();
+      // Open viewer straight away so the user can watch the AI populate it.
+      if (data?.id) openViewer(data.id);
     } catch (err) {
       status.textContent = err.message || "Couldn't upload.";
       status.className = "form-status err";
@@ -142,19 +236,146 @@ console.info("EndoMe documents build v1");
     }
   });
 
-  // --- Delete ----------------------------------------------------------
-  document.addEventListener("click", async (e) => {
-    const del = e.target.closest("[data-delete]");
-    if (!del) return;
+  // --- Viewer modal ----------------------------------------------------
+  document.querySelectorAll("[data-close-viewer]").forEach((el) =>
+    el.addEventListener("click", () => closeViewer())
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !viewerModal.hidden && viewerModal.classList.contains("open")) closeViewer();
+  });
+
+  async function openViewer(id) {
+    viewerId = id;
+    viewerModal.classList.add("open"); viewerModal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+    document.getElementById("viewer-preview").innerHTML = `<p class="empty-state">Loading…</p>`;
+    document.getElementById("viewer-title").textContent = "Loading…";
+    document.getElementById("viewer-sub").textContent = "";
+    document.getElementById("viewer-ai-status").textContent = "loading";
+    document.getElementById("viewer-ai-summary").value = "";
+    document.getElementById("viewer-ai-notes").value = "";
+    document.getElementById("viewer-notes").value = "";
+    await refreshViewer();
+  }
+  function closeViewer() {
+    viewerModal.classList.remove("open"); viewerModal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("modal-open");
+    viewerId = null;
+    if (viewerPoll) { clearTimeout(viewerPoll); viewerPoll = null; }
+    load();
+  }
+  async function refreshViewer() {
+    if (!viewerId) return;
+    let data;
+    try {
+      data = await fetchJson(`/api/me/documents/${viewerId}`);
+    } catch (err) {
+      document.getElementById("viewer-preview").innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
+      return;
+    }
+    const d = data.document;
+    if (!d) return;
+    paintViewer(d);
+    if (d.ai?.status === "pending") schedulePoll(true);
+  }
+  function schedulePoll(viewerOnly) {
+    if (viewerPoll) clearTimeout(viewerPoll);
+    viewerPoll = setTimeout(async () => {
+      if (viewerOnly && viewerId) await refreshViewer();
+      else await load();
+    }, 4000);
+  }
+
+  function paintViewer(d) {
+    const folder = FOLDER_BY_ID[d.kind] || FOLDER_BY_ID.other;
+    const fileUrl = `/api/me/documents/${d.id}/file`;
+    document.getElementById("viewer-title").textContent = d.filename;
+    document.getElementById("viewer-sub").textContent =
+      `${folder.icon} ${folder.label} · ${Math.max(1, Math.round((d.sizeBytes || 0) / 1024))} KB · ${relTime(d.uploadedAt)}`;
+    document.getElementById("viewer-open").href     = fileUrl;
+    document.getElementById("viewer-download").href = fileUrl;
+    document.getElementById("viewer-download").setAttribute("download", d.filename);
+
+    const preview = document.getElementById("viewer-preview");
+    const ct = (d.contentType || "").toLowerCase();
+    if (ct.startsWith("image/")) {
+      preview.innerHTML = `<img class="doc-viewer-img" src="${fileUrl}" alt="${escapeHtml(d.filename)}" />`;
+    } else if (ct === "application/pdf") {
+      preview.innerHTML = `<iframe class="doc-viewer-pdf" src="${fileUrl}#toolbar=0" title="${escapeHtml(d.filename)}"></iframe>`;
+    } else if (ct === "text/plain" || ct === "text/csv") {
+      preview.innerHTML = `<iframe class="doc-viewer-pdf" src="${fileUrl}" title="${escapeHtml(d.filename)}"></iframe>`;
+    } else {
+      preview.innerHTML = `<div class="doc-viewer-fallback"><span>${folder.icon}</span><p>No preview available. <a href="${fileUrl}" target="_blank" rel="noopener">Open ↗</a></p></div>`;
+    }
+
+    document.getElementById("viewer-kind").value = d.kind || "other";
+    document.getElementById("viewer-notes").value = d.notes || "";
+
+    // AI block
+    const status = d.ai?.status || "skipped";
+    const statusLabel = {
+      pending: "⏳ Reviewing… this usually takes ~30 seconds",
+      done:    d.ai?.editedByUser ? "✓ Reviewed (you've edited the notes)" : "✓ Reviewed",
+      error:   `✕ Review failed — ${d.ai?.error || "try re-running"}`,
+      skipped: d.ai?.error || "Skipped",
+    }[status];
+    document.getElementById("viewer-ai-status").textContent = statusLabel;
+    document.getElementById("viewer-ai-status").className = `ai-status ai-status-${status}`;
+    document.getElementById("viewer-ai-summary").value = d.ai?.summary || "";
+    document.getElementById("viewer-ai-notes").value   = d.ai?.notes   || "";
+    document.getElementById("viewer-ai-summary").disabled = status === "pending";
+    document.getElementById("viewer-ai-notes").disabled   = status === "pending";
+    document.getElementById("viewer-ai-rerun").hidden = !(status === "done" || status === "error");
+  }
+
+  document.getElementById("viewer-save").addEventListener("click", async () => {
+    if (!viewerId) return;
+    const statusEl = document.getElementById("viewer-save-status");
+    statusEl.textContent = "Saving…"; statusEl.className = "form-status";
+    try {
+      const body = {
+        kind:      document.getElementById("viewer-kind").value,
+        notes:     document.getElementById("viewer-notes").value,
+        aiSummary: document.getElementById("viewer-ai-summary").value,
+        aiNotes:   document.getElementById("viewer-ai-notes").value,
+      };
+      await fetchJson(`/api/me/documents/${viewerId}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      statusEl.textContent = "Saved."; statusEl.className = "form-status ok";
+      toast("Saved", "ok");
+      await refreshViewer();
+    } catch (err) {
+      statusEl.textContent = err.message || "Couldn't save."; statusEl.className = "form-status err";
+    }
+  });
+
+  document.getElementById("viewer-ai-rerun").addEventListener("click", async () => {
+    if (!viewerId) return;
+    if (!confirm("Re-run the AI review? Your edits to the AI notes will be replaced.")) return;
+    const btn = document.getElementById("viewer-ai-rerun");
+    btn.disabled = true;
+    try {
+      await fetchJson(`/api/me/documents/${viewerId}/rerun?force=1`, { method: "POST" });
+      toast("Re-running AI review…", "ok");
+      await refreshViewer();
+    } catch (err) {
+      toast(err.message || "Couldn't re-run", "err");
+    } finally { btn.disabled = false; }
+  });
+
+  document.getElementById("viewer-delete").addEventListener("click", async () => {
+    if (!viewerId) return;
     if (!confirm("Delete this document? This can't be undone.")) return;
     try {
-      const res = await fetch(`/api/me/documents/${del.dataset.delete}`, {
-        method: "DELETE",
-        credentials: "same-origin",
+      const res = await fetch(`/api/me/documents/${viewerId}`, {
+        method: "DELETE", credentials: "same-origin",
       });
       if (!res.ok) throw new Error("Couldn't delete");
       toast("Deleted", "ok");
-      await load();
+      closeViewer();
     } catch (err) { toast(err.message || "Couldn't delete", "err"); }
   });
 

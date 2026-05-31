@@ -265,14 +265,17 @@ export default {
             return jsonHeaders(await listDocuments(env, user));
           }
           if (url.pathname === "/api/me/documents" && request.method === "POST") {
-            return jsonHeaders(await uploadDocument(request, env, user));
+            return jsonHeaders(await uploadDocument(request, env, user, ctx));
           }
           const docMatch = url.pathname.match(/^\/api\/me\/documents\/(\d+)(?:\/(\w+))?$/);
           if (docMatch) {
             const id = +docMatch[1];
             const action = docMatch[2];
+            if (!action       && request.method === "GET")    return jsonHeaders(await getDocument(env, user, id));
+            if (!action       && request.method === "PUT")    return jsonHeaders(await updateDocument(request, env, user, id));
             if (!action       && request.method === "DELETE") return await deleteDocument(env, user, id);
             if (action === "file" && request.method === "GET") return await streamDocument(env, user, id);
+            if (action === "rerun" && request.method === "POST") return jsonHeaders(await rerunDocAi(request, env, user, id));
           }
 
           if (url.pathname === "/api/me/today" && request.method === "GET") {
@@ -5891,7 +5894,7 @@ async function sendBuddyMessage(request, env, user, id) {
   const dataContext = await buildInsightContext(env, user, [
     "symptoms_30d", "daily_logs_30d", "medications",
     "medication_logs_30d", "food_logs_30d", "cravings_30d", "intimacy_30d", "test_results", "appointments_60d",
-    "cycles",
+    "cycles", "documents",
   ]).catch(() => "(data lookup failed)");
 
   // The companion speaks AS the user's EndoPet — using the name they chose
@@ -8452,8 +8455,13 @@ function clampIntOrNull(v, lo, hi) {
 // `users/<user_id>/...` so accidental cross-user reads are not possible.
 // =============================================================================
 
-const MAX_DOC_BYTES = 20 * 1024 * 1024;   // 20 MB upload cap
-const ALLOWED_DOC_KINDS = new Set(["ultrasound", "report", "lab", "image", "scan", "letter", "prescription", "other"]);
+const MAX_DOC_BYTES = 25 * 1024 * 1024;            // 25 MB per file
+const MAX_DOC_TOTAL_BYTES = 500 * 1024 * 1024;     // 500 MB total per user
+const MAX_DOC_COUNT = 100;                         // 100 files per user
+// What Claude vision + document blocks reliably accept. Anything bigger
+// gets uploaded and stored, but the AI review skips with a "too large".
+const MAX_AI_REVIEW_BYTES = 8 * 1024 * 1024;
+const ALLOWED_DOC_KINDS = new Set(["ultrasound", "scan", "report", "lab", "letter", "prescription", "image", "other"]);
 const ALLOWED_DOC_TYPES = new Set([
   "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/heic", "image/heif",
   "application/pdf",
@@ -8477,6 +8485,19 @@ async function ensureDocSchema(env) {
     "  uploaded_at INTEGER NOT NULL" +
     ")",
     "CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user_id, uploaded_at DESC)",
+    // AI review columns — added lazily so existing rows are fine.
+    // ai_status: 'pending' | 'done' | 'error' | 'skipped'
+    // ai_summary: short one-line take used on cards
+    // ai_notes:   long-form notes; user-editable so they can correct AI errors
+    // ai_error:   last error message if a review failed
+    "ALTER TABLE documents ADD COLUMN ai_status TEXT",
+    "ALTER TABLE documents ADD COLUMN ai_summary TEXT",
+    "ALTER TABLE documents ADD COLUMN ai_notes TEXT",
+    "ALTER TABLE documents ADD COLUMN ai_error TEXT",
+    "ALTER TABLE documents ADD COLUMN ai_processed_at INTEGER",
+    "ALTER TABLE documents ADD COLUMN ai_input_tokens INTEGER",
+    "ALTER TABLE documents ADD COLUMN ai_output_tokens INTEGER",
+    "ALTER TABLE documents ADD COLUMN ai_edited_by_user INTEGER NOT NULL DEFAULT 0",
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
 }
@@ -8488,21 +8509,43 @@ function requireDocsBinding(env) {
 async function listDocuments(env, user) {
   await ensureDocSchema(env);
   const rows = await env.DB.prepare(
-    "SELECT id, filename, content_type, size_bytes, kind, notes, uploaded_at " +
+    "SELECT id, filename, content_type, size_bytes, kind, notes, uploaded_at, " +
+    "       ai_status, ai_summary, ai_notes, ai_processed_at, ai_edited_by_user " +
     "FROM documents WHERE user_id = ? ORDER BY uploaded_at DESC LIMIT 200"
   ).bind(user.id).all().catch(() => ({ results: [] }));
+  // Per-user storage usage so the UI can warn before they hit the cap.
+  let totalBytes = 0;
+  for (const r of (rows.results || [])) totalBytes += r.size_bytes || 0;
   return json({
     ok: true,
     storageReady: requireDocsBinding(env),
-    documents: (rows.results || []).map((r) => ({
-      id: r.id, filename: r.filename, contentType: r.content_type,
-      sizeBytes: r.size_bytes, kind: r.kind, notes: r.notes,
-      uploadedAt: r.uploaded_at,
-    })),
+    limits: {
+      perFileBytes: MAX_DOC_BYTES,
+      totalBytes:   MAX_DOC_TOTAL_BYTES,
+      maxCount:     MAX_DOC_COUNT,
+      usedBytes:    totalBytes,
+      usedCount:    (rows.results || []).length,
+    },
+    documents: (rows.results || []).map(docRow),
   });
 }
 
-async function uploadDocument(request, env, user) {
+function docRow(r) {
+  return {
+    id: r.id, filename: r.filename, contentType: r.content_type,
+    sizeBytes: r.size_bytes, kind: r.kind || "other", notes: r.notes,
+    uploadedAt: r.uploaded_at,
+    ai: {
+      status:        r.ai_status || null,
+      summary:       r.ai_summary || null,
+      notes:         r.ai_notes || null,
+      processedAt:   r.ai_processed_at || null,
+      editedByUser:  !!r.ai_edited_by_user,
+    },
+  };
+}
+
+async function uploadDocument(request, env, user, ctx) {
   await ensureDocSchema(env);
   if (!requireDocsBinding(env)) {
     return json({
@@ -8521,12 +8564,25 @@ async function uploadDocument(request, env, user) {
   }
   const declared = +request.headers.get("content-length") || 0;
   if (declared && declared > MAX_DOC_BYTES) {
-    return json({ error: "File too big — max 20 MB per upload." }, 413);
+    return json({ error: `File too big — max ${Math.round(MAX_DOC_BYTES / 1024 / 1024)} MB per file.` }, 413);
+  }
+
+  // Per-user caps so we don't accidentally bill on someone's behalf for
+  // hundreds of GB. Cheap aggregate read — only their own row count.
+  const usage = await env.DB.prepare(
+    "SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS total FROM documents WHERE user_id = ?"
+  ).bind(user.id).first().catch(() => ({ n: 0, total: 0 }));
+  if (usage.n >= MAX_DOC_COUNT) {
+    return json({ error: `You've hit the ${MAX_DOC_COUNT}-file limit. Delete a few old documents to add more.` }, 413);
   }
 
   const buf = await request.arrayBuffer();
   if (buf.byteLength === 0) return json({ error: "File is empty." }, 400);
-  if (buf.byteLength > MAX_DOC_BYTES) return json({ error: "File too big — max 20 MB per upload." }, 413);
+  if (buf.byteLength > MAX_DOC_BYTES) return json({ error: `File too big — max ${Math.round(MAX_DOC_BYTES / 1024 / 1024)} MB per file.` }, 413);
+  if ((usage.total || 0) + buf.byteLength > MAX_DOC_TOTAL_BYTES) {
+    const remainingMb = Math.max(0, Math.round((MAX_DOC_TOTAL_BYTES - usage.total) / 1024 / 1024));
+    return json({ error: `Storage limit reached (${Math.round(MAX_DOC_TOTAL_BYTES / 1024 / 1024)} MB total). You have ~${remainingMb} MB left — delete a few old documents first.` }, 413);
+  }
 
   // Generate a random, unguessable key namespaced under the user. Means a
   // hostile party can't enumerate someone else's docs even if R2 were ever
@@ -8541,11 +8597,229 @@ async function uploadDocument(request, env, user) {
     customMetadata: { userId: user.id, filename, kind, uploadedAt: String(nowSec()) },
   });
 
+  // Insert with ai_status='pending' so the UI can show a spinner straight
+  // away. The actual AI call runs in the background after we respond.
   const res = await env.DB.prepare(
-    "INSERT INTO documents (user_id, r2_key, filename, content_type, size_bytes, kind, notes, uploaded_at) " +
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO documents (user_id, r2_key, filename, content_type, size_bytes, kind, notes, uploaded_at, ai_status) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
   ).bind(user.id, r2Key, filename, contentType, buf.byteLength, kind, notes, nowSec()).run();
-  return json({ ok: true, id: res.meta?.last_row_id, filename, kind, sizeBytes: buf.byteLength });
+  const docId = res.meta?.last_row_id;
+
+  // Kick off the AI review in the background so the upload feels instant.
+  // Falls through to a direct await if ctx isn't available (shouldn't happen
+  // in normal Workers runtime but keeps things safe).
+  const aiJob = aiReviewDocument(env, user, docId).catch((err) =>
+    console.warn("doc AI review failed:", err?.message || err)
+  );
+  if (ctx?.waitUntil) ctx.waitUntil(aiJob); else { /* fire and forget */ aiJob; }
+
+  return json({ ok: true, id: docId, filename, kind, sizeBytes: buf.byteLength, aiStatus: "pending" });
+}
+
+// GET /api/me/documents/:id — full record incl. AI notes for the viewer.
+async function getDocument(env, user, id) {
+  await ensureDocSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT id, filename, content_type, size_bytes, kind, notes, uploaded_at, " +
+    "       ai_status, ai_summary, ai_notes, ai_processed_at, ai_edited_by_user, ai_error " +
+    "FROM documents WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!r) return json({ error: "Document not found" }, 404);
+  const out = docRow(r);
+  out.ai.error = r.ai_error || null;
+  return json({ ok: true, document: out });
+}
+
+// PUT /api/me/documents/:id — let users fix the AI notes, change the kind
+// (move between folders), or rewrite the user notes. We never let the
+// client overwrite r2_key, filename, or size_bytes.
+async function updateDocument(request, env, user, id) {
+  await ensureDocSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const sets = []; const binds = [];
+  if ("kind" in body) {
+    const k = String(body.kind || "").toLowerCase();
+    if (!ALLOWED_DOC_KINDS.has(k)) return json({ error: "Unknown folder" }, 400);
+    sets.push("kind = ?"); binds.push(k);
+  }
+  if ("notes" in body) {
+    sets.push("notes = ?"); binds.push(sanitizeText(body.notes, 1000));
+  }
+  if ("aiNotes" in body) {
+    // User-edited AI notes count as the source of truth from now on.
+    sets.push("ai_notes = ?");        binds.push(sanitizeText(body.aiNotes, 4000));
+    sets.push("ai_edited_by_user = 1");
+  }
+  if ("aiSummary" in body) {
+    sets.push("ai_summary = ?");      binds.push(sanitizeText(body.aiSummary, 300));
+    sets.push("ai_edited_by_user = 1");
+  }
+  if (!sets.length) return json({ error: "Nothing to update" }, 400);
+  binds.push(id, user.id);
+  await env.DB.prepare(`UPDATE documents SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`).bind(...binds).run();
+  return getDocument(env, user, id);
+}
+
+// POST /api/me/documents/:id/rerun — re-run the AI review. Skips when the
+// user has edited the notes, unless force=1 (they're explicitly asking
+// for a fresh take and accepting their edits will be replaced).
+async function rerunDocAi(request, env, user, id) {
+  await ensureDocSchema(env);
+  const url = new URL(request.url);
+  const force = url.searchParams.get("force") === "1";
+  const row = await env.DB.prepare(
+    "SELECT id, ai_edited_by_user FROM documents WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!row) return json({ error: "Document not found" }, 404);
+  if (row.ai_edited_by_user && !force) {
+    return json({ error: "You've edited the AI notes. Re-run anyway? Pass ?force=1 to replace your edits." }, 409);
+  }
+  await env.DB.prepare("UPDATE documents SET ai_status = 'pending', ai_error = NULL WHERE id = ? AND user_id = ?")
+    .bind(id, user.id).run();
+  await aiReviewDocument(env, user, id);
+  return getDocument(env, user, id);
+}
+
+// AI document review. Pulls the file out of R2, packages it as a
+// content block (image | document | text) and asks Claude for a
+// structured response: a short summary, transcribed text from any
+// doctor's notes, and a longer interpretive note. Save the result on
+// the documents row so /buddy + /insights can use it.
+async function aiReviewDocument(env, user, id) {
+  if (!id) return;
+  if (!env.DB) return;
+  await ensureDocSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT id, r2_key, filename, content_type, size_bytes, kind, notes " +
+    "FROM documents WHERE id = ? AND user_id = ?"
+  ).bind(id, user.id).first().catch(() => null);
+  if (!row) return;
+
+  // Anything past the vision cap is impractical to send to Claude. We
+  // still store it and let the user add their own notes; AI just skips.
+  const skipReason = (() => {
+    if (!requireDocsBinding(env)) return "Storage not configured";
+    if ((row.size_bytes || 0) > MAX_AI_REVIEW_BYTES) return "File too large for AI review (>8 MB)";
+    return null;
+  })();
+  if (skipReason) {
+    await env.DB.prepare(
+      "UPDATE documents SET ai_status = 'skipped', ai_error = ?, ai_processed_at = ? WHERE id = ?"
+    ).bind(skipReason, nowSec(), id).run();
+    return;
+  }
+
+  // Read the bytes once. We base64 it for image/PDF and decode it for text.
+  let bytes;
+  try {
+    const obj = await env.DOCS.get(row.r2_key);
+    if (!obj) throw new Error("R2 object missing");
+    bytes = new Uint8Array(await obj.arrayBuffer());
+  } catch (err) {
+    await env.DB.prepare(
+      "UPDATE documents SET ai_status = 'error', ai_error = ?, ai_processed_at = ? WHERE id = ?"
+    ).bind(`Couldn't read file: ${err?.message || err}`.slice(0, 400), nowSec(), id).run();
+    return;
+  }
+
+  const mediaType = (row.content_type || "").split(";")[0].trim().toLowerCase();
+  const kindLabel = row.kind || "other";
+  const userNotes = row.notes ? `User added these notes: ${row.notes}` : "No user notes yet.";
+
+  // Build the user-message content block per file type.
+  let userContent;
+  if (mediaType.startsWith("image/")) {
+    userContent = [
+      { type: "image", source: { type: "base64", media_type: mediaType, data: bytesToBase64(bytes) } },
+      { type: "text",  text: aiReviewPromptUser(row.filename, kindLabel, userNotes) },
+    ];
+  } else if (mediaType === "application/pdf") {
+    userContent = [
+      { type: "document", source: { type: "base64", media_type: "application/pdf", data: bytesToBase64(bytes) } },
+      { type: "text",     text: aiReviewPromptUser(row.filename, kindLabel, userNotes) },
+    ];
+  } else if (mediaType === "text/plain" || mediaType === "text/csv") {
+    const decoder = new TextDecoder();
+    const text = decoder.decode(bytes).slice(0, 30000);
+    userContent = [
+      { type: "text", text: `Document filename: ${row.filename}\nFolder: ${kindLabel}\n${userNotes}\n\n--- FILE CONTENT ---\n${text}` },
+    ];
+  } else {
+    await env.DB.prepare(
+      "UPDATE documents SET ai_status = 'skipped', ai_error = 'Unsupported file type for AI review', ai_processed_at = ? WHERE id = ?"
+    ).bind(nowSec(), id).run();
+    return;
+  }
+
+  const ai = await invokeClaude(env, null, {
+    system: AI_DOC_REVIEW_SYSTEM,
+    messages: [{ role: "user", content: userContent }],
+    maxTokens: 1200,
+  });
+
+  if (!ai.ok) {
+    await env.DB.prepare(
+      "UPDATE documents SET ai_status = 'error', ai_error = ?, ai_processed_at = ? WHERE id = ?"
+    ).bind(String(ai.error || "AI offline").slice(0, 400), nowSec(), id).run();
+    return;
+  }
+
+  // Parse the structured response. We ask for ```summary / ```notes
+  // fences so we can pull them apart cleanly; fall back to using the
+  // whole text as notes if the model ignored the format.
+  const text = String(ai.text || "");
+  const summaryMatch = text.match(/```summary\s*([\s\S]*?)```/i);
+  const notesMatch   = text.match(/```notes\s*([\s\S]*?)```/i);
+  const summary = sanitizeText(summaryMatch ? summaryMatch[1].trim() : text.split("\n")[0] || "", 300);
+  const notes   = sanitizeText(notesMatch   ? notesMatch[1].trim()   : text, 4000);
+
+  await env.DB.prepare(
+    "UPDATE documents SET ai_status = 'done', ai_summary = ?, ai_notes = ?, " +
+    "  ai_processed_at = ?, ai_input_tokens = ?, ai_output_tokens = ?, ai_error = NULL " +
+    "WHERE id = ?"
+  ).bind(
+    summary, notes, nowSec(),
+    ai.inputTokens || null, ai.outputTokens || null,
+    id
+  ).run();
+}
+
+const AI_DOC_REVIEW_SYSTEM =
+  "You are EndoMe's medical-document reviewer. The user just uploaded a health " +
+  "document (ultrasound, MRI, blood test, specialist letter, prescription, etc.). " +
+  "Your job is to give them a clear, plain-English read of what's in it — like a " +
+  "knowledgeable friend who works in healthcare, not a clinician. You are NOT diagnosing.\n\n" +
+  "Always reply in EXACTLY this fenced format so the app can parse it:\n" +
+  "```summary\n" +
+  "<one tight sentence (≤25 words) summarising the document>\n" +
+  "```\n" +
+  "```notes\n" +
+  "<longer plain-English review, 4-10 short paragraphs or bullets>\n" +
+  "```\n\n" +
+  "What to put in the notes:\n" +
+  "1. Transcribe any handwritten or printed clinician notes verbatim (mark them as `> quoted` blocks).\n" +
+  "2. Translate medical jargon into plain English so the user actually understands it.\n" +
+  "3. Highlight any findings worth raising with their clinician (size, location, severity, abnormal values).\n" +
+  "4. For lab results: list the key values, their reference range, and whether each is low/normal/high.\n" +
+  "5. For ultrasound/MRI: name the structures seen, any cysts, lesions, fibroids, dimensions, and whether it explicitly mentions endometriosis findings.\n" +
+  "6. For letters/reports: extract the clinical opinion, any tests ordered, and any follow-up actions.\n" +
+  "7. End with a short \"What this could mean for your endo journey\" paragraph IF the document is relevant; otherwise skip.\n\n" +
+  "If the image is unreadable, blurred, or doesn't look like a medical document, say so honestly in the notes and put a one-line summary like \"Couldn't read this clearly — try a sharper photo\". Never invent values or diagnoses.";
+
+function aiReviewPromptUser(filename, kindLabel, userNotes) {
+  return `Please review this ${kindLabel} document.\n\nFilename: ${filename}\n${userNotes}\n\nReply using the fenced summary + notes format from your instructions.`;
+}
+
+// Bytes → base64. We keep it self-contained (no atob/btoa string round-trip)
+// because some Workers runtimes balk at large strings through btoa.
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 async function streamDocument(env, user, id) {
@@ -11691,6 +11965,7 @@ async function buildInsightContext(env, user, scope) {
       else if (s === "cravings_30d")   chunk = await ctxCravings(env, user, 30);
       else if (s === "intimacy_30d")   chunk = await ctxIntimacy(env, user, 30);
       else if (s === "cycles")         chunk = await ctxCycles(env, user);
+      else if (s === "documents")      chunk = await ctxDocuments(env, user);
     } catch (err) {
       chunk = `(${s}: read failed — ${err?.message || "unknown"})`;
     }
@@ -11867,6 +12142,31 @@ async function ctxCycles(env, user) {
       `Fertile window: ${pred.fertileStart} → ${pred.fertileEnd}, ovulation ~${pred.ovulation}.`
     : "Not enough cycle history yet for a prediction.";
   return `### Menstrual cycles\n${predLine}\nRecent:\n${lines}`;
+}
+
+// User-uploaded health documents (ultrasound, MRI, blood tests, specialist
+// letters) plus the AI's review notes and any edits the user has made.
+// This is what makes "the AI noticed your latest ultrasound mentioned a
+// 3cm endometrioma" possible inside Buddy + insights.
+async function ctxDocuments(env, user) {
+  await ensureDocSchema(env);
+  const r = await env.DB.prepare(
+    "SELECT id, filename, kind, notes, ai_summary, ai_notes, ai_status, ai_edited_by_user, uploaded_at " +
+    "FROM documents WHERE user_id = ? ORDER BY uploaded_at DESC LIMIT 20"
+  ).bind(user.id).all().catch(() => ({ results: [] }));
+  if (!(r.results || []).length) {
+    return "### Uploaded documents\nNone yet — when the user uploads an ultrasound, MRI, blood test or specialist note we'll review it and surface the findings here.";
+  }
+  const lines = (r.results || []).map((d) => {
+    const date = d.uploaded_at ? new Date(d.uploaded_at * 1000).toISOString().slice(0, 10) : "?";
+    const summary = d.ai_summary ? ` — ${String(d.ai_summary).slice(0, 200)}` : "";
+    const aiNotes = d.ai_notes
+      ? `\n  AI/user notes (${d.ai_edited_by_user ? "user-edited" : "AI"}): ${String(d.ai_notes).replace(/\s+/g, " ").slice(0, 1200)}`
+      : (d.ai_status === "pending" ? "\n  AI review still running." : "");
+    const userNotes = d.notes ? `\n  User comment: ${String(d.notes).slice(0, 200)}` : "";
+    return `- ${date} [${d.kind || "other"}] ${d.filename}${summary}${aiNotes}${userNotes}`;
+  }).join("\n");
+  return `### Uploaded documents (${r.results.length})\nThe AI has already reviewed these — quote real findings when relevant; never invent numbers.\n${lines}`;
 }
 
 async function ctxTestResults(env, user) {

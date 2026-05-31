@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780193972" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/documents.css?v=1779934116" />
+  <link rel="stylesheet" href="/documents.css?v=1780210000" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -75,22 +75,27 @@
       </nav>
     </aside>
 
-    <main class="dash-main community-main">
+    <main class="dash-main community-main docs-main">
       <header class="community-hero soft">
         <div>
           <p class="hero-eyebrow">Documents</p>
           <h1>Your private health folder.</h1>
-          <p class="hero-lead">Ultrasound images, MRI reports, blood test results, doctors' letters — keep everything in one safe place. <strong>Only you can see these.</strong> Files are encrypted in transit and stored privately per account.</p>
+          <p class="hero-lead">Ultrasounds, MRI scans, blood tests, specialist notes — keep them organised in folders. EndoMe's AI reviews each one and pulls out the key findings so your insights and Buddy understand your full picture. <strong>Only you can see them.</strong></p>
+        </div>
+        <div class="docs-usage" id="docs-usage" hidden>
+          <strong id="docs-usage-text">0 / 500 MB</strong>
+          <span id="docs-usage-count">0 files</span>
+          <div class="docs-usage-bar"><span id="docs-usage-fill"></span></div>
         </div>
       </header>
 
-      <section class="community-section">
+      <section class="community-section docs-upload-section">
         <div class="upload-zone" id="upload-zone">
-          <input type="file" id="upload-input" multiple accept="image/*,application/pdf,text/plain,text/csv" hidden />
+          <input type="file" id="upload-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv" hidden />
           <div class="upload-inner">
             <div class="upload-emoji">📁</div>
             <strong>Drop a file here, or <button class="upload-btn" type="button" id="upload-pick">pick from your device</button></strong>
-            <span class="upload-hint">PDFs and images up to 20 MB. JPG, PNG, HEIC, WebP, PDF, TXT, CSV.</span>
+            <span class="upload-hint">JPG, PNG, WebP, GIF, PDF, TXT, CSV · up to 25 MB · up to 100 files · 500 MB total</span>
           </div>
         </div>
         <div id="upload-status" class="upload-status" hidden></div>
@@ -101,10 +106,16 @@
         </p>
       </section>
 
-      <section class="community-section">
+      <section class="community-section docs-shelf-section">
         <div class="section-head">
-          <h2>Your documents</h2>
-          <span class="section-hint">Private to your account</span>
+          <h2>Folders</h2>
+          <span class="section-hint">Tap to filter</span>
+        </div>
+        <div class="docs-folders" id="docs-folders"></div>
+
+        <div class="section-head docs-list-head">
+          <h2 id="docs-list-title">All documents</h2>
+          <span class="section-hint" id="docs-list-sub">Private to your account</span>
         </div>
         <ul class="doc-list" id="doc-list">
           <li class="empty-state">Loading…</li>
@@ -116,24 +127,25 @@
         <div class="modal-backdrop" data-close-modal></div>
         <div class="modal-card">
           <button class="modal-close" data-close-modal aria-label="Close">×</button>
-          <h3>About this document</h3>
+          <h3>Which folder?</h3>
           <p class="modal-sub" id="meta-filename">filename</p>
           <form id="meta-form">
-            <label class="field"><span>Type</span>
+            <label class="field"><span>Folder</span>
               <select name="kind">
-                <option value="ultrasound">Ultrasound</option>
-                <option value="scan">MRI / CT scan</option>
-                <option value="report">Specialist report</option>
-                <option value="lab">Lab results</option>
-                <option value="letter">Doctor's letter</option>
-                <option value="prescription">Prescription</option>
-                <option value="image">Image</option>
-                <option value="other" selected>Other</option>
+                <option value="ultrasound">🩻 Ultrasounds</option>
+                <option value="scan">🧠 MRI / CT Scans</option>
+                <option value="lab">🩸 Blood Tests</option>
+                <option value="report">📋 Specialist Notes</option>
+                <option value="letter">✉️ Doctor's Letters</option>
+                <option value="prescription">💊 Prescriptions</option>
+                <option value="image">🖼️ Other Images</option>
+                <option value="other" selected>📄 Other</option>
               </select>
             </label>
-            <label class="field"><span>Notes <em>(optional)</em></span>
-              <textarea name="notes" rows="3" maxlength="500" placeholder="e.g. Date, clinic, anything to remember."></textarea>
+            <label class="field"><span>Notes <em>(optional — date, clinic, anything to remember)</em></span>
+              <textarea name="notes" rows="3" maxlength="1000" placeholder="e.g. transvaginal scan, Dr Smith, 12 May 2026"></textarea>
             </label>
+            <p class="modal-hint">📌 The AI will review this file in the background. You'll see its notes once it's done — usually within ~30 seconds.</p>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Upload</button>
               <button type="button" class="btn-soft" data-close-modal>Cancel</button>
@@ -142,12 +154,74 @@
           </form>
         </div>
       </div>
+
+      <!-- Viewer modal -->
+      <div class="modal doc-viewer-modal" id="viewer-modal" aria-hidden="true" role="dialog">
+        <div class="modal-backdrop" data-close-viewer></div>
+        <div class="modal-card doc-viewer-card">
+          <button class="modal-close" data-close-viewer aria-label="Close">×</button>
+          <div class="doc-viewer-grid">
+            <div class="doc-viewer-pane">
+              <div class="doc-viewer-preview" id="viewer-preview">
+                <p class="empty-state">Loading…</p>
+              </div>
+              <div class="doc-viewer-toolbar">
+                <a class="btn-soft small" id="viewer-open" target="_blank" rel="noopener">Open in new tab ↗</a>
+                <a class="btn-soft small" id="viewer-download" download>Download</a>
+                <button class="btn-soft small danger" id="viewer-delete">Delete</button>
+              </div>
+            </div>
+            <div class="doc-viewer-side">
+              <header class="doc-viewer-head">
+                <h3 id="viewer-title">Document</h3>
+                <p class="doc-viewer-sub" id="viewer-sub">…</p>
+              </header>
+
+              <div class="doc-viewer-card-block">
+                <label class="field"><span>Folder</span>
+                  <select id="viewer-kind">
+                    <option value="ultrasound">🩻 Ultrasounds</option>
+                    <option value="scan">🧠 MRI / CT Scans</option>
+                    <option value="lab">🩸 Blood Tests</option>
+                    <option value="report">📋 Specialist Notes</option>
+                    <option value="letter">✉️ Doctor's Letters</option>
+                    <option value="prescription">💊 Prescriptions</option>
+                    <option value="image">🖼️ Other Images</option>
+                    <option value="other">📄 Other</option>
+                  </select>
+                </label>
+                <label class="field"><span>Your notes</span>
+                  <textarea id="viewer-notes" rows="3" maxlength="1000" placeholder="Add a note for future you…"></textarea>
+                </label>
+              </div>
+
+              <div class="doc-viewer-card-block ai-block">
+                <div class="ai-head">
+                  <div>
+                    <strong>✨ AI review</strong>
+                    <span class="ai-status" id="viewer-ai-status">…</span>
+                  </div>
+                  <button type="button" class="btn-soft small" id="viewer-ai-rerun" hidden>↻ Re-run review</button>
+                </div>
+                <input type="text" id="viewer-ai-summary" maxlength="300" placeholder="One-line summary the AI generated" />
+                <textarea id="viewer-ai-notes" rows="10" maxlength="4000" placeholder="The detailed review will appear here. Edit anything that's wrong — your version takes over."></textarea>
+                <p class="ai-foot" id="viewer-ai-foot">Your edits will replace the AI take. These notes feed into your insights and Buddy.</p>
+              </div>
+
+              <div class="doc-viewer-actions">
+                <button type="button" class="btn btn-primary" id="viewer-save">Save changes</button>
+                <p class="form-status" id="viewer-save-status" role="status"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/documents.js?v=1779934116" defer></script>
+  <script src="/documents.js?v=1780210000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780199000" defer></script>
 </body>
