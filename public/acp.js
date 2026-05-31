@@ -9,6 +9,7 @@
     insights:  document.getElementById("view-insights"),
     stories:   document.getElementById("view-stories"),
     resources: document.getElementById("view-resources"),
+    foods:     document.getElementById("view-foods"),
     system:    document.getElementById("view-system"),
   };
   let allUsersCache = []; // for the add-member dropdown
@@ -26,6 +27,7 @@
       if (name === "insights") loadInsightsTab();
       if (name === "stories") loadStoriesTab();
       if (name === "resources") loadResourcesTab();
+      if (name === "foods") loadFoodsTab();
     });
   });
   function showView(name) {
@@ -36,6 +38,7 @@
     if (views.insights)  views.insights.hidden  = name !== "insights";
     if (views.stories)   views.stories.hidden   = name !== "stories";
     if (views.resources) views.resources.hidden = name !== "resources";
+    if (views.foods)     views.foods.hidden     = name !== "foods";
     if (views.system)    views.system.hidden    = name !== "system";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -699,6 +702,7 @@
   if (startTab === "insights") loadInsightsTab();
   if (startTab === "stories") loadStoriesTab();
   if (startTab === "resources") loadResourcesTab();
+  if (startTab === "foods") loadFoodsTab();
   // Always populate the right rail on first load so it has data immediately,
   // even if the admin starts on a non-Overview tab.
   if (startTab !== "overview") loadOverview();
@@ -929,4 +933,149 @@
     requestAnimationFrame(() => t.classList.add("in"));
     setTimeout(() => { t.classList.remove("in"); setTimeout(() => t.remove(), 250); }, 2400);
   }
+
+  // ====================================================================
+  // FOOD DB TAB — curated food + macros for the Smart-Log autocomplete.
+  // (Uses var so the bootstrap above can call loadFoodsTab before these
+  // declarations are reached — the function is hoisted but its closure
+  // over `let` vars would otherwise hit the TDZ.)
+  // ====================================================================
+  var foodsCache = [];
+  var foodsQuery = "";
+  var foodsCategory = "";
+
+  async function loadFoodsTab() {
+    const list = document.getElementById("acp-foods-list");
+    list.innerHTML = `<p class="empty-state">Loading…</p>`;
+    try {
+      const params = new URLSearchParams();
+      if (foodsQuery) params.set("q", foodsQuery);
+      if (foodsCategory) params.set("category", foodsCategory);
+      const data = await fetchJson(`/api/acp/foods?${params}`);
+      foodsCache = data.items || [];
+      document.getElementById("acp-foods-count").textContent =
+        `${foodsCache.length} of ${data.total || 0} foods`;
+      if (!foodsCache.length) {
+        list.innerHTML = `<p class="empty-state">No foods match. Click "+ Add food" to add one.</p>`;
+        return;
+      }
+      list.innerHTML = foodsCache.map(foodRow).join("");
+      list.querySelectorAll("[data-edit-food]").forEach((b) =>
+        b.addEventListener("click", () => openFoodModal(foodsCache.find((f) => f.id === +b.dataset.editFood))));
+      list.querySelectorAll("[data-del-food]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          if (!confirm(`Delete "${b.dataset.delFoodName}"?`)) return;
+          try {
+            await fetchJson(`/api/acp/foods/${b.dataset.delFood}`, { method: "DELETE" });
+            toast("Deleted", "ok");
+            loadFoodsTab();
+          } catch (err) { toast(err.message || "Couldn't delete", "err"); }
+        }));
+    } catch (err) {
+      list.innerHTML = `<p class="empty-state">Couldn't load: ${escapeHtml(err.message)}</p>`;
+    }
+  }
+  function foodRow(f) {
+    const macros = `${f.calories}kcal · P${f.protein_g} · C${f.carbs_g} · F${f.fat_g} · Fib${f.fiber_g}`;
+    return `<div class="acp-food-row" style="background:#fff;border:1px solid #ffeaf2;border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;margin-bottom:8px">
+      <div style="min-width:0">
+        <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+          <strong style="font-size:14px;color:#2b1922">${escapeHtml(f.name)}</strong>
+          ${f.brand ? `<span style="font-size:11px;color:#7a5f6c">${escapeHtml(f.brand)}</span>` : ""}
+          ${f.category ? `<span style="font-size:10px;background:#fff5f8;color:#c4344b;padding:2px 8px;border-radius:999px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">${escapeHtml(f.category)}</span>` : ""}
+          ${f.source === "seed" ? `<span style="font-size:10px;color:#7a5f6c">· seed</span>` : ""}
+        </div>
+        <div style="font-size:12px;color:#7a5f6c;margin-top:3px">
+          ${escapeHtml(f.serving_size || "")} · <code style="background:#fff5f8;padding:2px 6px;border-radius:5px;font-size:11px">${macros}</code>
+          ${f.tags ? ` · tags: <em>${escapeHtml(f.tags)}</em>` : ""}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="acp-btn" data-edit-food="${f.id}" style="font-size:12px;padding:6px 12px">Edit</button>
+        <button class="acp-btn" data-del-food="${f.id}" data-del-food-name="${escapeAttr(f.name)}" style="font-size:12px;padding:6px 12px;color:#c4344b">Delete</button>
+      </div>
+    </div>`;
+  }
+
+  // Search + category filter wiring (debounced).
+  let foodsSearchDeb = null;
+  document.getElementById("acp-foods-search")?.addEventListener("input", (e) => {
+    clearTimeout(foodsSearchDeb);
+    foodsSearchDeb = setTimeout(() => {
+      foodsQuery = e.target.value.trim();
+      loadFoodsTab();
+    }, 200);
+  });
+  document.getElementById("acp-foods-category")?.addEventListener("change", (e) => {
+    foodsCategory = e.target.value;
+    loadFoodsTab();
+  });
+  document.getElementById("acp-foods-add")?.addEventListener("click", () => openFoodModal(null));
+
+  // Modal --------------------------------------------------------------
+  const foodModal = document.getElementById("food-modal");
+  function openFoodModal(food) {
+    const form = document.getElementById("food-form");
+    form.reset();
+    if (food) {
+      document.getElementById("food-modal-title").textContent = "Edit food";
+      form.id.value = food.id;
+      form.name.value = food.name || "";
+      form.brand.value = food.brand || "";
+      form.category.value = food.category || "";
+      form.serving_size.value = food.serving_size || "";
+      form.serving_grams.value = food.serving_grams || "";
+      form.calories.value = food.calories || 0;
+      form.protein_g.value = food.protein_g || 0;
+      form.carbs_g.value = food.carbs_g || 0;
+      form.fat_g.value = food.fat_g || 0;
+      form.fiber_g.value = food.fiber_g || 0;
+      form.tags.value = food.tags || "";
+    } else {
+      document.getElementById("food-modal-title").textContent = "Add food";
+    }
+    document.getElementById("food-status").textContent = "";
+    foodModal.classList.add("open");
+    foodModal.setAttribute("aria-hidden", "false");
+  }
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-close-food]")) {
+      foodModal.classList.remove("open");
+      foodModal.setAttribute("aria-hidden", "true");
+    }
+  });
+  document.getElementById("food-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById("food-status");
+    status.textContent = "Saving…"; status.style.color = "#7a5f6c";
+    const body = {
+      id: form.id.value ? +form.id.value : null,
+      name: form.name.value.trim(),
+      brand: form.brand.value.trim() || null,
+      category: form.category.value || null,
+      serving_size: form.serving_size.value.trim() || null,
+      serving_grams: form.serving_grams.value ? +form.serving_grams.value : null,
+      calories: +form.calories.value || 0,
+      protein_g: +form.protein_g.value || 0,
+      carbs_g: +form.carbs_g.value || 0,
+      fat_g: +form.fat_g.value || 0,
+      fiber_g: +form.fiber_g.value || 0,
+      tags: form.tags.value.trim(),
+    };
+    try {
+      await fetchJson(`/api/acp/foods${body.id ? `/${body.id}` : ""}`, {
+        method: body.id ? "PUT" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      toast("Saved", "ok");
+      foodModal.classList.remove("open");
+      foodModal.setAttribute("aria-hidden", "true");
+      await loadFoodsTab();
+    } catch (err) {
+      status.textContent = err.message || "Couldn't save."; status.style.color = "#c4344b";
+    }
+  });
+  function escapeAttr(s) { return String(s ?? "").replace(/"/g, "&quot;").replace(/&/g, "&amp;"); }
 })();

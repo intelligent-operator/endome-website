@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/styles.css?v=1780193972" />
   <link rel="stylesheet" href="/dashboard.css?v=1780100000" />
   <link rel="stylesheet" href="/meds.css?v=1780100000" />
-  <link rel="stylesheet" href="/food.css?v=1780193972" />
+  <link rel="stylesheet" href="/food.css?v=1780240000" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -349,7 +349,10 @@
         </label>
         <button type="button" class="btn btn-ghost" id="smart-log-parse-btn">✨ Parse</button>
         <div id="smart-log-result" hidden>
-          <h4 class="smart-result-h">Items</h4>
+          <div class="smart-result-head">
+            <h4 class="smart-result-h">Items <span class="smart-result-hint">edit anything that's wrong</span></h4>
+            <button type="button" class="btn-soft small" id="smart-add-item-btn">＋ Add item</button>
+          </div>
           <ul class="smart-result-list" id="smart-result-list"></ul>
           <div class="smart-result-totals" id="smart-result-totals"></div>
         </div>
@@ -410,7 +413,7 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/food.js?v=1780193972" defer></script>
+  <script src="/food.js?v=1780240000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/log-symptom-widget.js?v=1780225000" defer></script>
   <script src="/buddy-widget.js?v=1780199000" defer></script>

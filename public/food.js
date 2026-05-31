@@ -493,40 +493,200 @@ console.info("EndoMe food build v1");
       btn.disabled = false; btn.textContent = "✨ Parse";
     }
   });
-  function paintSmartResult(data) {
-    const list = document.getElementById("smart-result-list");
-    list.innerHTML = data.items.map((it, i) => `
+  // Smart-log items live here while the modal is open. Every field is
+  // editable in place (name, servings, calories, macros); users can
+  // also "Replace" any row from the curated food DB, or "+ Add" a row
+  // (e.g. tomato sauce on a hot dog) without re-running the AI.
+  let smartItems = [];
+  function smartItemRow(it, i) {
+    return `
       <li class="smart-item" data-i="${i}">
-        <input type="checkbox" checked data-keep="${i}" />
+        <label class="smart-item-keep">
+          <input type="checkbox" data-keep="${i}" ${it.keep === false ? "" : "checked"} />
+        </label>
         <div class="smart-item-body">
-          <strong>${escapeHtml(it.name)}</strong>
-          <span class="smart-item-meta">
-            <input type="number" step="0.5" min="0" value="${it.servings}" data-servings="${i}" />×
-            · ${it.calories} kcal · P ${it.protein_g}g · C ${it.carbs_g}g · F ${it.fat_g}g
-          </span>
+          <div class="smart-item-row">
+            <input type="text" class="smart-item-name" data-field="name" data-i="${i}" value="${escapeAttr(it.name)}" placeholder="Item name" />
+            <button type="button" class="btn-soft tiny" data-replace-i="${i}" title="Swap with a food from the database">🔁 Replace</button>
+            <button type="button" class="btn-soft tiny danger" data-remove-i="${i}" title="Remove this item">×</button>
+          </div>
+          <div class="smart-item-grid">
+            <label>Servings <input type="number" step="0.5" min="0" data-field="servings"  data-i="${i}" value="${it.servings ?? 1}" /></label>
+            <label>kcal     <input type="number" step="1"   min="0" data-field="calories"  data-i="${i}" value="${it.calories ?? 0}" /></label>
+            <label>P (g)    <input type="number" step="0.1" min="0" data-field="protein_g" data-i="${i}" value="${it.protein_g ?? 0}" /></label>
+            <label>C (g)    <input type="number" step="0.1" min="0" data-field="carbs_g"   data-i="${i}" value="${it.carbs_g ?? 0}" /></label>
+            <label>F (g)    <input type="number" step="0.1" min="0" data-field="fat_g"     data-i="${i}" value="${it.fat_g ?? 0}" /></label>
+            <label>Fibre    <input type="number" step="0.1" min="0" data-field="fiber_g"   data-i="${i}" value="${it.fiber_g ?? 0}" /></label>
+          </div>
+          <div class="smart-item-picker" data-picker-i="${i}" hidden></div>
         </div>
-      </li>`).join("");
-    list.dataset.items = JSON.stringify(data.items);
-    const t = data.totals;
+      </li>`;
+  }
+  function paintSmartResult(data) {
+    smartItems = (data?.items || []).map((it) => ({
+      name: it.name || "",
+      servings: +it.servings || 1,
+      calories: +it.calories || 0,
+      protein_g: +it.protein_g || 0,
+      carbs_g:   +it.carbs_g   || 0,
+      fat_g:     +it.fat_g     || 0,
+      fiber_g:   +it.fiber_g   || 0,
+      keep: true,
+    }));
+    renderSmartList();
+  }
+  function renderSmartList() {
+    const list = document.getElementById("smart-result-list");
+    if (!list) return;
+    list.innerHTML = smartItems.length
+      ? smartItems.map(smartItemRow).join("")
+      : `<li class="smart-empty">No items — tap "＋ Add item" to start.</li>`;
+    paintSmartTotals();
+  }
+  function paintSmartTotals() {
+    const t = smartItems.reduce((s, it) => {
+      if (it.keep === false) return s;
+      const m = +it.servings || 1;
+      s.calories  += (+it.calories  || 0) * m;
+      s.protein_g += (+it.protein_g || 0) * m;
+      s.carbs_g   += (+it.carbs_g   || 0) * m;
+      s.fat_g     += (+it.fat_g     || 0) * m;
+      s.fiber_g   += (+it.fiber_g   || 0) * m;
+      return s;
+    }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0 });
+    const r1 = (n) => Math.round(n * 10) / 10;
     document.getElementById("smart-result-totals").innerHTML =
-      `<strong>Total:</strong> ${Math.round(t.calories)} kcal · P ${t.protein_g}g · C ${t.carbs_g}g · F ${t.fat_g}g · Fibre ${t.fiber_g}g`;
+      `<strong>Total:</strong> ${Math.round(t.calories)} kcal · P ${r1(t.protein_g)}g · C ${r1(t.carbs_g)}g · F ${r1(t.fat_g)}g · Fibre ${r1(t.fiber_g)}g`;
+  }
+
+  // Field edits + checkbox toggles + remove + replace + add-item — all
+  // wired via delegation off the result list so re-renders don't lose
+  // listeners.
+  document.getElementById("smart-result-list")?.addEventListener("input", (e) => {
+    const inp = e.target;
+    const i = +inp.dataset?.i;
+    const field = inp.dataset?.field;
+    if (Number.isFinite(i) && field && smartItems[i]) {
+      smartItems[i][field] = field === "name" ? inp.value : (+inp.value || 0);
+      paintSmartTotals();
+    }
+  });
+  document.getElementById("smart-result-list")?.addEventListener("change", (e) => {
+    const cb = e.target.closest("[data-keep]");
+    if (!cb) return;
+    const i = +cb.dataset.keep;
+    if (smartItems[i]) { smartItems[i].keep = cb.checked; paintSmartTotals(); }
+  });
+  document.getElementById("smart-result-list")?.addEventListener("click", (e) => {
+    const rm = e.target.closest("[data-remove-i]");
+    if (rm) {
+      const i = +rm.dataset.removeI;
+      smartItems.splice(i, 1);
+      renderSmartList();
+      return;
+    }
+    const rep = e.target.closest("[data-replace-i]");
+    if (rep) {
+      const i = +rep.dataset.replaceI;
+      toggleReplacePicker(i);
+      return;
+    }
+  });
+  document.getElementById("smart-add-item-btn")?.addEventListener("click", () => {
+    smartItems.push({ name: "", servings: 1, calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, keep: true });
+    renderSmartList();
+    // Auto-open the picker on the new row so the user immediately gets
+    // an autocomplete against the food DB.
+    setTimeout(() => toggleReplacePicker(smartItems.length - 1, ""), 30);
+  });
+
+  // ----- Replace / pick a food from the curated DB --------------------
+  async function toggleReplacePicker(i, initialQuery) {
+    const wrap = document.querySelector(`[data-picker-i="${i}"]`);
+    if (!wrap) return;
+    if (!wrap.hidden && initialQuery == null) { wrap.hidden = true; wrap.innerHTML = ""; return; }
+    const seed = initialQuery != null ? initialQuery : (smartItems[i]?.name || "");
+    wrap.hidden = false;
+    wrap.innerHTML = `
+      <div class="smart-picker">
+        <input type="text" class="smart-picker-input" placeholder="Search foods (e.g. wholemeal, sourdough, tomato sauce)…" value="${escapeAttr(seed)}" />
+        <ul class="smart-picker-list"><li class="smart-empty">Type to search the food database…</li></ul>
+      </div>`;
+    const input = wrap.querySelector("input");
+    const list  = wrap.querySelector(".smart-picker-list");
+    let token = 0;
+    const runSearch = async () => {
+      const q = input.value.trim();
+      const mine = ++token;
+      list.innerHTML = `<li class="smart-empty">Searching…</li>`;
+      try {
+        const data = await fetchJson(`/api/me/foods/search?q=${encodeURIComponent(q)}`);
+        if (mine !== token) return;
+        const items = data?.items || [];
+        if (!items.length) {
+          list.innerHTML = `<li class="smart-empty">No matches. Type a different keyword.</li>`;
+          return;
+        }
+        list.innerHTML = items.map((f) => `
+          <li>
+            <button type="button" class="smart-picker-row" data-food-id="${f.id}">
+              <strong>${escapeHtml(f.name)}</strong>
+              <span class="smart-picker-meta">${escapeHtml(f.serving_size || "")} · ${f.calories} kcal · P ${f.protein_g}g · C ${f.carbs_g}g · F ${f.fat_g}g</span>
+              ${f.category ? `<span class="smart-picker-cat">${escapeHtml(f.category)}</span>` : ""}
+            </button>
+          </li>`).join("");
+        list.querySelectorAll("[data-food-id]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const food = items.find((x) => x.id === +btn.dataset.foodId);
+            if (!food) return;
+            smartItems[i] = {
+              ...smartItems[i],
+              name: food.name + (food.serving_size ? ` · ${food.serving_size}` : ""),
+              calories: food.calories,
+              protein_g: food.protein_g,
+              carbs_g: food.carbs_g,
+              fat_g: food.fat_g,
+              fiber_g: food.fiber_g,
+              keep: true,
+            };
+            renderSmartList();
+          });
+        });
+      } catch (err) {
+        if (mine !== token) return;
+        list.innerHTML = `<li class="smart-empty">Couldn't search. ${escapeHtml(err.message || "")}</li>`;
+      }
+    };
+    const debounced = (() => {
+      let h = null;
+      return () => { clearTimeout(h); h = setTimeout(runSearch, 120); };
+    })();
+    input.addEventListener("input", debounced);
+    if (seed) runSearch();
+    else input.focus();
+  }
+  function escapeAttr(s) {
+    return String(s ?? "").replace(/"/g, "&quot;").replace(/&/g, "&amp;");
   }
   document.getElementById("smart-log-save-btn")?.addEventListener("click", async () => {
-    const list = document.getElementById("smart-result-list");
-    const items = JSON.parse(list.dataset.items || "[]");
     const mealEl = document.querySelector('#smart-meal-pick button.on');
     const meal = mealEl?.dataset.val || "snack";
     const btn = document.getElementById("smart-log-save-btn");
     btn.disabled = true; btn.textContent = "Saving…";
-    const keep = [];
-    list.querySelectorAll("[data-keep]").forEach((cb) => {
-      if (cb.checked) {
-        const i = +cb.dataset.keep;
-        const servingsInput = list.querySelector(`[data-servings="${i}"]`);
-        const servings = +servingsInput?.value || items[i].servings || 1;
-        keep.push({ ...items[i], servings });
-      }
-    });
+    // Save every item the user kept ticked, using their (possibly edited)
+    // name + macros. Drops empty-name rows so an accidental "+ Add" doesn't
+    // create a blank food log.
+    const keep = smartItems
+      .filter((it) => it.keep !== false && (it.name || "").trim())
+      .map((it) => ({
+        name: it.name.trim(),
+        servings:  +it.servings  || 1,
+        calories:  +it.calories  || 0,
+        protein_g: +it.protein_g || 0,
+        carbs_g:   +it.carbs_g   || 0,
+        fat_g:     +it.fat_g     || 0,
+        fiber_g:   +it.fiber_g   || 0,
+      }));
     if (!keep.length) { toast("Nothing selected", "err"); btn.disabled = false; btn.textContent = "Save all to diary"; return; }
     try {
       await Promise.all(keep.map((it) => fetchJson("/api/me/food-logs", {

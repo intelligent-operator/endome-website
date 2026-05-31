@@ -36,6 +36,7 @@
         <button class="acp-tab" data-tab="insights"><span class="acp-tab-ico">✨</span> Insights</button>
         <button class="acp-tab" data-tab="stories"><span class="acp-tab-ico">📖</span> Stories</button>
         <button class="acp-tab" data-tab="resources"><span class="acp-tab-ico">🔗</span> Resources</button>
+        <button class="acp-tab" data-tab="foods"><span class="acp-tab-ico">🥗</span> Food DB</button>
         <button class="acp-tab" data-tab="system"><span class="acp-tab-ico">🛠</span> System</button>
       </nav>
     </aside>
@@ -197,6 +198,95 @@
         </div>
       </section>
 
+      <!-- ===== FOOD DB ===== -->
+      <section class="acp-view" id="view-foods" hidden>
+        <header class="acp-section-head">
+          <h2>🥗 Food database</h2>
+          <p>Curated foods + macros that power the Smart-Log autocomplete on /food. Every bread variety, condiment, and brand you add here is searchable to users when they're fixing a Smart-Log entry.</p>
+        </header>
+        <div class="acp-resource-toolbar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="search" id="acp-foods-search" placeholder="Search by name, tag or category…" style="flex:1;min-width:240px;padding:9px 12px;border:1px solid #ffd6e0;border-radius:10px;font-family:inherit;font-size:13px" />
+          <select id="acp-foods-category" style="padding:9px 12px;border:1px solid #ffd6e0;border-radius:10px;font-family:inherit;font-size:13px">
+            <option value="">All categories</option>
+            <option value="bread">Bread</option>
+            <option value="condiment">Condiment</option>
+            <option value="meat">Meat / Protein</option>
+            <option value="dairy">Dairy</option>
+            <option value="fruit">Fruit</option>
+            <option value="veg">Vegetable</option>
+            <option value="grain">Grain</option>
+            <option value="drink">Drink</option>
+            <option value="snack">Snack</option>
+            <option value="dessert">Dessert</option>
+            <option value="other">Other</option>
+          </select>
+          <button class="btn btn-primary" id="acp-foods-add">+ Add food</button>
+          <span class="acp-hint" id="acp-foods-count" style="margin-left:auto"></span>
+        </div>
+        <div id="acp-foods-list" style="margin-top:14px">
+          <p class="empty-state">Loading…</p>
+        </div>
+      </section>
+
+      <!-- Food editor modal -->
+      <div class="acp-modal" id="food-modal" aria-hidden="true">
+        <div class="acp-modal-backdrop" data-close-food></div>
+        <div class="acp-modal-card" style="max-width:560px">
+          <button class="acp-modal-close" data-close-food>×</button>
+          <h3 id="food-modal-title">Add food</h3>
+          <form id="food-form" novalidate>
+            <input type="hidden" name="id" />
+            <label class="acp-field"><span>Name *</span>
+              <input type="text" name="name" required maxlength="200" placeholder="e.g. Bread, wholemeal, sliced" />
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <label class="acp-field"><span>Category</span>
+                <select name="category">
+                  <option value="">—</option>
+                  <option value="bread">Bread</option>
+                  <option value="condiment">Condiment</option>
+                  <option value="meat">Meat / Protein</option>
+                  <option value="dairy">Dairy</option>
+                  <option value="fruit">Fruit</option>
+                  <option value="veg">Vegetable</option>
+                  <option value="grain">Grain</option>
+                  <option value="drink">Drink</option>
+                  <option value="snack">Snack</option>
+                  <option value="dessert">Dessert</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label class="acp-field"><span>Brand <em>(optional)</em></span>
+                <input type="text" name="brand" maxlength="120" placeholder="e.g. Helga's" />
+              </label>
+            </div>
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
+              <label class="acp-field"><span>Serving size <em>(human-readable)</em></span>
+                <input type="text" name="serving_size" maxlength="60" placeholder="e.g. 1 slice (38g)" />
+              </label>
+              <label class="acp-field"><span>Grams</span>
+                <input type="number" name="serving_grams" step="0.1" min="0" />
+              </label>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
+              <label class="acp-field"><span>kcal *</span><input type="number" name="calories" step="0.1" min="0" required /></label>
+              <label class="acp-field"><span>Protein (g)</span><input type="number" name="protein_g" step="0.1" min="0" /></label>
+              <label class="acp-field"><span>Carbs (g)</span><input type="number" name="carbs_g" step="0.1" min="0" /></label>
+              <label class="acp-field"><span>Fat (g)</span><input type="number" name="fat_g" step="0.1" min="0" /></label>
+              <label class="acp-field"><span>Fibre (g)</span><input type="number" name="fiber_g" step="0.1" min="0" /></label>
+            </div>
+            <label class="acp-field"><span>Tags <em>(comma-separated keywords for search)</em></span>
+              <input type="text" name="tags" maxlength="200" placeholder="toast, sandwich, wholewheat" />
+            </label>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+              <button type="submit" class="acp-btn primary">Save food</button>
+              <button type="button" class="acp-btn" data-close-food>Cancel</button>
+              <p class="acp-form-status" id="food-status" style="margin-left:auto"></p>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- ===== SYSTEM ===== -->
       <section class="acp-view" id="view-system" hidden>
         <header class="acp-section-head">
@@ -347,6 +437,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/acp.js?v=1780199000" defer></script>
+  <script src="/acp.js?v=1780240000" defer></script>
 </body>
 </html>

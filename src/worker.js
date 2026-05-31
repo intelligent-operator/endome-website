@@ -192,6 +192,10 @@ export default {
           if (url.pathname === "/api/me/food/parse" && request.method === "POST") {
             return jsonHeaders(await parseFoodFromText(request, env, user));
           }
+          // --- Curated food DB (search powers Smart Log autocomplete) -----
+          if (url.pathname === "/api/me/foods/search" && request.method === "GET") {
+            return jsonHeaders(await searchFoodDb(request, env));
+          }
           const medSchedMatch = url.pathname.match(/^\/api\/me\/medications\/(\d+)\/schedules(?:\/(\d+))?$/);
           if (medSchedMatch) {
             const medId = +medSchedMatch[1];
@@ -7618,11 +7622,37 @@ async function ensureFoodSchema(env) {
     "  notes TEXT" +
     ")",
     "CREATE INDEX IF NOT EXISTS idx_intimacy_user_date ON intimacy_logs(user_id, log_date DESC)",
+    // Curated food database — name + per-serving macros. Powers the
+    // Smart-Log autocomplete + the ACP food editor. Self-built so we
+    // own the data and can correct entries (different bread varieties,
+    // regional foods, etc.). NOT user-scoped; one row per food.
+    "CREATE TABLE IF NOT EXISTS food_db (" +
+    "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
+    "  name TEXT NOT NULL," +
+    "  brand TEXT," +
+    "  category TEXT," +                       // bread, dairy, fruit, etc.
+    "  serving_size TEXT," +                   // human-readable: "1 slice (38g)"
+    "  serving_grams REAL," +                  // numeric, optional
+    "  calories REAL NOT NULL," +
+    "  protein_g REAL NOT NULL DEFAULT 0," +
+    "  carbs_g   REAL NOT NULL DEFAULT 0," +
+    "  fat_g     REAL NOT NULL DEFAULT 0," +
+    "  fiber_g   REAL NOT NULL DEFAULT 0," +
+    "  tags TEXT," +                           // comma-sep search tags
+    "  source TEXT," +                         // 'seed' | 'admin' | 'crowd'
+    "  created_at INTEGER NOT NULL," +
+    "  updated_at INTEGER NOT NULL" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_food_db_name ON food_db(name)",
+    "CREATE INDEX IF NOT EXISTS idx_food_db_cat  ON food_db(category)",
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
   // Seed the food-parser AI config so admins can tune the prompt + model
   // from /acp without us needing to backfill manually.
   await seedFoodParserConfig(env);
+  // Seed the curated food DB on first boot (idempotent — only inserts
+  // if the row doesn't already exist).
+  await seedFoodDb(env);
 }
 
 const CRAVINGS_ALLOWED = new Set([
@@ -7835,6 +7865,200 @@ async function parseFoodFromText(request, env, user) {
     model: cfg.model,
     inputTokens: ai.inputTokens, outputTokens: ai.outputTokens,
   });
+}
+
+// =============================================================================
+// CURATED FOOD DB — our own indexed table of common foods + macros.
+// Used by Smart-Log autocomplete so users can swap a generic "white bread"
+// line for the correct bread variety (wholemeal, sourdough, etc.) and add
+// missing condiments (tomato sauce, etc.) without re-typing macros.
+// =============================================================================
+
+// Initial seed list. Numbers are per-serving (typical, AU/UK), to one
+// decimal. Keep concise — admins extend via /acp.
+const FOOD_DB_SEED = [
+  // Bread (the missing-variety pain point)
+  { name: "Bread, white, sliced",            category: "bread", serving_size: "1 slice (38g)", serving_grams: 38, calories: 95,  protein_g: 3.2, carbs_g: 18,  fat_g: 0.9, fiber_g: 0.8, tags: "toast,sandwich" },
+  { name: "Bread, wholemeal, sliced",        category: "bread", serving_size: "1 slice (38g)", serving_grams: 38, calories: 87,  protein_g: 4.1, carbs_g: 14.7,fat_g: 1.2, fiber_g: 2.7, tags: "wholewheat,brown,toast,sandwich" },
+  { name: "Bread, multigrain",               category: "bread", serving_size: "1 slice (40g)", serving_grams: 40, calories: 100, protein_g: 4.5, carbs_g: 15.5,fat_g: 1.5, fiber_g: 2.8, tags: "seeds,toast,sandwich" },
+  { name: "Bread, sourdough",                category: "bread", serving_size: "1 slice (45g)", serving_grams: 45, calories: 110, protein_g: 4.0, carbs_g: 21,  fat_g: 0.8, fiber_g: 1.0, tags: "toast,fermented" },
+  { name: "Bread, rye",                      category: "bread", serving_size: "1 slice (32g)", serving_grams: 32, calories: 83,  protein_g: 2.7, carbs_g: 15.5,fat_g: 1.1, fiber_g: 1.9, tags: "dark,toast" },
+  { name: "Bread, gluten-free",              category: "bread", serving_size: "1 slice (35g)", serving_grams: 35, calories: 95,  protein_g: 1.8, carbs_g: 18.5,fat_g: 2.4, fiber_g: 1.0, tags: "GF,celiac" },
+  { name: "Pita, white",                     category: "bread", serving_size: "1 pita (60g)",  serving_grams: 60, calories: 165, protein_g: 5.5, carbs_g: 33,  fat_g: 0.7, fiber_g: 1.3, tags: "flatbread" },
+  { name: "Pita, wholemeal",                 category: "bread", serving_size: "1 pita (60g)",  serving_grams: 60, calories: 170, protein_g: 6.3, carbs_g: 35,  fat_g: 1.7, fiber_g: 4.7, tags: "flatbread,wholewheat" },
+  { name: "Bagel, plain",                    category: "bread", serving_size: "1 bagel (95g)", serving_grams: 95, calories: 270, protein_g: 11,  carbs_g: 53,  fat_g: 1.5, fiber_g: 2.3, tags: "breakfast" },
+  { name: "Croissant, plain",                category: "bread", serving_size: "1 (60g)",       serving_grams: 60, calories: 270, protein_g: 5.5, carbs_g: 31,  fat_g: 14,  fiber_g: 1.7, tags: "pastry,breakfast" },
+  { name: "Burger bun, white",               category: "bread", serving_size: "1 bun (50g)",   serving_grams: 50, calories: 140, protein_g: 5.0, carbs_g: 25,  fat_g: 2.5, fiber_g: 1.0, tags: "burger" },
+  { name: "Hot dog bun, white",              category: "bread", serving_size: "1 bun (43g)",   serving_grams: 43, calories: 120, protein_g: 4.5, carbs_g: 22,  fat_g: 2.0, fiber_g: 1.0, tags: "hotdog" },
+  { name: "Tortilla, flour, white",          category: "bread", serving_size: "1 (60g)",       serving_grams: 60, calories: 190, protein_g: 5.0, carbs_g: 32,  fat_g: 4.7, fiber_g: 1.7, tags: "wrap,burrito" },
+  { name: "Tortilla, corn",                  category: "bread", serving_size: "1 (28g)",       serving_grams: 28, calories: 60,  protein_g: 1.5, carbs_g: 12.5,fat_g: 0.7, fiber_g: 1.5, tags: "wrap,GF" },
+
+  // Condiments + sauces (the "I can't add tomato sauce" pain point)
+  { name: "Tomato sauce (ketchup)",          category: "condiment", serving_size: "1 tbsp (15g)", serving_grams: 15, calories: 15,  protein_g: 0.2, carbs_g: 3.7, fat_g: 0,   fiber_g: 0.1, tags: "ketchup,sauce" },
+  { name: "BBQ sauce",                       category: "condiment", serving_size: "1 tbsp (17g)", serving_grams: 17, calories: 30,  protein_g: 0.1, carbs_g: 7.0, fat_g: 0,   fiber_g: 0.1, tags: "sauce" },
+  { name: "Mayonnaise, full fat",            category: "condiment", serving_size: "1 tbsp (14g)", serving_grams: 14, calories: 100, protein_g: 0.1, carbs_g: 0.1, fat_g: 11,  fiber_g: 0,   tags: "sauce" },
+  { name: "Mayonnaise, light",               category: "condiment", serving_size: "1 tbsp (14g)", serving_grams: 14, calories: 40,  protein_g: 0.1, carbs_g: 1.0, fat_g: 4.0, fiber_g: 0,   tags: "sauce,light" },
+  { name: "Mustard, yellow",                 category: "condiment", serving_size: "1 tsp (5g)",   serving_grams: 5,  calories: 3,   protein_g: 0.2, carbs_g: 0.3, fat_g: 0.2, fiber_g: 0.2, tags: "sauce" },
+  { name: "Mustard, Dijon",                  category: "condiment", serving_size: "1 tsp (5g)",   serving_grams: 5,  calories: 5,   protein_g: 0.3, carbs_g: 0.4, fat_g: 0.3, fiber_g: 0.2, tags: "sauce" },
+  { name: "Sweet chilli sauce",              category: "condiment", serving_size: "1 tbsp (18g)", serving_grams: 18, calories: 35,  protein_g: 0.1, carbs_g: 8.5, fat_g: 0,   fiber_g: 0.1, tags: "asian,sauce" },
+  { name: "Soy sauce",                       category: "condiment", serving_size: "1 tbsp (15ml)",serving_grams: 15, calories: 8,   protein_g: 1.3, carbs_g: 0.8, fat_g: 0,   fiber_g: 0.1, tags: "asian,sauce" },
+  { name: "Sriracha",                        category: "condiment", serving_size: "1 tsp (5g)",   serving_grams: 5,  calories: 5,   protein_g: 0.1, carbs_g: 1.0, fat_g: 0,   fiber_g: 0.1, tags: "hot,sauce" },
+  { name: "Hummus",                          category: "condiment", serving_size: "2 tbsp (30g)", serving_grams: 30, calories: 78,  protein_g: 2.4, carbs_g: 6.0, fat_g: 4.5, fiber_g: 1.8, tags: "dip,spread" },
+  { name: "Butter",                          category: "condiment", serving_size: "1 tsp (5g)",   serving_grams: 5,  calories: 36,  protein_g: 0,   carbs_g: 0,   fat_g: 4.1, fiber_g: 0,   tags: "spread,fat" },
+  { name: "Margarine",                       category: "condiment", serving_size: "1 tsp (5g)",   serving_grams: 5,  calories: 30,  protein_g: 0,   carbs_g: 0,   fat_g: 3.3, fiber_g: 0,   tags: "spread" },
+  { name: "Olive oil, extra virgin",         category: "condiment", serving_size: "1 tbsp (14g)", serving_grams: 14, calories: 120, protein_g: 0,   carbs_g: 0,   fat_g: 14,  fiber_g: 0,   tags: "oil,fat" },
+
+  // Common meats
+  { name: "Sausage, beef hot dog",           category: "meat",  serving_size: "1 (50g)",        serving_grams: 50, calories: 150, protein_g: 5.5, carbs_g: 1.5, fat_g: 13.5,fiber_g: 0,   tags: "hotdog,frankfurt" },
+  { name: "Sausage, chicken/turkey",         category: "meat",  serving_size: "1 (50g)",        serving_grams: 50, calories: 100, protein_g: 8.0, carbs_g: 1.0, fat_g: 7.0, fiber_g: 0,   tags: "hotdog" },
+  { name: "Chicken breast, grilled",         category: "meat",  serving_size: "100g",           serving_grams: 100,calories: 165, protein_g: 31,  carbs_g: 0,   fat_g: 3.6, fiber_g: 0,   tags: "lean,protein" },
+  { name: "Bacon, fried",                    category: "meat",  serving_size: "2 rashers (30g)",serving_grams: 30, calories: 130, protein_g: 9.0, carbs_g: 0.3, fat_g: 10,  fiber_g: 0,   tags: "breakfast,pork" },
+  { name: "Egg, large, fried",               category: "meat",  serving_size: "1 (50g)",        serving_grams: 50, calories: 90,  protein_g: 6.0, carbs_g: 0.4, fat_g: 7.0, fiber_g: 0,   tags: "breakfast,protein" },
+  { name: "Egg, large, boiled",              category: "meat",  serving_size: "1 (50g)",        serving_grams: 50, calories: 72,  protein_g: 6.3, carbs_g: 0.4, fat_g: 5.0, fiber_g: 0,   tags: "breakfast,protein" },
+  { name: "Tuna, canned in springwater",     category: "meat",  serving_size: "95g can drained",serving_grams: 80, calories: 90,  protein_g: 20,  carbs_g: 0,   fat_g: 1.0, fiber_g: 0,   tags: "fish,lean" },
+  { name: "Salmon, grilled",                 category: "meat",  serving_size: "100g",           serving_grams: 100,calories: 206, protein_g: 22,  carbs_g: 0,   fat_g: 13,  fiber_g: 0,   tags: "fish,omega3" },
+
+  // Dairy + alternatives
+  { name: "Milk, full cream",                category: "dairy", serving_size: "1 cup (250ml)",  serving_grams: 250,calories: 158, protein_g: 8.0, carbs_g: 12,  fat_g: 8.5, fiber_g: 0,   tags: "drink" },
+  { name: "Milk, skim",                      category: "dairy", serving_size: "1 cup (250ml)",  serving_grams: 250,calories: 88,  protein_g: 9.0, carbs_g: 12.5,fat_g: 0.3, fiber_g: 0,   tags: "drink,lowfat" },
+  { name: "Oat milk",                        category: "dairy", serving_size: "1 cup (250ml)",  serving_grams: 250,calories: 120, protein_g: 3.0, carbs_g: 16,  fat_g: 5.0, fiber_g: 2.0, tags: "drink,plant" },
+  { name: "Almond milk, unsweetened",        category: "dairy", serving_size: "1 cup (250ml)",  serving_grams: 250,calories: 30,  protein_g: 1.0, carbs_g: 1.0, fat_g: 2.5, fiber_g: 0.5, tags: "drink,plant" },
+  { name: "Greek yoghurt, plain",            category: "dairy", serving_size: "170g pot",       serving_grams: 170,calories: 100, protein_g: 17,  carbs_g: 6.0, fat_g: 0.7, fiber_g: 0,   tags: "breakfast,protein" },
+  { name: "Cheese, cheddar",                 category: "dairy", serving_size: "1 slice (20g)",  serving_grams: 20, calories: 80,  protein_g: 5.0, carbs_g: 0.1, fat_g: 6.5, fiber_g: 0,   tags: "yellow" },
+  { name: "Cheese, feta",                    category: "dairy", serving_size: "30g",            serving_grams: 30, calories: 80,  protein_g: 4.5, carbs_g: 0.5, fat_g: 6.5, fiber_g: 0,   tags: "salad,greek" },
+
+  // Fruit + veg + carbs
+  { name: "Banana",                          category: "fruit", serving_size: "1 medium (118g)",serving_grams: 118,calories: 105, protein_g: 1.3, carbs_g: 27,  fat_g: 0.4, fiber_g: 3.1, tags: "potassium" },
+  { name: "Apple",                           category: "fruit", serving_size: "1 medium (180g)",serving_grams: 180,calories: 95,  protein_g: 0.5, carbs_g: 25,  fat_g: 0.3, fiber_g: 4.4, tags: "" },
+  { name: "Avocado",                         category: "fruit", serving_size: "1/2 (100g)",     serving_grams: 100,calories: 160, protein_g: 2.0, carbs_g: 9.0, fat_g: 15,  fiber_g: 7.0, tags: "fat,healthy" },
+  { name: "Rice, white, cooked",             category: "grain", serving_size: "1 cup (158g)",   serving_grams: 158,calories: 205, protein_g: 4.3, carbs_g: 45,  fat_g: 0.4, fiber_g: 0.6, tags: "carb" },
+  { name: "Rice, brown, cooked",             category: "grain", serving_size: "1 cup (195g)",   serving_grams: 195,calories: 218, protein_g: 4.5, carbs_g: 46,  fat_g: 1.6, fiber_g: 3.5, tags: "carb,wholegrain" },
+  { name: "Pasta, cooked",                   category: "grain", serving_size: "1 cup (140g)",   serving_grams: 140,calories: 220, protein_g: 8.0, carbs_g: 43,  fat_g: 1.3, fiber_g: 2.5, tags: "carb" },
+  { name: "Oats, rolled, dry",               category: "grain", serving_size: "40g (1/2 cup)",  serving_grams: 40, calories: 150, protein_g: 5.0, carbs_g: 27,  fat_g: 2.5, fiber_g: 4.0, tags: "breakfast,porridge" },
+  { name: "Potato, baked",                   category: "veg",   serving_size: "1 medium (170g)",serving_grams: 170,calories: 160, protein_g: 4.3, carbs_g: 37,  fat_g: 0.2, fiber_g: 3.8, tags: "carb" },
+  { name: "Hash brown",                      category: "veg",   serving_size: "1 (60g)",        serving_grams: 60, calories: 145, protein_g: 1.5, carbs_g: 15,  fat_g: 9.0, fiber_g: 1.5, tags: "breakfast,fried" },
+
+  // Drinks
+  { name: "Latte, oat milk",                 category: "drink", serving_size: "regular (240ml)",serving_grams: 240,calories: 130, protein_g: 4.5, carbs_g: 18,  fat_g: 4.5, fiber_g: 1.5, tags: "coffee" },
+  { name: "Latte, dairy milk",               category: "drink", serving_size: "regular (240ml)",serving_grams: 240,calories: 140, protein_g: 8.0, carbs_g: 11.5,fat_g: 7.0, fiber_g: 0,   tags: "coffee" },
+  { name: "Coffee, black",                   category: "drink", serving_size: "1 cup (240ml)",  serving_grams: 240,calories: 2,   protein_g: 0.3, carbs_g: 0,   fat_g: 0,   fiber_g: 0,   tags: "" },
+  { name: "Tea, black, no milk",             category: "drink", serving_size: "1 cup (240ml)",  serving_grams: 240,calories: 2,   protein_g: 0,   carbs_g: 0.7, fat_g: 0,   fiber_g: 0,   tags: "" },
+  { name: "Orange juice",                    category: "drink", serving_size: "1 cup (240ml)",  serving_grams: 240,calories: 110, protein_g: 2.0, carbs_g: 25,  fat_g: 0.5, fiber_g: 0.5, tags: "sugar" },
+];
+
+let _foodDbSeeded = false;
+async function seedFoodDb(env) {
+  if (_foodDbSeeded) return;
+  _foodDbSeeded = true;
+  // Skip seeding if rows already exist — we only ever want to seed once.
+  try {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM food_db").first();
+    if ((row?.n || 0) > 0) return;
+  } catch { return; }
+  const now = nowSec();
+  for (const f of FOOD_DB_SEED) {
+    try {
+      await env.DB.prepare(
+        "INSERT INTO food_db (name, brand, category, serving_size, serving_grams, " +
+        "  calories, protein_g, carbs_g, fat_g, fiber_g, tags, source, created_at, updated_at) " +
+        "VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'seed', ?, ?)"
+      ).bind(
+        f.name, f.category, f.serving_size, f.serving_grams || null,
+        f.calories, f.protein_g, f.carbs_g, f.fat_g, f.fiber_g,
+        f.tags || "", now, now
+      ).run();
+    } catch (e) { console.warn("food seed", f.name, e?.message); }
+  }
+}
+
+// GET /api/foods/search?q=… — autocomplete against the curated DB. Falls
+// back to substring + tag match for "letter" → "lettuce" style typos.
+async function searchFoodDb(request, env) {
+  await ensureFoodSchema(env);
+  const url = new URL(request.url);
+  const q = String(url.searchParams.get("q") || "").trim().toLowerCase();
+  const cat = String(url.searchParams.get("category") || "").trim();
+  if (!q && !cat) {
+    // Without a query, return top categories + a handful of popular foods.
+    const r = await env.DB.prepare(
+      "SELECT id, name, brand, category, serving_size, calories, protein_g, carbs_g, fat_g, fiber_g " +
+      "FROM food_db ORDER BY name LIMIT 30"
+    ).all().catch(() => ({ results: [] }));
+    return json({ ok: true, items: r.results || [] });
+  }
+  const like = `%${q}%`;
+  let stmt, binds;
+  if (cat) {
+    stmt = "SELECT id, name, brand, category, serving_size, calories, protein_g, carbs_g, fat_g, fiber_g " +
+           "FROM food_db WHERE category = ? AND (LOWER(name) LIKE ? OR LOWER(tags) LIKE ?) " +
+           "ORDER BY CASE WHEN LOWER(name) LIKE ? THEN 0 ELSE 1 END, name LIMIT 30";
+    binds = [cat, like, like, `${q}%`];
+  } else {
+    stmt = "SELECT id, name, brand, category, serving_size, calories, protein_g, carbs_g, fat_g, fiber_g " +
+           "FROM food_db WHERE LOWER(name) LIKE ? OR LOWER(tags) LIKE ? OR LOWER(category) LIKE ? " +
+           "ORDER BY CASE WHEN LOWER(name) LIKE ? THEN 0 ELSE 1 END, name LIMIT 30";
+    binds = [like, like, like, `${q}%`];
+  }
+  const r = await env.DB.prepare(stmt).bind(...binds).all().catch(() => ({ results: [] }));
+  return json({ ok: true, items: r.results || [] });
+}
+
+// ACP — list (paginated), create, update, delete food DB rows.
+async function acpListFoods(request, env) {
+  await ensureFoodSchema(env);
+  const url = new URL(request.url);
+  const q = String(url.searchParams.get("q") || "").trim().toLowerCase();
+  const cat = String(url.searchParams.get("category") || "").trim();
+  const limit  = Math.min(500, Math.max(20, +url.searchParams.get("limit") || 200));
+  const offset = Math.max(0, +url.searchParams.get("offset") || 0);
+  const where = []; const binds = [];
+  if (q)   { where.push("(LOWER(name) LIKE ? OR LOWER(tags) LIKE ?)"); binds.push(`%${q}%`, `%${q}%`); }
+  if (cat) { where.push("category = ?"); binds.push(cat); }
+  const sql = `SELECT id, name, brand, category, serving_size, serving_grams, calories, protein_g, carbs_g, fat_g, fiber_g, tags, source, updated_at
+               FROM food_db ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY name LIMIT ${limit} OFFSET ${offset}`;
+  const r = await env.DB.prepare(sql).bind(...binds).all().catch(() => ({ results: [] }));
+  const tot = await env.DB.prepare(`SELECT COUNT(*) AS n FROM food_db ${where.length ? "WHERE " + where.join(" AND ") : ""}`).bind(...binds).first().catch(() => ({ n: 0 }));
+  return json({ ok: true, total: tot?.n || 0, items: r.results || [] });
+}
+async function acpUpsertFood(request, env) {
+  await ensureFoodSchema(env);
+  const body = await readJsonSafe(request);
+  if (!body) return json({ error: "Invalid body" }, 400);
+  const name = sanitizeText(body.name, 200);
+  if (!name) return json({ error: "Name required" }, 400);
+  const f = {
+    name,
+    brand: sanitizeText(body.brand, 120) || null,
+    category: sanitizeText(body.category, 60) || null,
+    serving_size: sanitizeText(body.serving_size, 60) || null,
+    serving_grams: body.serving_grams == null ? null : Math.max(0, +body.serving_grams || 0),
+    calories: Math.max(0, +body.calories || 0),
+    protein_g: Math.max(0, +body.protein_g || 0),
+    carbs_g:   Math.max(0, +body.carbs_g   || 0),
+    fat_g:     Math.max(0, +body.fat_g     || 0),
+    fiber_g:   Math.max(0, +body.fiber_g   || 0),
+    tags: sanitizeText(body.tags, 200) || "",
+  };
+  const now = nowSec();
+  if (body.id) {
+    await env.DB.prepare(
+      "UPDATE food_db SET name=?, brand=?, category=?, serving_size=?, serving_grams=?, " +
+      "  calories=?, protein_g=?, carbs_g=?, fat_g=?, fiber_g=?, tags=?, updated_at=? WHERE id=?"
+    ).bind(f.name, f.brand, f.category, f.serving_size, f.serving_grams,
+           f.calories, f.protein_g, f.carbs_g, f.fat_g, f.fiber_g, f.tags, now, +body.id).run();
+    return json({ ok: true, id: +body.id });
+  }
+  const res = await env.DB.prepare(
+    "INSERT INTO food_db (name, brand, category, serving_size, serving_grams, " +
+    "  calories, protein_g, carbs_g, fat_g, fiber_g, tags, source, created_at, updated_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'admin', ?, ?)"
+  ).bind(f.name, f.brand, f.category, f.serving_size, f.serving_grams,
+         f.calories, f.protein_g, f.carbs_g, f.fat_g, f.fiber_g, f.tags, now, now).run();
+  return json({ ok: true, id: res.meta?.last_row_id });
+}
+async function acpDeleteFood(env, id) {
+  await env.DB.prepare("DELETE FROM food_db WHERE id = ?").bind(id).run();
+  return json({ ok: true });
 }
 
 // Seed the food parser admin config so it's editable in /acp.
@@ -8752,10 +8976,14 @@ async function aiReviewDocument(env, user, id) {
     return;
   }
 
+  // Pick the kind-specific prompt (ultrasound prompt looks for endometriomas,
+  // adeno markers, PCO morphology, etc. — the generic prompt was missing
+  // these). Admins can fine-tune each one in ACP → Insights.
+  const systemPrompt = await getDocReviewSystemPrompt(env, row.kind);
   const ai = await invokeClaude(env, null, {
-    system: AI_DOC_REVIEW_SYSTEM,
+    system: systemPrompt,
     messages: [{ role: "user", content: userContent }],
-    maxTokens: 1200,
+    maxTokens: 1500,
   });
 
   if (!ai.ok) {
@@ -8785,27 +9013,209 @@ async function aiReviewDocument(env, user, id) {
   ).run();
 }
 
-const AI_DOC_REVIEW_SYSTEM =
-  "You are EndoMe's medical-document reviewer. The user just uploaded a health " +
-  "document (ultrasound, MRI, blood test, specialist letter, prescription, etc.). " +
-  "Your job is to give them a clear, plain-English read of what's in it — like a " +
-  "knowledgeable friend who works in healthcare, not a clinician. You are NOT diagnosing.\n\n" +
+// =============================================================================
+// DOC REVIEW PROMPTS — one per file kind so the AI knows what to look
+// for. The ultrasound + MRI prompts are heavily tuned for endometriosis,
+// adenomyosis, PCOS and fibroids because those are what users most often
+// want surfaced and the generic prompt was missing them.
+// All slugs are seeded into insight_configs so admins can fine-tune from
+// /acp → Insights without a deploy.
+// =============================================================================
+const AI_DOC_REVIEW_FORMAT =
   "Always reply in EXACTLY this fenced format so the app can parse it:\n" +
-  "```summary\n" +
-  "<one tight sentence (≤25 words) summarising the document>\n" +
-  "```\n" +
-  "```notes\n" +
-  "<longer plain-English review, 4-10 short paragraphs or bullets>\n" +
-  "```\n\n" +
+  "```summary\n<one tight sentence (≤25 words) summarising the document>\n```\n" +
+  "```notes\n<longer plain-English review, 4-10 short paragraphs or bullets>\n```\n" +
+  "If the image is unreadable, blurry, or clearly not a medical document, " +
+  "say so honestly in the notes and put a one-line summary like " +
+  "\"Couldn't read this clearly — try a sharper photo\". Never invent values, " +
+  "measurements, or diagnoses.";
+
+const AI_DOC_REVIEW_DEFAULT =
+  "You are EndoMe's medical-document reviewer. The user just uploaded a health " +
+  "document. Give them a clear, plain-English read of what's in it — like a " +
+  "knowledgeable friend who works in healthcare, not a clinician. You are NOT " +
+  "diagnosing.\n\n" + AI_DOC_REVIEW_FORMAT + "\n\n" +
   "What to put in the notes:\n" +
-  "1. Transcribe any handwritten or printed clinician notes verbatim (mark them as `> quoted` blocks).\n" +
+  "1. Transcribe any handwritten or printed clinician notes verbatim (`> quoted`).\n" +
   "2. Translate medical jargon into plain English so the user actually understands it.\n" +
   "3. Highlight any findings worth raising with their clinician (size, location, severity, abnormal values).\n" +
-  "4. For lab results: list the key values, their reference range, and whether each is low/normal/high.\n" +
-  "5. For ultrasound/MRI: name the structures seen, any cysts, lesions, fibroids, dimensions, and whether it explicitly mentions endometriosis findings.\n" +
-  "6. For letters/reports: extract the clinical opinion, any tests ordered, and any follow-up actions.\n" +
-  "7. End with a short \"What this could mean for your endo journey\" paragraph IF the document is relevant; otherwise skip.\n\n" +
-  "If the image is unreadable, blurred, or doesn't look like a medical document, say so honestly in the notes and put a one-line summary like \"Couldn't read this clearly — try a sharper photo\". Never invent values or diagnoses.";
+  "4. End with a short \"What this could mean for your endo journey\" paragraph IF the document is relevant.";
+
+const AI_DOC_REVIEW_ULTRASOUND =
+  "You are EndoMe's ultrasound reviewer, reading scans for women with suspected " +
+  "or confirmed endometriosis. You are NOT diagnosing — you're surfacing findings " +
+  "and patterns the user (and their clinician) should look for.\n\n" + AI_DOC_REVIEW_FORMAT + "\n\n" +
+  "PRIMARY FOCUS — read the image with an endo-specialist mindset. Specifically " +
+  "look for and CALL OUT any of the following, even if the radiology report didn't " +
+  "name them (they're commonly missed on standard scans):\n\n" +
+  "ENDOMETRIOSIS markers:\n" +
+  " • Endometriomas (\"chocolate cysts\"): ovarian cysts with homogeneous low-level " +
+  "internal echoes, ground-glass appearance, often bilateral. Report size, side, " +
+  "and whether echo pattern fits.\n" +
+  " • Deep infiltrating endometriosis (DIE): hypoechoic nodules in the rectovaginal " +
+  "septum, uterosacral ligaments, bladder wall, or bowel. Report site + size.\n" +
+  " • Pouch of Douglas obliteration / negative sliding sign — suggests adhesions.\n" +
+  " • Adhesions: ovaries fixed to the uterus or pelvic wall, kissing ovaries, " +
+  "fluid loculations.\n\n" +
+  "ADENOMYOSIS markers (frequently missed — always check explicitly):\n" +
+  " • Globular/asymmetric uterus, anterior-posterior wall asymmetry.\n" +
+  " • Myometrial cysts or anechoic lacunae.\n" +
+  " • Heterogeneous myometrial echotexture, sub-endometrial echogenic lines/buds.\n" +
+  " • Indistinct or thickened junctional zone (>12mm).\n" +
+  " • Increased myometrial vascularity (translesional flow on Doppler).\n" +
+  " • Uterine enlargement without fibroids.\n\n" +
+  "PCOS / polycystic ovary morphology (also commonly missed):\n" +
+  " • ≥20 follicles per ovary (Rotterdam 2018 criterion) OR ovarian volume >10mL.\n" +
+  " • Follicles arranged peripherally (\"string of pearls\").\n" +
+  " • Increased stromal echogenicity.\n\n" +
+  "FIBROIDS: report number, location (subserosal, intramural, submucosal), and size.\n" +
+  "OVARIAN cysts: differentiate simple, haemorrhagic, dermoid, endometrioma.\n" +
+  "FREE FLUID in pouch of Douglas: small/moderate/large.\n" +
+  "ENDOMETRIAL thickness: report in mm and whether it fits cycle phase.\n\n" +
+  "BE EXPLICIT: if NONE of the above are visible, say so by NAME (e.g. \"No features " +
+  "of adenomyosis seen on this image\", \"Ovaries do not meet PCO morphology criteria\"). " +
+  "If the image is a black-and-white still without enough resolution to assess, say " +
+  "that too — never invent findings.\n\n" +
+  "Also transcribe any printed report text on the image verbatim (`> quoted`), and " +
+  "extract the radiologist's measurements/conclusion if visible. End with a short " +
+  "\"What this could mean for your endo journey\" paragraph framing the findings.";
+
+const AI_DOC_REVIEW_SCAN =
+  "You are EndoMe's MRI / CT reviewer for women with suspected or confirmed " +
+  "endometriosis. You are NOT diagnosing — you're surfacing findings.\n\n" + AI_DOC_REVIEW_FORMAT + "\n\n" +
+  "PRIMARY FOCUS:\n" +
+  " • Endometriomas: T1 hyperintense, T2 \"shading\" — classic for endo.\n" +
+  " • Deep infiltrating endometriosis: nodular T2-hypointense lesions in " +
+  "the rectovaginal septum, uterosacrals, bladder dome, bowel wall (especially " +
+  "rectosigmoid). Report site and size.\n" +
+  " • Adenomyosis: junctional zone thickening (>12mm), JZ:myometrium ratio >40%, " +
+  "T2 hyperintense myometrial foci, globular uterus.\n" +
+  " • Hydrosalpinx / dilated tubes.\n" +
+  " • Fibroids: number, location (FIGO classification if visible), size.\n" +
+  " • PCO morphology if ovaries are imaged.\n" +
+  " • Bowel involvement: wall thickening, stricture, mushroom cap sign.\n" +
+  " • Bladder involvement: wall nodules, dome lesions.\n\n" +
+  "Transcribe the radiologist's report text verbatim (`> quoted`). Translate " +
+  "every medical term into plain English. State explicitly whether each of the " +
+  "above is PRESENT, ABSENT, or NOT ASSESSED in this study. End with a short " +
+  "\"What this could mean for your endo journey\" paragraph.";
+
+const AI_DOC_REVIEW_LAB =
+  "You are EndoMe's blood test reviewer. Lay out the results plainly for the user.\n\n" +
+  AI_DOC_REVIEW_FORMAT + "\n\n" +
+  "For each value visible on the report:\n" +
+  " • Name the test, the user's value, the reference range, and whether it's LOW / " +
+  "NORMAL / HIGH (use ↓ / ↑ markers).\n" +
+  " • Flag any results that are clinically significant in plain English.\n\n" +
+  "Pay special attention to markers relevant to endo + women's health:\n" +
+  " • Ferritin (often depleted by heavy periods — <30 ng/mL is iron-deficient; <15 " +
+  "is severe even if Hb is normal).\n" +
+  " • Iron, transferrin saturation, TIBC.\n" +
+  " • Haemoglobin, MCV, MCH (microcytic anaemia from chronic blood loss).\n" +
+  " • Vitamin D (25-OH; <50 nmol/L deficient).\n" +
+  " • B12, folate.\n" +
+  " • TSH, free T4, free T3, thyroid antibodies (autoimmune comorbidities are " +
+  "common with endo).\n" +
+  " • CA-125 (elevated in endo + ovarian pathology; not specific).\n" +
+  " • Inflammatory markers: CRP, ESR.\n" +
+  " • Sex hormones if listed: oestradiol, progesterone, FSH, LH, testosterone, " +
+  "AMH, SHBG, DHEAS, prolactin. Comment on FSH:LH ratio (PCOS marker).\n" +
+  " • HbA1c, fasting glucose, insulin (insulin resistance link to PCOS).\n\n" +
+  "End with a short paragraph on what's most worth raising with their clinician.";
+
+const AI_DOC_REVIEW_REPORT =
+  "You are EndoMe's specialist report reviewer.\n\n" + AI_DOC_REVIEW_FORMAT + "\n\n" +
+  "Extract and translate into plain English:\n" +
+  " 1. The clinical question being addressed.\n" +
+  " 2. The findings (transcribe key sentences verbatim as `> quoted`).\n" +
+  " 3. The clinician's impression / conclusion.\n" +
+  " 4. Recommendations, follow-up actions, prescriptions, referrals.\n" +
+  " 5. Any explicit mention of endometriosis, adenomyosis, PCOS, fibroids, " +
+  "ovarian cysts, dyspareunia, dysmenorrhoea, infertility, pelvic pain.\n\n" +
+  "End with a short \"What to do next\" paragraph.";
+
+const AI_DOC_REVIEW_LETTER =
+  "You are EndoMe's clinician-letter reviewer.\n\n" + AI_DOC_REVIEW_FORMAT + "\n\n" +
+  "Extract:\n" +
+  " 1. Who wrote it, who to (GP → specialist, specialist → GP, etc.).\n" +
+  " 2. The clinical history they're summarising — transcribe key sentences as " +
+  "`> quoted`.\n" +
+  " 3. Any explicit mention of endo / adeno / PCOS / fibroids / pelvic pain.\n" +
+  " 4. Tests ordered, medications started or changed, referrals made.\n" +
+  " 5. Follow-up plan.\n\n" +
+  "Translate jargon into plain English and end with a short \"What to do next\" paragraph.";
+
+const AI_DOC_REVIEW_PRESCRIPTION =
+  "You are EndoMe's prescription reviewer.\n\n" + AI_DOC_REVIEW_FORMAT + "\n\n" +
+  "For every medication listed:\n" +
+  " • Name (generic + brand if visible), strength, dose, frequency, duration.\n" +
+  " • What it's used for in plain English.\n" +
+  " • Common side effects worth knowing.\n" +
+  " • Any flags specific to endo care (e.g. NSAIDs + GI side effects, GnRH " +
+  "agonists/antagonists + bone density, progestins + breakthrough bleeding, " +
+  "hormonal contraceptives, opioids + dependence risk).\n\n" +
+  "End by reminding the user to confirm dose + frequency with their pharmacist.";
+
+const AI_DOC_REVIEW_IMAGE =
+  "You are EndoMe's general health-image reviewer.\n\n" + AI_DOC_REVIEW_FORMAT + "\n\n" +
+  "Describe what's in the image in plain English. If it's a body photo (rash, " +
+  "swelling, scar, bruise) note location, size, colour, any concerning features. " +
+  "If it's a screenshot of an app/tracker, transcribe the values shown. Don't " +
+  "diagnose — flag anything worth raising with a clinician.";
+
+// One row per kind. Seeded into insight_configs so admins can tune any
+// one without a deploy. Slug naming is `doc-review-<kind>`.
+const DOC_REVIEW_PROMPTS = {
+  ultrasound:   { title: "Doc review — Ultrasound (endo-tuned)", emoji: "🩻", prompt: AI_DOC_REVIEW_ULTRASOUND },
+  scan:         { title: "Doc review — MRI / CT (endo-tuned)",   emoji: "🧠", prompt: AI_DOC_REVIEW_SCAN },
+  lab:          { title: "Doc review — Blood tests",             emoji: "🩸", prompt: AI_DOC_REVIEW_LAB },
+  report:       { title: "Doc review — Specialist report",       emoji: "📋", prompt: AI_DOC_REVIEW_REPORT },
+  letter:       { title: "Doc review — Doctor's letter",         emoji: "✉️", prompt: AI_DOC_REVIEW_LETTER },
+  prescription: { title: "Doc review — Prescription",            emoji: "💊", prompt: AI_DOC_REVIEW_PRESCRIPTION },
+  image:        { title: "Doc review — Other image",             emoji: "🖼️", prompt: AI_DOC_REVIEW_IMAGE },
+  other:        { title: "Doc review — Generic fallback",        emoji: "📄", prompt: AI_DOC_REVIEW_DEFAULT },
+};
+
+let _docReviewSeeded = false;
+async function seedDocReviewPrompts(env) {
+  if (_docReviewSeeded) return;
+  _docReviewSeeded = true;
+  try { await ensureInsightSchema(env); } catch { return; }
+  const now = nowSec();
+  for (const [kind, cfg] of Object.entries(DOC_REVIEW_PROMPTS)) {
+    const slug = `doc-review-${kind}`;
+    try {
+      await env.DB.prepare(
+        "INSERT INTO insight_configs (slug, title, emoji, description, prompt_template, " +
+        "  data_scope_json, refresh_hours, model, sort_order, enabled, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, '[]', 24, NULL, 1200, 1, ?, ?) ON CONFLICT(slug) DO NOTHING"
+      ).bind(
+        slug, cfg.title, cfg.emoji,
+        "Sent as the system prompt when the AI reviews a document of this kind on /documents. Tune the endo-specific signals (adeno markers, PCO morphology, deep infiltrating endo, etc.) here.",
+        cfg.prompt, now, now
+      ).run();
+    } catch (e) { console.warn("seed doc review", kind, e?.message); }
+  }
+}
+
+async function getDocReviewSystemPrompt(env, kind) {
+  const slug = `doc-review-${kind || "other"}`;
+  try {
+    await ensureInsightSchema(env);
+    await seedDocReviewPrompts(env);
+    const row = await env.DB.prepare(
+      "SELECT prompt_template FROM insight_configs WHERE slug = ?"
+    ).bind(slug).first();
+    if (row?.prompt_template) return row.prompt_template;
+    // Fall back to the generic prompt if there's no kind-specific row.
+    const def = await env.DB.prepare(
+      "SELECT prompt_template FROM insight_configs WHERE slug = 'doc-review-other'"
+    ).first();
+    return def?.prompt_template || AI_DOC_REVIEW_DEFAULT;
+  } catch {
+    return DOC_REVIEW_PROMPTS[kind]?.prompt || AI_DOC_REVIEW_DEFAULT;
+  }
+}
 
 function aiReviewPromptUser(filename, kindLabel, userNotes) {
   return `Please review this ${kindLabel} document.\n\nFilename: ${filename}\n${userNotes}\n\nReply using the fenced summary + notes format from your instructions.`;
@@ -9081,6 +9491,15 @@ function isAdminSession(env, session) {
 
 async function handleAcp(request, env, url, session) {
   const path = url.pathname.slice("/api/acp".length); // e.g. "/users"
+
+  // --- Food DB CRUD (curated food + macros for Smart-Log) ----------------
+  if (path === "/foods" && request.method === "GET")  return await acpListFoods(request, env);
+  if (path === "/foods" && request.method === "POST") return await acpUpsertFood(request, env);
+  {
+    const m = path.match(/^\/foods\/(\d+)$/);
+    if (m && request.method === "PUT")    return await acpUpsertFood(request, env);
+    if (m && request.method === "DELETE") return await acpDeleteFood(env, +m[1]);
+  }
 
   // --- Community resources CRUD (admin CMS) ------------------------------
   if (path === "/resources" && request.method === "GET")  return await acpListAllResources(env);
