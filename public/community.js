@@ -148,25 +148,81 @@ console.info("EndoMe community build v2");
       ? (storyQuery ? `· ${list.length}/${storiesAll.length}` : `· ${storiesAll.length}`)
       : "";
     if (!list.length) {
-      grid.innerHTML = `<p class="empty-state">${storyQuery
-        ? `No stories match "${escapeHtml(storyQuery)}".`
-        : "No stories published yet — be the first to share yours."}</p>`;
+      grid.innerHTML = `
+        <div class="stories-empty">
+          <span class="stories-empty-ico">📖</span>
+          <h3>${storyQuery ? `No stories match "${escapeHtml(storyQuery)}"` : "No published stories yet"}</h3>
+          <p>${storyQuery
+            ? "Try a different keyword or clear the search."
+            : "Be the first — share what you've learned, what helped, or what you're still figuring out."}</p>
+          ${!storyQuery ? `<a class="btn btn-primary" href="/write-story">✍️ Start your story</a>` : ""}
+        </div>`;
       return;
     }
-    grid.innerHTML = list.map((s) => `
+    // Featured story = the most recent on the "recent" tab (or the top
+    // result on title/author when a search is active). Big banner card
+    // up top, rest in a grid below.
+    const featured = (storySort === "recent" && !storyQuery) ? list[0] : null;
+    const rest = featured ? list.slice(1) : list;
+    grid.innerHTML = `
+      ${featured ? featuredCard(featured) : ""}
+      <div class="stories-cards">
+        ${rest.map(storyCard).join("")}
+      </div>`;
+  }
+  function storyCard(s) {
+    const date = s.publishedAt ? new Date(s.publishedAt * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+    const minutes = estimateReadMinutes(s);
+    const donorClass = s.authorIsDonor ? "is-donor" : "";
+    const donorTag   = s.authorIsDonor ? ` <span class="donor-tag small" title="Patron">🎗️</span>` : "";
+    return `
       <a class="story-card" href="/read-story?id=${s.id}">
         ${s.coverImageUrl
           ? `<div class="story-card-img"><img src="${escapeHtml(s.coverImageUrl)}" alt="" loading="lazy" /></div>`
           : `<div class="story-card-img story-card-img-empty">📖</div>`}
         <div class="story-card-body">
+          ${minutes ? `<span class="story-card-read">⏱ ${minutes} min read</span>` : ""}
           <h3>${highlight(s.title, storyQuery)}</h3>
           ${s.summary ? `<p class="story-card-summary">${highlight(s.summary, storyQuery)}</p>` : ""}
           <div class="story-card-foot">
-            <span class="story-card-author">${highlight(s.author, storyQuery)}</span>
-            <span class="story-card-date">${s.publishedAt ? new Date(s.publishedAt * 1000).toLocaleDateString() : ""}</span>
+            <span class="story-card-author"><span class="${donorClass}">${highlight(s.author, storyQuery)}</span>${donorTag}</span>
+            <span class="story-card-date">${escapeHtml(date)}</span>
           </div>
         </div>
-      </a>`).join("");
+      </a>`;
+  }
+  function featuredCard(s) {
+    const date = s.publishedAt ? new Date(s.publishedAt * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+    const minutes = estimateReadMinutes(s);
+    const donorClass = s.authorIsDonor ? "is-donor" : "";
+    const donorTag   = s.authorIsDonor ? ` <span class="donor-tag" title="Patron">🎗️ Patron</span>` : "";
+    return `
+      <a class="story-featured" href="/read-story?id=${s.id}">
+        <div class="story-featured-img">
+          ${s.coverImageUrl
+            ? `<img src="${escapeHtml(s.coverImageUrl)}" alt="" loading="lazy" />`
+            : `<span class="story-featured-empty">📖</span>`}
+          <span class="story-featured-tag">✨ Latest</span>
+        </div>
+        <div class="story-featured-body">
+          ${minutes ? `<span class="story-card-read">⏱ ${minutes} min read</span>` : ""}
+          <h2>${highlight(s.title, storyQuery)}</h2>
+          ${s.summary ? `<p>${highlight(s.summary, storyQuery)}</p>` : ""}
+          <div class="story-card-foot">
+            <span class="story-card-author"><span class="${donorClass}">${highlight(s.author, storyQuery)}</span>${donorTag}</span>
+            <span class="story-card-date">${escapeHtml(date)}</span>
+          </div>
+          <span class="story-featured-cta">Read story →</span>
+        </div>
+      </a>`;
+  }
+  // Rough estimate: average reading speed ~ 220 words/min. Falls back
+  // to a minimum of 1 minute when content is short.
+  function estimateReadMinutes(s) {
+    const text = `${s.summary || ""} ${s.body || ""}`.trim();
+    if (!text) return null;
+    const words = text.split(/\s+/).length;
+    return Math.max(1, Math.round(words / 220));
   }
   (function wireStoriesControls() {
     const input = document.getElementById("stories-search");
@@ -440,12 +496,14 @@ console.info("EndoMe community build v2");
     const avatarClass = a.authorAvatarUrl
       ? "activity-avatar has-image"
       : a.authorAvatar ? "activity-avatar has-emoji" : "activity-avatar";
+    const donorClass = a.authorIsDonor ? "is-donor" : "";
+    const donorTag   = a.authorIsDonor ? ` <span class="donor-tag small" title="Patron">🎗️</span>` : "";
     return `<li class="activity-item">
       <a href="/community?c=${encodeURIComponent(a.circleSlug)}" class="activity-link" data-open="${escapeHtml(a.circleSlug)}">
         <div class="${avatarClass}">${avatarInner}</div>
         <div class="activity-body">
           <div class="activity-head">
-            <strong>${escapeHtml(a.authorName)}</strong>
+            <strong class="${donorClass}">${escapeHtml(a.authorName)}</strong>${donorTag}
             <span class="activity-meta">in ${escapeHtml(a.circleName)}${a.circleOfficial ? " · 🌸" : ""}${a.isQuestion ? " · ❓" : ""}</span>
           </div>
           <p class="activity-body-text">${escapeHtml(a.body)}</p>
@@ -787,6 +845,11 @@ console.info("EndoMe community build v2");
       ? "author-avatar has-image"
       : p.authorAvatar ? "author-avatar has-emoji" : "author-avatar";
     const profileHref = p.authorUsername ? `/u/${encodeURIComponent(p.authorUsername)}` : null;
+    // Donors get a gold gradient name + a 🎗️ Patron tag inline. The
+    // class is added to the author <strong> via .is-donor and the tag
+    // is a sibling pill.
+    const donorClass = p.authorIsDonor ? "is-donor" : "";
+    const donorTag   = p.authorIsDonor ? `<span class="donor-tag" title="Supports endo research">🎗️ Patron</span>` : "";
     return `
       <article class="post-card ${p.isQuestion ? "is-question" : ""}" data-post-id="${p.id}">
         <header class="post-head">
@@ -796,8 +859,9 @@ console.info("EndoMe community build v2");
               : `<div class="${avatarClass}">${avatarInner}</div>`}
             <div>
               ${profileHref
-                ? `<a href="${profileHref}" class="author-link"><strong>${escapeHtml(p.authorName)}</strong></a>`
-                : `<strong>${escapeHtml(p.authorName)}</strong>`}
+                ? `<a href="${profileHref}" class="author-link"><strong class="${donorClass}">${escapeHtml(p.authorName)}</strong></a>`
+                : `<strong class="${donorClass}">${escapeHtml(p.authorName)}</strong>`}
+              ${donorTag}
               <span class="post-time">${relTime(p.createdAt)}${p.isQuestion ? " · ❓ Question" : ""}</span>
             </div>
           </div>
@@ -939,6 +1003,8 @@ console.info("EndoMe community build v2");
       ? "author-avatar small has-image"
       : r.authorAvatar ? "author-avatar small has-emoji" : "author-avatar small";
     const profileHref = r.authorUsername ? `/u/${encodeURIComponent(r.authorUsername)}` : null;
+    const donorClass = r.authorIsDonor ? "is-donor" : "";
+    const donorTag   = r.authorIsDonor ? `<span class="donor-tag small" title="Supports endo research">🎗️</span>` : "";
     return `
       <li class="reply">
         ${profileHref
@@ -947,8 +1013,9 @@ console.info("EndoMe community build v2");
         <div class="reply-body">
           <div class="reply-head">
             ${profileHref
-              ? `<a href="${profileHref}" class="author-link"><strong>${escapeHtml(r.authorName)}</strong></a>`
-              : `<strong>${escapeHtml(r.authorName)}</strong>`}
+              ? `<a href="${profileHref}" class="author-link"><strong class="${donorClass}">${escapeHtml(r.authorName)}</strong></a>`
+              : `<strong class="${donorClass}">${escapeHtml(r.authorName)}</strong>`}
+            ${donorTag}
             <span class="post-time">${relTime(r.createdAt)}</span>
           </div>
           <p>${escapeHtml(r.body)}</p>

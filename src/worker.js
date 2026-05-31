@@ -4043,6 +4043,9 @@ const ENDOPET_ITEMS = {
   memory_seed:       { name: "Memory Seed",           category: "special", price: 500, rarity: "legendary", icon: "🌱",  consumable: false, equippable: true, slot: "decor_shelf", stageRequirement: 4 },
   legacy_lantern:    { name: "Legacy Lantern",        category: "special", price: 750, rarity: "legendary", icon: "🏮",  consumable: false, equippable: true, slot: "decor_light", stageRequirement: 5 },
   mini_companion:    { name: "Mini Companion Plush",  category: "special", price: 400, rarity: "rare",      icon: "🧸",  consumable: false, equippable: true, slot: "decor_friend" },
+  // --- Donor-exclusive (granted by completeDonation, can't be bought) ---
+  patron_crown:      { name: "Patron's Crown",        category: "special", price: 0,   rarity: "legendary", icon: "👑",  consumable: false, equippable: true, slot: "wear_head", donorOnly: true },
+  research_ribbon:   { name: "Research Ribbon",       category: "special", price: 0,   rarity: "rare",      icon: "🎗️", consumable: false, equippable: true, slot: "wear_neck", donorOnly: true },
 };
 const ENDOPET_ITEM_KEYS = new Set(Object.keys(ENDOPET_ITEMS));
 
@@ -5057,7 +5060,7 @@ async function getCommunityStats(env, user) {
   const recentActivity = await safeAll(
     "SELECT p.id, p.body, p.created_at, p.is_question, " +
     "       c.slug AS circle_slug, c.name AS circle_name, c.is_official, " +
-    "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias " +
+    "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias, u.is_donor AS author_is_donor " +
     "FROM circle_posts p " +
     "JOIN circles c ON c.id = p.circle_id " +
     "LEFT JOIN users u ON u.id = p.user_id " +
@@ -5100,6 +5103,7 @@ async function getCommunityStats(env, user) {
       authorAvatarUrl: p.author_avatar_key
         ? "/api/u/" + encodeURIComponent(p.author_id) + "/avatar"
         : null,
+      authorIsDonor: !!p.author_is_donor,
     })),
   });
 }
@@ -5176,7 +5180,7 @@ async function getCircleDetail(env, user, slug) {
   try {
     posts = await env.DB.prepare(
       "SELECT p.id, p.body, p.is_question, p.created_at, p.user_id, " +
-      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias, " +
+      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias, u.is_donor AS author_is_donor, " +
       "       (SELECT COUNT(*) FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.reaction='heart') AS heart_count, " +
       "       (SELECT COUNT(*) FROM circle_replies r WHERE r.post_id=p.id AND r.deleted_at IS NULL) AS reply_count, " +
       "       EXISTS(SELECT 1 FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.user_id=? AND r.reaction='heart') AS i_hearted " +
@@ -5203,6 +5207,7 @@ async function getCircleDetail(env, user, slug) {
       authorAvatarUrl: p.author_avatar_key
         ? "/api/u/" + encodeURIComponent(p.author_id) + "/avatar"
         : null,
+      authorIsDonor: !!p.author_is_donor,
       heartCount: p.heart_count || 0, replyCount: p.reply_count || 0,
       iHearted: !!p.i_hearted, mine: p.user_id === user.id,
     })),
@@ -5320,7 +5325,7 @@ async function getReplies(env, user, postId) {
   try {
     rows = await env.DB.prepare(
       "SELECT r.id, r.body, r.created_at, r.parent_reply_id, r.user_id, " +
-      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias, " +
+      "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias, u.is_donor AS author_is_donor, " +
       "       (SELECT COUNT(*) FROM circle_reactions x WHERE x.target_type='reply' AND x.target_id=r.id AND x.reaction='heart') AS heart_count, " +
       "       EXISTS(SELECT 1 FROM circle_reactions x WHERE x.target_type='reply' AND x.target_id=r.id AND x.user_id=? AND x.reaction='heart') AS i_hearted " +
       "FROM circle_replies r LEFT JOIN users u ON u.id = r.user_id " +
@@ -5337,6 +5342,7 @@ async function getReplies(env, user, postId) {
       authorAvatarUrl: r.author_avatar_key
         ? "/api/u/" + encodeURIComponent(r.author_id) + "/avatar"
         : null,
+      authorIsDonor: !!r.author_is_donor,
       heartCount: r.heart_count || 0, iHearted: !!r.i_hearted,
       mine: r.user_id === user.id,
     })),
@@ -5437,6 +5443,12 @@ async function ensureProfileSchema(env) {
     // records the moment of consent so the consent record is auditable.
     "ALTER TABLE users ADD COLUMN research_share_consent INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN research_consent_at INTEGER",
+    // Donor / patron flags — set when a Stripe donation completes against
+    // a logged-in user. Drives the gold username + 💖 patron tag in the
+    // community + a legendary "Patron's Crown" pet item.
+    "ALTER TABLE users ADD COLUMN is_donor INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN donor_total_cents INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN donor_since INTEGER",
     "CREATE TABLE IF NOT EXISTS friendships (" +
     "  user_id_a    TEXT    NOT NULL," +
     "  user_id_b    TEXT    NOT NULL," +
@@ -9470,9 +9482,41 @@ async function completeDonation(env, session) {
   const donationId = session.metadata?.donation_id ? +session.metadata.donation_id : null;
   if (!donationId) return false;
   const amount = session.amount_total ?? 0;
+  const now = nowSec();
   await env.DB.prepare(
     "UPDATE donations SET status = 'succeeded', completed_at = ?, amount_cents = ? WHERE id = ?"
-  ).bind(nowSec(), amount || 0, donationId).run();
+  ).bind(now, amount || 0, donationId).run();
+
+  // If we know which user gave (from the donation row), grant them donor
+  // status + the donor-exclusive pet items. We DON'T grant anything for
+  // anonymous donations — there's no user to credit.
+  try {
+    await ensureProfileSchema(env);
+    const dRow = await env.DB.prepare(
+      "SELECT user_id FROM donations WHERE id = ?"
+    ).bind(donationId).first();
+    const userId = dRow?.user_id;
+    if (userId) {
+      // is_donor flips to 1 + add this gift to the lifetime total. Stamp
+      // donor_since on the first donation only (NULL → now, else keep).
+      await env.DB.prepare(
+        "UPDATE users SET is_donor = 1, " +
+        "  donor_total_cents = COALESCE(donor_total_cents, 0) + ?, " +
+        "  donor_since = COALESCE(donor_since, ?) WHERE id = ?"
+      ).bind(amount || 0, now, userId).run();
+      // Drop the donor-only items into the user's pet inventory. UPSERT
+      // by bumping quantity so re-donating doesn't fail on the UNIQUE.
+      for (const itemKey of ["patron_crown", "research_ribbon"]) {
+        try {
+          await env.DB.prepare(
+            "INSERT INTO endopet_inventory (user_id, item_key, quantity, acquired_at) " +
+            "VALUES (?, ?, 1, ?) " +
+            "ON CONFLICT(user_id, item_key) DO UPDATE SET quantity = quantity + 1"
+          ).bind(userId, itemKey, now).run();
+        } catch (e) { console.warn("grant donor item:", itemKey, e?.message); }
+      }
+    }
+  } catch (e) { console.warn("donor recognition failed:", e?.message); }
   return true;
 }
 

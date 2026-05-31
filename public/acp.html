@@ -198,6 +198,58 @@
         </div>
       </section>
 
+      <!-- Resource editor modal (proper modal — replaces the prompt() flow
+           that silently saved as draft when admins hit Cancel on the
+           "Publish now?" confirm). -->
+      <div class="acp-modal" id="resource-modal" aria-hidden="true">
+        <div class="acp-modal-backdrop" data-close-resource></div>
+        <div class="acp-modal-card" style="max-width:600px">
+          <button class="acp-modal-close" data-close-resource>×</button>
+          <h3 id="resource-modal-title">Add resource</h3>
+          <form id="resource-form" novalidate>
+            <input type="hidden" name="id" />
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <label class="acp-field"><span>Category *</span>
+                <select name="category" required>
+                  <option value="organisations">🎗 Endo organisations & support</option>
+                  <option value="education">📚 Education & evidence</option>
+                  <option value="mental_health">💗 Mental health & chronic illness</option>
+                  <option value="pain">⚡ Pain management</option>
+                  <option value="nutrition">🥗 Nutrition & gut health</option>
+                  <option value="fertility">🌱 Fertility & family planning</option>
+                  <option value="surgery">🏥 Surgery & specialists</option>
+                  <option value="advocacy">📣 Workplace & advocacy</option>
+                  <option value="podcasts">🎧 Podcasts & creators</option>
+                  <option value="books">📖 Books</option>
+                  <option value="crisis">🆘 Crisis & helplines</option>
+                </select>
+              </label>
+              <label class="acp-field"><span>Position <em>(lower = first)</em></span>
+                <input type="number" name="position" min="0" step="1" value="100" />
+              </label>
+            </div>
+            <label class="acp-field"><span>Title *</span>
+              <input type="text" name="title" required maxlength="200" placeholder="e.g. Endometriosis Australia" />
+            </label>
+            <label class="acp-field"><span>Summary <em>(one or two sentences)</em></span>
+              <textarea name="summary" rows="2" maxlength="800" placeholder="A short blurb shown on the card."></textarea>
+            </label>
+            <label class="acp-field"><span>URL</span>
+              <input type="url" name="url" maxlength="600" placeholder="https://…" />
+            </label>
+            <label class="acp-field" style="display:flex;align-items:center;gap:10px;flex-direction:row;background:#fff5f8;padding:12px 14px;border-radius:10px;border:1px solid #ffeaf2">
+              <input type="checkbox" name="is_published" checked />
+              <span><strong>Publish on /community</strong> — visible to users immediately. Untick to save as a draft.</span>
+            </label>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:14px">
+              <button type="submit" class="acp-btn primary">Save</button>
+              <button type="button" class="acp-btn" data-close-resource>Cancel</button>
+              <p class="acp-form-status" id="resource-status" style="margin-left:auto"></p>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- ===== FOOD DB ===== -->
       <section class="acp-view" id="view-foods" hidden>
         <header class="acp-section-head">
@@ -437,6 +489,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/acp.js?v=1780240000" defer></script>
+  <script src="/acp.js?v=1780245000" defer></script>
 </body>
 </html>

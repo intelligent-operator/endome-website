@@ -66,6 +66,26 @@ mark{
   font-weight:600;box-decoration-break:clone;
 }
 
+/* ---------- Donor / patron recognition ---------- */
+/* Username gets a gold gradient so patrons are easy to spot across the
+   community feed. Subtle — text-only, no shadow, so it still reads as a
+   name; the 🎗️ pill next to it carries the explicit signal. */
+.is-donor{
+  background:linear-gradient(135deg,#c79a3d 0%,#e8c66b 45%,#b9871b 100%);
+  background-clip:text;-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;color:transparent;
+  font-weight:700;
+}
+.donor-tag{
+  display:inline-flex;align-items:center;gap:3px;
+  background:linear-gradient(135deg,#fff6d6,#fcdf86);
+  color:#7a5400;border:1px solid #f0c95b;
+  border-radius:999px;padding:2px 8px;font-size:10px;font-weight:700;
+  letter-spacing:.04em;margin-left:6px;line-height:1.4;vertical-align:middle;
+  box-shadow:0 2px 6px rgba(180,140,40,.22);
+}
+.donor-tag.small{padding:1px 7px;font-size:10px}
+
 /* ---------- Sub-nav (Dashboard · Circles · Stories · Resources) ---------- */
 .community-subnav{
   display:flex;gap:6px;padding:6px;background:#fff;border:1px solid #ffeaf2;
@@ -594,22 +614,94 @@ mark{
 /* ===========================================================
    Stories grid + my-drafts list
    =========================================================== */
-.stories-grid{
+.stories-grid{display:flex;flex-direction:column;gap:24px}
+.stories-cards{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
-  gap:14px;
+  gap:18px;
 }
+
+/* Featured story banner — bigger, image-led card pinned to the top of
+   the Stories tab. */
+.story-featured{
+  display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:0;
+  background:#fff;border:1px solid #ffeaf2;border-radius:22px;overflow:hidden;
+  text-decoration:none;color:inherit;
+  box-shadow:0 8px 24px rgba(255,77,138,.08);
+  transition:transform .18s, box-shadow .18s, border-color .18s;
+}
+.story-featured:hover{
+  transform:translateY(-3px);
+  box-shadow:0 18px 38px rgba(255,77,138,.16);border-color:#ffb8cb;
+}
+.story-featured-img{
+  position:relative;background:linear-gradient(135deg,#fff5f8,#ffd6e0);
+  min-height:280px;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+}
+.story-featured-img img{
+  width:100%;height:100%;object-fit:cover;display:block;
+  transition:transform .35s;
+}
+.story-featured:hover .story-featured-img img{transform:scale(1.04)}
+.story-featured-empty{font-size:84px;opacity:.4}
+.story-featured-tag{
+  position:absolute;top:14px;left:14px;
+  background:#fff;color:#c4344b;border-radius:999px;padding:5px 12px;
+  font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  box-shadow:0 4px 12px rgba(255,77,138,.18);
+}
+.story-featured-body{
+  padding:26px 28px 24px;display:flex;flex-direction:column;gap:10px;justify-content:center;
+}
+.story-featured-body h2{
+  margin:0;font-size:24px;line-height:1.25;color:#2b1922;letter-spacing:-.2px;
+}
+.story-featured-body p{
+  margin:0;font-size:14px;color:#5a3a48;line-height:1.6;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+.story-featured-cta{
+  margin-top:8px;color:#ff4e8a;font-weight:700;font-size:13px;
+  display:inline-flex;align-items:center;gap:4px;
+  transition:gap .15s;
+}
+.story-featured:hover .story-featured-cta{gap:8px}
+@media (max-width:760px){
+  .story-featured{grid-template-columns:1fr}
+  .story-featured-img{min-height:220px}
+  .story-featured-body{padding:22px 20px}
+  .story-featured-body h2{font-size:20px}
+}
+
+.story-card-read{
+  display:inline-block;font-size:11px;color:#7a5f6c;
+  background:#fff5f8;border-radius:999px;padding:3px 9px;
+  font-weight:600;align-self:flex-start;letter-spacing:.02em;
+}
+
+/* Friendlier empty state on the Stories tab. */
+.stories-empty{
+  background:linear-gradient(135deg,#fff5f8,#ffeaf2);
+  border-radius:20px;padding:48px 28px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+}
+.stories-empty-ico{font-size:48px;line-height:1}
+.stories-empty h3{margin:6px 0 0;font-size:18px;color:#2b1922}
+.stories-empty p{margin:0;font-size:13px;color:#5a3a48;line-height:1.55;max-width:420px}
+.stories-empty .btn{margin-top:12px}
 .story-card{
-  background:#fff;border:1px solid #ffeaf2;border-radius:14px;
+  background:#fff;border:1px solid #ffeaf2;border-radius:16px;
   overflow:hidden;text-decoration:none;color:inherit;
   display:flex;flex-direction:column;
-  transition:transform .12s,box-shadow .12s,border-color .12s;
+  transition:transform .15s,box-shadow .15s,border-color .15s;
 }
-.story-card:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(255,77,138,.08);border-color:#ffd6e0}
+.story-card:hover{transform:translateY(-3px);box-shadow:0 14px 28px rgba(255,77,138,.12);border-color:#ffb8cb}
 .story-card-img{
   width:100%;aspect-ratio:16 / 10;background:#fff5f8;
   display:flex;align-items:center;justify-content:center;overflow:hidden;
 }
-.story-card-img img{width:100%;height:100%;object-fit:cover}
+.story-card-img img{width:100%;height:100%;object-fit:cover;transition:transform .35s}
+.story-card:hover .story-card-img img{transform:scale(1.05)}
 .story-card-img-empty{font-size:36px;color:#ffd6e0}
 .story-card-body{padding:14px 16px;flex:1;display:flex;flex-direction:column;gap:6px}
 .story-card-body h3{margin:0;font-size:15px;color:#2b1922;line-height:1.3}

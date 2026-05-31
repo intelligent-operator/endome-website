@@ -875,31 +875,71 @@
   });
 
   function openResourceEditor(existing) {
-    // Use prompt-based editor for compact admin UX. Builds payload then saves.
-    const cats = ["organisations","education","mental_health","pain","nutrition","fertility","surgery","advocacy","podcasts","books","crisis"];
-    const isEdit = !!existing;
-    const cat = prompt(
-      `Category (one of: ${cats.join(", ")})${isEdit ? `\nCurrent: ${existing.category}` : ""}`,
-      existing?.category || "organisations"
-    );
-    if (!cat) return;
-    if (!cats.includes(cat.trim())) { alert("Invalid category"); return; }
-    const title = prompt("Title", existing?.title || "");
-    if (!title) return;
-    const summary = prompt("Summary (one or two sentences)", existing?.summary || "");
-    const url = prompt("URL (https://…)", existing?.url || "");
-    const isPub = confirm("Publish now? OK = yes, Cancel = save as draft");
-    const payload = {
-      category: cat.trim(), title: title.trim(),
-      summary: summary?.trim() || null,
-      url: url?.trim() || null,
-      is_published: isPub,
-    };
-    const promise = isEdit
-      ? fetchJson(`/api/acp/resources/${existing.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })
-      : fetchJson(`/api/acp/resources`,                 { method: "POST",  headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-    promise.then(() => loadResourcesTab()).catch((err) => alert(err.message));
+    // Proper modal — replaces the prompt() flow that silently saved as
+    // a draft whenever an admin hit Cancel/Esc on the "Publish now?"
+    // confirm. Defaults to PUBLISHED for new resources so the most
+    // common path (admin adds a resource → wants it live) is one click.
+    const modal = document.getElementById("resource-modal");
+    const form = document.getElementById("resource-form");
+    if (!modal || !form) {
+      // Fallback if the modal markup is missing (older deploys) — still
+      // works, just less polished.
+      alert("Resource editor markup missing — refresh the page.");
+      return;
+    }
+    form.reset();
+    document.getElementById("resource-modal-title").textContent = existing ? "Edit resource" : "Add resource";
+    document.getElementById("resource-status").textContent = "";
+    form.id.value = existing?.id || "";
+    form.category.value = existing?.category || "organisations";
+    form.title.value    = existing?.title    || "";
+    form.summary.value  = existing?.summary  || "";
+    form.url.value      = existing?.url      || "";
+    form.position.value = existing?.position != null ? existing.position : 100;
+    // Default: PUBLISHED for new, current status for edits.
+    form.is_published.checked = existing ? !!existing.is_published : true;
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
   }
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-close-resource]")) {
+      const modal = document.getElementById("resource-modal");
+      modal?.classList.remove("open");
+      modal?.setAttribute("aria-hidden", "true");
+    }
+  });
+  document.getElementById("resource-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById("resource-status");
+    status.textContent = "Saving…"; status.style.color = "#7a5f6c";
+    const id = form.id.value ? +form.id.value : null;
+    const payload = {
+      category: form.category.value,
+      title: form.title.value.trim(),
+      summary: form.summary.value.trim() || null,
+      url: form.url.value.trim() || null,
+      position: +form.position.value || 100,
+      is_published: form.is_published.checked,
+    };
+    if (!payload.title) {
+      status.textContent = "Title required."; status.style.color = "#c4344b"; return;
+    }
+    try {
+      await fetchJson(
+        id ? `/api/acp/resources/${id}` : `/api/acp/resources`,
+        { method: id ? "PATCH" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload) }
+      );
+      toast(payload.is_published ? "Saved and published" : "Saved as draft", "ok");
+      document.getElementById("resource-modal").classList.remove("open");
+      document.getElementById("resource-modal").setAttribute("aria-hidden", "true");
+      await loadResourcesTab();
+    } catch (err) {
+      status.textContent = err.message || "Couldn't save."; status.style.color = "#c4344b";
+    }
+  });
 
   // --- Helpers ---------------------------------------------------------
   async function fetchJson(url, init = {}) {
