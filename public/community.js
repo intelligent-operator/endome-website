@@ -724,17 +724,223 @@ console.info("EndoMe community build v2");
   // ====================================================================
   // INDIVIDUAL CIRCLE VIEW
   // ====================================================================
+  // Cached posts + members for the in-circle tabs (Feed / Saved / Members).
+  let currentPosts = [];
+  let currentMembers = [];
+  let memberFilter = "all";
+  let memberSearch = "";
+  let activeCircleTab = "feed";
+
   async function loadCircle(slug) {
     try {
       const data = await fetchJson(`/api/me/community/circles/${encodeURIComponent(slug)}`);
       currentCircle = data.circle;
+      currentPosts = data.posts || [];
       renderCircleHeader(data.circle);
-      renderPosts(data.posts || []);
+      renderPosts(currentPosts);
+      renderSavedPosts();
+      // Only fetch members on first paint of the circle — the tab handler
+      // refreshes if the user opens the Members tab.
+      const countEl = document.getElementById("circle-members-count");
+      if (countEl) countEl.textContent = data.circle.memberCount ? `· ${data.circle.memberCount}` : "";
+      currentMembers = [];
+      setCircleTab(activeCircleTab);
     } catch (err) {
       document.getElementById("posts-list").innerHTML =
         `<p class="empty-state">${escapeHtml(err.message || "Couldn't open this circle.")}</p>`;
     }
   }
+
+  // --- Sub-tab handling (Feed · Saved · Members) -----------------------
+  document.querySelectorAll(".circle-tab").forEach((b) => {
+    b.addEventListener("click", () => setCircleTab(b.dataset.circleTab));
+  });
+  function setCircleTab(name) {
+    activeCircleTab = name;
+    document.querySelectorAll(".circle-tab").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.circleTab === name));
+    document.getElementById("circle-tab-feed").hidden    = name !== "feed";
+    document.getElementById("circle-tab-saved").hidden   = name !== "saved";
+    document.getElementById("circle-tab-members").hidden = name !== "members";
+    if (name === "members" && currentCircle) {
+      if (!currentMembers.length) loadCircleMembers(currentCircle.slug);
+      else renderMembers();
+    }
+    if (name === "saved") renderSavedPosts();
+  }
+  async function loadCircleMembers(slug) {
+    const list = document.getElementById("members-list");
+    if (list) list.innerHTML = `<li class="empty-state">Loading members…</li>`;
+    try {
+      const data = await fetchJson(`/api/me/community/circles/${encodeURIComponent(slug)}/members`);
+      currentMembers = data.members || [];
+      renderMembers();
+    } catch (err) {
+      if (list) list.innerHTML = `<li class="empty-state">${escapeHtml(err.message || "Couldn't load")}</li>`;
+    }
+  }
+  function renderMembers() {
+    const list = document.getElementById("members-list");
+    if (!list) return;
+    const q = (memberSearch || "").trim().toLowerCase();
+    const visible = currentMembers.filter((m) => {
+      if (memberFilter === "admin" && m.role !== "admin" && m.role !== "moderator") return false;
+      if (memberFilter === "donor" && !m.isDonor) return false;
+      if (q && !fuzzyMatch(q, [m.name, m.username, m.alias])) return false;
+      return true;
+    });
+    if (!visible.length) {
+      list.innerHTML = `<li class="empty-state">No members match.</li>`;
+      return;
+    }
+    list.innerHTML = visible.map(memberCard).join("");
+  }
+  function memberCard(m) {
+    const avatarInner = m.avatarUrl
+      ? `<img src="${escapeHtml(m.avatarUrl)}" alt="" />`
+      : m.avatar
+        ? `<span class="emoji">${escapeHtml(m.avatar)}</span>`
+        : escapeHtml(initials(m.name));
+    const avatarClass = m.avatarUrl ? "member-avatar has-image"
+      : m.avatar ? "member-avatar has-emoji" : "member-avatar";
+    const roleLabel = m.role === "admin" ? "👑 Admin"
+      : m.role === "moderator" ? "🛡 Mod" : "";
+    const donorTag = m.isDonor ? `<span class="donor-tag small">🎗️</span>` : "";
+    const nameClass = m.isDonor ? "is-donor" : "";
+    return `<li class="member-row" data-open-member="${escapeHtml(m.userId)}">
+      <div class="${avatarClass}">${avatarInner}</div>
+      <div class="member-body">
+        <div class="member-name-row">
+          <strong class="${nameClass}">${escapeHtml(m.name)}</strong>
+          ${donorTag}
+          ${roleLabel ? `<span class="member-role">${roleLabel}</span>` : ""}
+          ${m.isMe ? `<span class="member-role you">You</span>` : ""}
+        </div>
+        <div class="member-meta">
+          ${m.postCount} post${m.postCount === 1 ? "" : "s"} · ${m.replyCount} repl${m.replyCount === 1 ? "y" : "ies"}
+          ${m.joinedAt ? ` · joined ${shortDate(m.joinedAt)}` : ""}
+        </div>
+      </div>
+      <span class="member-chev">›</span>
+    </li>`;
+  }
+  function shortDate(unixSec) {
+    if (!unixSec) return "";
+    return new Date(unixSec * 1000).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  }
+  document.getElementById("members-search")?.addEventListener("input", debounce((e) => {
+    memberSearch = e.target.value;
+    renderMembers();
+  }, 80));
+  document.querySelectorAll("[data-member-filter]").forEach((b) => {
+    b.addEventListener("click", () => {
+      memberFilter = b.dataset.memberFilter;
+      document.querySelectorAll("[data-member-filter]").forEach((x) =>
+        x.classList.toggle("is-active", x === b));
+      renderMembers();
+    });
+  });
+
+  function renderSavedPosts() {
+    const list = document.getElementById("saved-posts-list");
+    if (!list) return;
+    const saved = currentPosts.filter((p) => p.iSaved);
+    if (!saved.length) {
+      list.innerHTML = `<p class="empty-state">Nothing saved yet. Tap ⭐ on any post and it'll land here for later.</p>`;
+      return;
+    }
+    list.innerHTML = saved.map(postHtml).join("");
+  }
+
+  // --- Mini profile popover --------------------------------------------
+  async function openMiniProfile(userId) {
+    const modal = document.getElementById("mini-profile-modal");
+    const slot  = document.getElementById("mini-profile-content");
+    if (!modal || !slot) return;
+    slot.innerHTML = `<p class="empty-state">Loading…</p>`;
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+    try {
+      const data = await fetchJson(`/api/me/community/profiles/${encodeURIComponent(userId)}`);
+      paintMiniProfile(data.profile);
+    } catch (err) {
+      slot.innerHTML = `<p class="empty-state">${escapeHtml(err.message || "Couldn't load")}</p>`;
+    }
+  }
+  function paintMiniProfile(p) {
+    if (!p) return;
+    const slot = document.getElementById("mini-profile-content");
+    const avatarInner = p.avatarUrl
+      ? `<img src="${escapeHtml(p.avatarUrl)}" alt="" />`
+      : p.avatar
+        ? `<span class="emoji">${escapeHtml(p.avatar)}</span>`
+        : escapeHtml(initials(p.name));
+    const avatarClass = p.avatarUrl ? "mini-avatar has-image"
+      : p.avatar ? "mini-avatar has-emoji" : "mini-avatar";
+    const donorBadge = p.isDonor
+      ? `<span class="donor-tag">🎗️ Patron${p.donorSince ? ` since ${shortDate(p.donorSince)}` : ""}</span>`
+      : "";
+    const friendBtn = (() => {
+      if (p.friendStatus === "self") return "";
+      if (p.friendStatus === "friends") return `<button type="button" class="btn-soft small" disabled>✓ Friends</button>`;
+      if (p.friendStatus === "pending_outgoing") return `<button type="button" class="btn-soft small" disabled>Request sent</button>`;
+      if (p.friendStatus === "pending_incoming")
+        return `<button type="button" class="btn btn-primary small" data-mini-friend-accept="${escapeHtml(p.userId)}">Accept request</button>`;
+      return `<button type="button" class="btn btn-primary small" data-mini-friend="${escapeHtml(p.userId)}">＋ Add friend</button>`;
+    })();
+    slot.innerHTML = `
+      <div class="${avatarClass}">${avatarInner}</div>
+      <h3 class="mini-name ${p.isDonor ? "is-donor" : ""}">${escapeHtml(p.name)}</h3>
+      ${p.alias ? `<p class="mini-alias">@${escapeHtml(p.alias)}</p>` : (p.username ? `<p class="mini-alias">@${escapeHtml(p.username)}</p>` : "")}
+      <div class="mini-badges">
+        ${donorBadge}
+        ${p.memberSince ? `<span class="mini-pill">📅 Joined ${shortDate(p.memberSince)}</span>` : ""}
+      </div>
+      ${p.bio ? `<p class="mini-bio">${escapeHtml(p.bio)}</p>` : ""}
+      <div class="mini-actions">
+        ${friendBtn}
+        ${p.username ? `<a class="btn-soft small" href="/u/${encodeURIComponent(p.username)}">View full profile →</a>` : ""}
+      </div>`;
+  }
+  // Close + friend actions
+  document.querySelectorAll("[data-close-mini]").forEach((el) =>
+    el.addEventListener("click", () => closeMiniProfile()));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMiniProfile();
+  });
+  function closeMiniProfile() {
+    const modal = document.getElementById("mini-profile-modal");
+    if (!modal) return;
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("modal-open");
+  }
+  // Click delegation for the member list + post author + friend actions.
+  document.addEventListener("click", async (e) => {
+    const open = e.target.closest?.("[data-open-member]");
+    if (open) { e.preventDefault(); openMiniProfile(open.dataset.openMember); return; }
+    const friend = e.target.closest?.("[data-mini-friend]");
+    if (friend) {
+      const id = friend.dataset.miniFriend;
+      friend.disabled = true; friend.textContent = "Sending…";
+      try {
+        await fetchJson(`/api/me/friends/${encodeURIComponent(id)}`, { method: "POST" });
+        friend.textContent = "Request sent"; toast("Friend request sent ✨");
+      } catch (err) { toast(err.message || "Couldn't send", "err"); friend.disabled = false; friend.textContent = "＋ Add friend"; }
+      return;
+    }
+    const accept = e.target.closest?.("[data-mini-friend-accept]");
+    if (accept) {
+      const id = accept.dataset.miniFriendAccept;
+      accept.disabled = true; accept.textContent = "Accepting…";
+      try {
+        await fetchJson(`/api/me/friends/${encodeURIComponent(id)}/accept`, { method: "POST" });
+        accept.textContent = "✓ Friends"; toast("You're now friends 🎉");
+      } catch (err) { toast(err.message || "Couldn't accept", "err"); accept.disabled = false; accept.textContent = "Accept request"; }
+      return;
+    }
+  });
 
   function renderCircleHeader(c) {
     document.getElementById("circle-name").textContent = c.name;
@@ -850,22 +1056,31 @@ console.info("EndoMe community build v2");
     // is a sibling pill.
     const donorClass = p.authorIsDonor ? "is-donor" : "";
     const donorTag   = p.authorIsDonor ? `<span class="donor-tag" title="Supports endo research">🎗️ Patron</span>` : "";
+    const canMod = currentCircle && (currentCircle.myRole === "admin" || currentCircle.myRole === "moderator");
+    const pinBtn = canMod
+      ? `<button class="post-mod-btn ${p.pinnedAt ? "on" : ""}" data-pin-post="${p.id}" title="${p.pinnedAt ? "Unpin" : "Pin to top"}">📌</button>`
+      : "";
+    const pinnedBadge = p.pinnedAt ? `<span class="post-pinned-badge">📌 Pinned</span>` : "";
     return `
-      <article class="post-card ${p.isQuestion ? "is-question" : ""}" data-post-id="${p.id}">
+      <article class="post-card ${p.isQuestion ? "is-question" : ""} ${p.pinnedAt ? "is-pinned" : ""}" data-post-id="${p.id}">
+        ${pinnedBadge}
         <header class="post-head">
           <div class="post-author">
-            ${profileHref
-              ? `<a href="${profileHref}" class="author-link"><div class="${avatarClass}">${avatarInner}</div></a>`
-              : `<div class="${avatarClass}">${avatarInner}</div>`}
+            <button type="button" class="author-link author-avatar-btn" data-open-member="${escapeHtml(p.authorId)}">
+              <div class="${avatarClass}">${avatarInner}</div>
+            </button>
             <div>
-              ${profileHref
-                ? `<a href="${profileHref}" class="author-link"><strong class="${donorClass}">${escapeHtml(p.authorName)}</strong></a>`
-                : `<strong class="${donorClass}">${escapeHtml(p.authorName)}</strong>`}
+              <button type="button" class="author-link author-name-btn" data-open-member="${escapeHtml(p.authorId)}">
+                <strong class="${donorClass}">${escapeHtml(p.authorName)}</strong>
+              </button>
               ${donorTag}
               <span class="post-time">${relTime(p.createdAt)}${p.isQuestion ? " · ❓ Question" : ""}</span>
             </div>
           </div>
-          ${p.mine ? `<button class="post-delete" data-delete-post="${p.id}" title="Delete">×</button>` : ""}
+          <div class="post-head-actions">
+            ${pinBtn}
+            ${p.mine ? `<button class="post-delete" data-delete-post="${p.id}" title="Delete">×</button>` : ""}
+          </div>
         </header>
         <p class="post-body">${escapeHtml(p.body)}</p>
         <footer class="post-foot">
@@ -878,12 +1093,44 @@ console.info("EndoMe community build v2");
             <span class="react-count">${p.replyCount || 0}</span>
             <span class="react-label">Comment${(p.replyCount||0)===1?"":"s"}</span>
           </button>
+          <button class="react-btn save-btn ${p.iSaved ? "on" : ""}" data-save-post="${p.id}" title="${p.iSaved ? "Unsave" : "Save for later"}">
+            <span>${p.iSaved ? "⭐" : "☆"}</span>
+            <span class="react-label">${p.iSaved ? "Saved" : "Save"}</span>
+          </button>
         </footer>
         <div class="replies-block" data-replies-block="${p.id}" hidden></div>
       </article>`;
   }
 
   document.addEventListener("click", async (e) => {
+    const save = e.target.closest("[data-save-post]");
+    if (save) {
+      e.preventDefault();
+      const id = +save.dataset.savePost;
+      try {
+        const data = await fetchJson(`/api/me/community/posts/${id}/save`, { method: "POST" });
+        const post = currentPosts.find((x) => x.id === id);
+        if (post) post.iSaved = !!data.saved;
+        save.classList.toggle("on", !!data.saved);
+        save.querySelector("span:first-child").textContent = data.saved ? "⭐" : "☆";
+        const lbl = save.querySelector(".react-label");
+        if (lbl) lbl.textContent = data.saved ? "Saved" : "Save";
+        toast(data.saved ? "Saved" : "Removed from saved");
+        if (activeCircleTab === "saved") renderSavedPosts();
+      } catch (err) { toast(err.message || "Couldn't save", "err"); }
+      return;
+    }
+    const pin = e.target.closest("[data-pin-post]");
+    if (pin) {
+      e.preventDefault();
+      const id = +pin.dataset.pinPost;
+      try {
+        await fetchJson(`/api/me/community/posts/${id}/pin`, { method: "POST" });
+        toast("Updated");
+        if (currentCircle) await loadCircle(currentCircle.slug);
+      } catch (err) { toast(err.message || "Couldn't pin", "err"); }
+      return;
+    }
     const react = e.target.closest("[data-react-post]");
     if (react) {
       e.preventDefault();

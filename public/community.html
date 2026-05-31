@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780193972" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/community.css?v=1780245000" />
+  <link rel="stylesheet" href="/community.css?v=1780250000" />
   <link rel="stylesheet" href="/profile.css?v=1779934116" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
@@ -332,10 +332,51 @@
           </div>
         </section>
 
-        <div id="posts-list" class="posts-list">
-          <p class="empty-state">Loading posts…</p>
+        <!-- Sub-tabs inside a circle: feed · saved · members -->
+        <nav class="circle-tabs" id="circle-tabs" role="tablist">
+          <button type="button" class="circle-tab is-active" data-circle-tab="feed">💬 Feed</button>
+          <button type="button" class="circle-tab" data-circle-tab="saved">⭐ Saved</button>
+          <button type="button" class="circle-tab" data-circle-tab="members">👥 Members <span class="cmt-count" id="circle-members-count"></span></button>
+        </nav>
+
+        <div class="circle-body">
+          <div id="circle-tab-feed">
+            <div id="posts-list" class="posts-list">
+              <p class="empty-state">Loading posts…</p>
+            </div>
+          </div>
+          <div id="circle-tab-saved" hidden>
+            <div id="saved-posts-list" class="posts-list">
+              <p class="empty-state">Nothing saved yet. Tap ⭐ on any post to keep it here.</p>
+            </div>
+          </div>
+          <div id="circle-tab-members" hidden>
+            <div class="members-toolbar">
+              <input type="search" id="members-search" placeholder="Search members…" />
+              <div class="members-filter">
+                <button type="button" class="member-filter-chip is-active" data-member-filter="all">All</button>
+                <button type="button" class="member-filter-chip" data-member-filter="admin">👑 Mods</button>
+                <button type="button" class="member-filter-chip" data-member-filter="donor">🎗️ Patrons</button>
+              </div>
+            </div>
+            <ul id="members-list" class="members-list">
+              <li class="empty-state">Loading members…</li>
+            </ul>
+          </div>
         </div>
       </section>
+
+      <!-- Mini-profile popover modal (opens from member list / post author) -->
+      <div class="modal mini-profile-modal" id="mini-profile-modal" aria-hidden="true" role="dialog">
+        <div class="modal-backdrop" data-close-mini></div>
+        <div class="modal-card mini-profile-card">
+          <button class="modal-close" data-close-mini aria-label="Close">×</button>
+          <div class="mini-profile-banner"></div>
+          <div class="mini-profile-content" id="mini-profile-content">
+            <p class="empty-state">Loading…</p>
+          </div>
+        </div>
+      </div>
 
       <!-- CREATE CIRCLE MODAL -->
       <div class="modal" id="create-circle-modal" aria-hidden="true" role="dialog">
@@ -381,7 +422,7 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/community.js?v=1780245000" defer></script>
+  <script src="/community.js?v=1780250000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/log-symptom-widget.js?v=1780225000" defer></script>
   <script src="/buddy-widget.js?v=1780199000" defer></script>

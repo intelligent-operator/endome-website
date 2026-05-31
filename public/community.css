@@ -86,6 +86,133 @@ mark{
 }
 .donor-tag.small{padding:1px 7px;font-size:10px}
 
+/* ---------- In-circle tabs: Feed · Saved · Members ---------- */
+.circle-tabs{
+  display:flex;gap:4px;background:#fff;border:1px solid #ffeaf2;border-radius:14px;
+  padding:5px;margin:14px 0 18px;overflow-x:auto;
+  box-shadow:0 2px 8px rgba(255,77,138,.05);
+}
+.circle-tab{
+  flex:1 0 auto;background:transparent;border:0;border-radius:10px;
+  padding:8px 14px;font-family:inherit;font-size:13px;font-weight:600;color:#7a5f6c;
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  transition:background .14s, color .14s;white-space:nowrap;
+}
+.circle-tab:hover{background:#fff5f8;color:#3a2330}
+.circle-tab.is-active{background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff}
+.cmt-count{font-weight:500;opacity:.85}
+
+/* Members list ------------------------------------------------------- */
+.members-toolbar{
+  display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+  background:#fff;border:1px solid #ffeaf2;border-radius:14px;padding:10px 12px;margin-bottom:12px;
+}
+.members-toolbar input{
+  flex:1 1 200px;min-width:180px;border:1px solid #ffd6e0;border-radius:10px;
+  padding:8px 12px;font-family:inherit;font-size:13px;color:#3a2330;background:#fff5f8;
+}
+.members-toolbar input:focus{outline:none;border-color:#ff4e8a;background:#fff;box-shadow:0 0 0 3px rgba(255,77,138,.16)}
+.members-filter{display:flex;gap:5px;flex-wrap:wrap}
+.member-filter-chip{
+  background:#fff5f8;border:1px solid #ffeaf2;border-radius:999px;
+  padding:6px 12px;font-size:11.5px;font-weight:600;color:#5a3a48;cursor:pointer;
+  font-family:inherit;transition:background .14s, color .14s;
+}
+.member-filter-chip:hover{background:#ffeaf2}
+.member-filter-chip.is-active{background:linear-gradient(135deg,#ff4e8a,#ff7aa6);color:#fff;border-color:transparent}
+.members-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+.member-row{
+  background:#fff;border:1px solid #ffeaf2;border-radius:14px;padding:12px 14px;
+  display:flex;gap:12px;align-items:center;cursor:pointer;
+  transition:transform .12s, box-shadow .12s, border-color .12s;
+}
+.member-row:hover{transform:translateX(2px);box-shadow:0 8px 18px rgba(255,77,138,.10);border-color:#ffb8cb}
+.member-avatar{
+  width:44px;height:44px;border-radius:50%;background:#ffd6e0;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-weight:700;color:#3a2330;font-size:14px;
+  overflow:hidden;
+}
+.member-avatar img{width:100%;height:100%;object-fit:cover}
+.member-avatar .emoji{font-size:22px}
+.member-body{flex:1;min-width:0}
+.member-name-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.member-name-row strong{font-size:14px;color:#2b1922}
+.member-role{
+  font-size:10px;font-weight:700;background:#fff5d6;color:#7a5500;
+  padding:2px 7px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;
+}
+.member-role.you{background:#dff5e0;color:#2b7d2f}
+.member-meta{font-size:11.5px;color:#7a5f6c;margin-top:2px}
+.member-chev{font-size:22px;color:#ff8aab;opacity:.5;font-weight:700}
+.member-row:hover .member-chev{opacity:1}
+
+/* Author button (clickable name + avatar opening mini-profile) ------- */
+.author-link.author-avatar-btn,
+.author-link.author-name-btn{
+  background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left;
+}
+.author-link.author-avatar-btn{display:inline-flex}
+.author-link.author-name-btn strong{transition:color .14s}
+.author-link.author-name-btn:hover strong{color:#ff4e8a}
+
+/* Post pin + save UI ------------------------------------------------- */
+.post-card.is-pinned{
+  border-color:#ffd6e0;background:linear-gradient(180deg,#fff8fb 0%,#fff 60px);
+  box-shadow:0 6px 18px rgba(255,77,138,.10);
+}
+.post-pinned-badge{
+  display:inline-block;background:#ffeaf2;color:#c4344b;
+  padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;
+  margin-bottom:8px;letter-spacing:.04em;text-transform:uppercase;
+}
+.post-head-actions{display:flex;gap:4px;align-items:center}
+.post-mod-btn{
+  background:transparent;border:0;cursor:pointer;border-radius:8px;
+  width:30px;height:30px;font-size:14px;color:#7a5f6c;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s, color .12s, transform .12s;
+}
+.post-mod-btn:hover{background:#fff5f8;color:#ff4e8a;transform:scale(1.1)}
+.post-mod-btn.on{background:#ffeaf2;color:#c4344b}
+.react-btn.save-btn.on{color:#c79a3d;background:#fff8e0}
+.react-btn.save-btn span:first-child{font-size:14px}
+
+/* Mini profile popover ----------------------------------------------- */
+.mini-profile-modal .mini-profile-card{
+  max-width:380px;width:92vw;padding:0;overflow:hidden;
+  border-radius:22px;
+}
+.mini-profile-banner{
+  height:64px;background:linear-gradient(135deg,#ffb8cb,#ff7aa6,#ff4e8a);
+  position:relative;
+}
+.mini-profile-content{
+  padding:0 22px 22px;text-align:center;margin-top:-44px;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+}
+.mini-avatar{
+  width:88px;height:88px;border-radius:50%;background:#ffd6e0;
+  border:4px solid #fff;box-shadow:0 6px 18px rgba(255,77,138,.20);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:28px;color:#3a2330;
+  overflow:hidden;flex-shrink:0;
+}
+.mini-avatar img{width:100%;height:100%;object-fit:cover}
+.mini-avatar .emoji{font-size:40px}
+.mini-name{margin:6px 0 0;font-size:20px;color:#2b1922;letter-spacing:-.2px}
+.mini-alias{margin:0;font-size:13px;color:#7a5f6c}
+.mini-badges{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:6px}
+.mini-pill{
+  background:#fff5f8;color:#3a2330;font-size:11px;font-weight:600;
+  padding:4px 10px;border-radius:999px;
+}
+.mini-bio{
+  margin:10px 0 6px;font-size:13px;color:#5a3a48;line-height:1.55;
+  background:#fff5f8;padding:10px 12px;border-radius:10px;text-align:left;width:100%;
+}
+.mini-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px;width:100%}
+.mini-actions .btn,
+.mini-actions .btn-soft{flex:1 0 auto;justify-content:center}
+
 /* ---------- Sub-nav (Dashboard · Circles · Stories · Resources) ---------- */
 .community-subnav{
   display:flex;gap:6px;padding:6px;background:#fff;border:1px solid #ffeaf2;

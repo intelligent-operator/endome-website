@@ -485,6 +485,7 @@ export default {
             if (action === "join"   && request.method === "POST") return jsonHeaders(await postJoinCircle(env, user, slug));
             if (action === "leave"  && request.method === "POST") return jsonHeaders(await postLeaveCircle(env, user, slug));
             if (action === "posts"  && request.method === "POST") return jsonHeaders(await postCreatePost(request, env, user, slug));
+            if (action === "members"&& request.method === "GET")  return jsonHeaders(await getCircleMembers(env, user, slug));
           }
           const postMatch = url.pathname.match(/^\/api\/me\/community\/posts\/(\d+)(?:\/(\w+))?$/);
           if (postMatch) {
@@ -494,6 +495,15 @@ export default {
             if (action === "react"   && request.method === "POST") return jsonHeaders(await reactPost(env, user, id));
             if (action === "replies" && request.method === "GET")  return jsonHeaders(await getReplies(env, user, id));
             if (action === "replies" && request.method === "POST") return jsonHeaders(await postCreateReply(request, env, user, id));
+            if (action === "pin"     && request.method === "POST") return jsonHeaders(await togglePinPost(env, user, id));
+            if (action === "save"    && request.method === "POST") return jsonHeaders(await toggleSavePost(env, user, id));
+          }
+          // Profile mini-card for the in-circle member popover. Cheap
+          // join — name + avatar + role-in-circle + friend status + a
+          // few totals so the popover loads instantly.
+          const miniMatch = url.pathname.match(/^\/api\/me\/community\/profiles\/([^/]+)$/);
+          if (miniMatch && request.method === "GET") {
+            return jsonHeaders(await getMemberMiniProfile(env, user, decodeURIComponent(miniMatch[1])));
           }
           const replyMatch = url.pathname.match(/^\/api\/me\/community\/replies\/(\d+)\/react$/);
           if (replyMatch && request.method === "POST") {
@@ -4862,6 +4872,22 @@ async function ensureCommunitySchema(env) {
     "  PRIMARY KEY (circle_id, user_id)" +
     ")",
     "CREATE INDEX IF NOT EXISTS idx_circle_members_user ON circle_members(user_id)",
+    // Member status — 'active' (default, can post), 'muted' (can read,
+    // can't post or comment), 'banned' (kicked, blocked from rejoining).
+    // Admins toggle from /acp; the circle itself never demotes anyone.
+    "ALTER TABLE circle_members ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
+    // Pinned posts so admins / mods can highlight an announcement or
+    // the "weekly highlight" at the top of the circle feed.
+    "ALTER TABLE circle_posts ADD COLUMN pinned_at INTEGER",
+    // User-saved posts (favourites) — separate table so a single post
+    // can be saved by many users without bloating circle_posts.
+    "CREATE TABLE IF NOT EXISTS circle_post_saves (" +
+    "  post_id INTEGER NOT NULL," +
+    "  user_id TEXT NOT NULL," +
+    "  saved_at INTEGER NOT NULL," +
+    "  PRIMARY KEY (post_id, user_id)" +
+    ")",
+    "CREATE INDEX IF NOT EXISTS idx_post_saves_user ON circle_post_saves(user_id, saved_at DESC)",
     "CREATE TABLE IF NOT EXISTS circle_posts (" +
     "  id INTEGER PRIMARY KEY AUTOINCREMENT," +
     "  circle_id INTEGER NOT NULL," +
@@ -5179,15 +5205,17 @@ async function getCircleDetail(env, user, slug) {
   let posts = { results: [] };
   try {
     posts = await env.DB.prepare(
-      "SELECT p.id, p.body, p.is_question, p.created_at, p.user_id, " +
+      "SELECT p.id, p.body, p.is_question, p.created_at, p.user_id, p.pinned_at, " +
       "       COALESCE(u.alias, u.display_name) AS author_name, u.username AS author_username, u.avatar AS author_avatar, u.avatar_image_key AS author_avatar_key, u.id AS author_id, u.alias AS author_alias, u.is_donor AS author_is_donor, " +
       "       (SELECT COUNT(*) FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.reaction='heart') AS heart_count, " +
       "       (SELECT COUNT(*) FROM circle_replies r WHERE r.post_id=p.id AND r.deleted_at IS NULL) AS reply_count, " +
-      "       EXISTS(SELECT 1 FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.user_id=? AND r.reaction='heart') AS i_hearted " +
+      "       EXISTS(SELECT 1 FROM circle_reactions r WHERE r.target_type='post' AND r.target_id=p.id AND r.user_id=? AND r.reaction='heart') AS i_hearted, " +
+      "       EXISTS(SELECT 1 FROM circle_post_saves s WHERE s.post_id=p.id AND s.user_id=?) AS i_saved " +
       "FROM circle_posts p LEFT JOIN users u ON u.id = p.user_id " +
       "WHERE p.circle_id = ? AND p.deleted_at IS NULL " +
-      "ORDER BY p.created_at DESC LIMIT 50"
-    ).bind(user.id, circle.id).all();
+      // Pinned posts always float to the top, regardless of age.
+      "ORDER BY p.pinned_at DESC NULLS LAST, p.created_at DESC LIMIT 50"
+    ).bind(user.id, user.id, circle.id).all();
   } catch (err) { console.warn("posts:", err?.message); }
 
   return json({
@@ -5209,7 +5237,9 @@ async function getCircleDetail(env, user, slug) {
         : null,
       authorIsDonor: !!p.author_is_donor,
       heartCount: p.heart_count || 0, replyCount: p.reply_count || 0,
-      iHearted: !!p.i_hearted, mine: p.user_id === user.id,
+      iHearted: !!p.i_hearted, iSaved: !!p.i_saved,
+      pinnedAt: p.pinned_at || null,
+      mine: p.user_id === user.id,
     })),
   });
 }
@@ -5258,12 +5288,14 @@ async function postCreatePost(request, env, user, slug) {
   const isQuestion = body.isQuestion ? 1 : 0;
 
   const circle = await env.DB.prepare(
-    "SELECT c.id, m.user_id AS membership FROM circles c " +
+    "SELECT c.id, m.user_id AS membership, COALESCE(m.status, 'active') AS status FROM circles c " +
     "LEFT JOIN circle_members m ON m.circle_id = c.id AND m.user_id = ? " +
     "WHERE c.slug = ? LIMIT 1"
   ).bind(user.id, slug).first().catch(() => null);
   if (!circle) return json({ error: "Circle not found" }, 404);
   if (!circle.membership) return json({ error: "Join this circle first." }, 403);
+  if (circle.status === "muted")  return json({ error: "You've been muted in this circle. Reach out to an admin if you think this is a mistake." }, 403);
+  if (circle.status === "banned") return json({ error: "You're no longer a member of this circle." }, 403);
 
   const now = nowSec();
   try {
@@ -5276,6 +5308,147 @@ async function postCreatePost(request, env, user, slug) {
     console.error("create post failed:", err?.message || err);
     return json({ error: "Couldn't post right now." }, 500);
   }
+}
+
+// --- GET /api/me/community/circles/:slug/members --------------------------
+// Lists members of a circle with avatar, role, donor flag, member status
+// and per-circle activity counts (posts + replies). Visible to:
+//  • everyone for OPEN circles
+//  • members only for PRIVATE circles
+// Banned users are filtered out (they shouldn't appear in the directory).
+async function getCircleMembers(env, user, slug) {
+  const circle = await env.DB.prepare(
+    "SELECT id, is_open, " +
+    "       (SELECT role FROM circle_members WHERE circle_id = circles.id AND user_id = ?) AS my_role " +
+    "FROM circles WHERE slug = ?"
+  ).bind(user.id, slug).first().catch(() => null);
+  if (!circle) return json({ error: "Circle not found" }, 404);
+  if (!circle.is_open && !circle.my_role) {
+    return json({ error: "Join this private circle to see its members." }, 403);
+  }
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT m.user_id, m.role, m.joined_at, m.status, " +
+      "       COALESCE(u.alias, u.display_name, u.username) AS name, " +
+      "       u.username, u.alias, u.avatar, u.avatar_image_key, u.is_donor, " +
+      "       (SELECT COUNT(*) FROM circle_posts p WHERE p.circle_id = m.circle_id AND p.user_id = m.user_id AND p.deleted_at IS NULL) AS post_count, " +
+      "       (SELECT COUNT(*) FROM circle_replies r JOIN circle_posts p ON p.id = r.post_id " +
+      "        WHERE p.circle_id = m.circle_id AND r.user_id = m.user_id AND r.deleted_at IS NULL) AS reply_count " +
+      "FROM circle_members m LEFT JOIN users u ON u.id = m.user_id " +
+      "WHERE m.circle_id = ? AND COALESCE(m.status, 'active') != 'banned' " +
+      "ORDER BY CASE m.role WHEN 'admin' THEN 0 WHEN 'moderator' THEN 1 ELSE 2 END, " +
+      "         (post_count + reply_count) DESC, m.joined_at ASC " +
+      "LIMIT 500"
+    ).bind(circle.id).all();
+  } catch (e) { console.warn("getCircleMembers:", e?.message); }
+  return json({
+    members: (rows.results || []).map((m) => ({
+      userId: m.user_id,
+      username: m.username,
+      alias: m.alias,
+      name: m.name || m.username || "Someone",
+      role: m.role,
+      status: m.status || "active",
+      avatar: m.avatar || null,
+      avatarUrl: m.avatar_image_key ? `/api/u/${encodeURIComponent(m.user_id)}/avatar` : null,
+      isDonor: !!m.is_donor,
+      postCount: m.post_count || 0,
+      replyCount: m.reply_count || 0,
+      joinedAt: m.joined_at,
+      isMe: m.user_id === user.id,
+    })),
+  });
+}
+
+// --- GET /api/me/community/profiles/:userId — mini profile card -----------
+// Cheap one-row lookup for the popover on the circle member list. Returns
+// the same shape the renderer needs: avatar + donor + friend status +
+// totals so a click-to-open-mini-profile feels instant.
+async function getMemberMiniProfile(env, user, otherId) {
+  if (!otherId || otherId === user.id) {
+    // Self — return basic info; client won't show a friend button.
+    const r = await env.DB.prepare(
+      "SELECT id, username, alias, display_name, avatar, avatar_image_key, bio, " +
+      "       is_donor, donor_since, created_at " +
+      "FROM users WHERE id = ?"
+    ).bind(user.id).first().catch(() => null);
+    if (!r) return json({ error: "Not found" }, 404);
+    return json({ profile: shapeMiniProfile(r, "self") });
+  }
+  const r = await env.DB.prepare(
+    "SELECT id, username, alias, display_name, avatar, avatar_image_key, bio, " +
+    "       is_donor, donor_since, created_at " +
+    "FROM users WHERE id = ?"
+  ).bind(otherId).first().catch(() => null);
+  if (!r) return json({ error: "Not found" }, 404);
+  // Friend status — none / pending_outgoing / pending_incoming / friends.
+  const [a, b] = friendPair(user.id, otherId);
+  const f = await env.DB.prepare(
+    "SELECT status, requested_by FROM friendships WHERE user_id_a = ? AND user_id_b = ?"
+  ).bind(a, b).first().catch(() => null);
+  let friendStatus = "none";
+  if (f) {
+    if (f.status === "accepted") friendStatus = "friends";
+    else if (f.status === "pending") friendStatus = f.requested_by === user.id ? "pending_outgoing" : "pending_incoming";
+  }
+  return json({ profile: shapeMiniProfile(r, friendStatus) });
+}
+function shapeMiniProfile(r, friendStatus) {
+  return {
+    userId: r.id,
+    username: r.username,
+    alias: r.alias || null,
+    name: r.alias || r.display_name || r.username || "Someone",
+    avatar: r.avatar || null,
+    avatarUrl: r.avatar_image_key ? `/api/u/${encodeURIComponent(r.id)}/avatar` : null,
+    bio: r.bio || null,
+    isDonor: !!r.is_donor,
+    donorSince: r.donor_since || null,
+    memberSince: r.created_at || null,
+    friendStatus,
+  };
+}
+
+// --- POST /api/me/community/posts/:id/pin — admin/mod only ----------------
+// Toggles the pinned_at timestamp on a post. Only the circle's mods +
+// admins can pin so non-mods clicking the API directly get 403'd.
+async function togglePinPost(env, user, postId) {
+  const row = await env.DB.prepare(
+    "SELECT p.id, p.circle_id, p.pinned_at, " +
+    "       (SELECT role FROM circle_members m WHERE m.circle_id = p.circle_id AND m.user_id = ?) AS my_role " +
+    "FROM circle_posts p WHERE p.id = ? AND p.deleted_at IS NULL"
+  ).bind(user.id, postId).first().catch(() => null);
+  if (!row) return json({ error: "Post not found" }, 404);
+  if (row.my_role !== "admin" && row.my_role !== "moderator") {
+    return json({ error: "Only admins and moderators can pin posts." }, 403);
+  }
+  const now = nowSec();
+  const pinning = !row.pinned_at;
+  await env.DB.prepare("UPDATE circle_posts SET pinned_at = ? WHERE id = ?")
+    .bind(pinning ? now : null, postId).run();
+  return json({ ok: true, pinned: pinning });
+}
+
+// --- POST /api/me/community/posts/:id/save — bookmark for later -----------
+async function toggleSavePost(env, user, postId) {
+  const existing = await env.DB.prepare(
+    "SELECT 1 FROM circle_post_saves WHERE post_id = ? AND user_id = ?"
+  ).bind(postId, user.id).first().catch(() => null);
+  if (existing) {
+    await env.DB.prepare(
+      "DELETE FROM circle_post_saves WHERE post_id = ? AND user_id = ?"
+    ).bind(postId, user.id).run();
+    return json({ ok: true, saved: false });
+  }
+  // Make sure the post exists + isn't deleted before saving.
+  const row = await env.DB.prepare("SELECT 1 FROM circle_posts WHERE id = ? AND deleted_at IS NULL")
+    .bind(postId).first().catch(() => null);
+  if (!row) return json({ error: "Post not found" }, 404);
+  await env.DB.prepare(
+    "INSERT INTO circle_post_saves (post_id, user_id, saved_at) VALUES (?, ?, ?)"
+  ).bind(postId, user.id, nowSec()).run();
+  return json({ ok: true, saved: true });
 }
 
 // --- DELETE /api/me/community/posts/:id ----------------------------------
@@ -9629,6 +9802,10 @@ async function handleAcp(request, env, url, session) {
   if (memberRole && request.method === "DELETE") {
     return await acpRemoveMember(env, +memberRole[1], decodeURIComponent(memberRole[2]));
   }
+  const memberStatus = path.match(/^\/circles\/(\d+)\/members\/([^\/]+)\/status$/);
+  if (memberStatus && request.method === "PUT") {
+    return await acpSetMemberStatus(request, env, +memberStatus[1], decodeURIComponent(memberStatus[2]));
+  }
 
   return json({ error: "Not found" }, 404);
 }
@@ -9699,7 +9876,10 @@ async function acpListMembers(env, circleId) {
   let rows = { results: [] };
   try {
     rows = await env.DB.prepare(
-      "SELECT m.user_id, m.role, m.joined_at, u.username, u.display_name, u.email " +
+      "SELECT m.user_id, m.role, m.joined_at, COALESCE(m.status, 'active') AS status, " +
+      "       u.username, u.display_name, u.alias, u.email, u.avatar, u.avatar_image_key, " +
+      "       u.is_donor, u.donor_total_cents, " +
+      "       (SELECT COUNT(*) FROM circle_posts p WHERE p.circle_id = m.circle_id AND p.user_id = m.user_id AND p.deleted_at IS NULL) AS post_count " +
       "FROM circle_members m LEFT JOIN users u ON u.id = m.user_id " +
       "WHERE m.circle_id = ? " +
       "ORDER BY CASE m.role WHEN 'admin' THEN 0 WHEN 'moderator' THEN 1 ELSE 2 END, m.joined_at ASC " +
@@ -9709,10 +9889,32 @@ async function acpListMembers(env, circleId) {
   return json({
     circle: { id: circle.id, slug: circle.slug, name: circle.name },
     members: (rows.results || []).map((m) => ({
-      userId: m.user_id, role: m.role, joinedAt: m.joined_at,
-      username: m.username, displayName: m.display_name || null, email: m.email || null,
+      userId: m.user_id, role: m.role, status: m.status || "active",
+      joinedAt: m.joined_at, postCount: m.post_count || 0,
+      username: m.username, displayName: m.display_name || null,
+      alias: m.alias || null, email: m.email || null,
+      avatar: m.avatar || null,
+      avatarUrl: m.avatar_image_key ? `/api/u/${encodeURIComponent(m.user_id)}/avatar` : null,
+      isDonor: !!m.is_donor,
+      donorTotalCents: m.donor_total_cents || 0,
     })),
   });
+}
+
+// PUT /api/acp/circles/:id/members/:userId/status — set 'active' | 'muted' | 'banned'.
+const ACP_MEMBER_STATUSES = new Set(["active", "muted", "banned"]);
+async function acpSetMemberStatus(request, env, circleId, userId) {
+  const body = await readJsonSafe(request);
+  const status = ACP_MEMBER_STATUSES.has(body?.status) ? body.status : null;
+  if (!status) return json({ error: "status must be active / muted / banned" }, 400);
+  const existing = await env.DB.prepare(
+    "SELECT 1 FROM circle_members WHERE circle_id = ? AND user_id = ?"
+  ).bind(circleId, userId).first().catch(() => null);
+  if (!existing) return json({ error: "User isn't in this circle." }, 404);
+  await env.DB.prepare(
+    "UPDATE circle_members SET status = ? WHERE circle_id = ? AND user_id = ?"
+  ).bind(status, circleId, userId).run();
+  return json({ ok: true, status });
 }
 
 async function acpAddMember(request, env, circleId) {

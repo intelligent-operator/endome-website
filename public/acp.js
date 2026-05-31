@@ -271,10 +271,27 @@
         card.innerHTML = `<p class="acp-empty">No members yet.</p>`;
         return;
       }
+      // Member-stat summary above the table.
+      const stats = {
+        total: members.length,
+        admins: members.filter((m) => m.role === "admin").length,
+        mods:   members.filter((m) => m.role === "moderator").length,
+        donors: members.filter((m) => m.isDonor).length,
+        muted:  members.filter((m) => m.status === "muted").length,
+        banned: members.filter((m) => m.status === "banned").length,
+      };
       card.innerHTML = `
+        <div class="acp-member-stats">
+          <span><strong>${stats.total}</strong> members</span>
+          <span><strong>${stats.admins}</strong> 👑 admin${stats.admins===1?"":"s"}</span>
+          <span><strong>${stats.mods}</strong> 🛡 mod${stats.mods===1?"":"s"}</span>
+          <span><strong>${stats.donors}</strong> 🎗️ patron${stats.donors===1?"":"s"}</span>
+          ${stats.muted ? `<span class="warn"><strong>${stats.muted}</strong> 🔇 muted</span>` : ""}
+          ${stats.banned ? `<span class="danger"><strong>${stats.banned}</strong> 🚫 banned</span>` : ""}
+        </div>
         <table class="acp-table">
           <thead><tr>
-            <th>User</th><th>Email</th><th>Joined</th><th>Role</th><th></th>
+            <th>User</th><th>Tags</th><th>Activity</th><th>Joined</th><th>Role</th><th>Status</th><th></th>
           </tr></thead>
           <tbody>${members.map(memberRow).join("")}</tbody>
         </table>`;
@@ -284,16 +301,37 @@
   }
   function memberRow(m) {
     const roles = ["member", "moderator", "admin"];
-    return `<tr data-member-id="${escapeHtml(m.userId)}">
+    const statuses = ["active", "muted", "banned"];
+    const tags = [];
+    if (m.isDonor) tags.push(`<span class="acp-mtag donor" title="Lifetime $${((m.donorTotalCents||0)/100).toFixed(2)}">🎗️ Patron</span>`);
+    if (m.role === "admin") tags.push(`<span class="acp-mtag mod">👑 Admin</span>`);
+    else if (m.role === "moderator") tags.push(`<span class="acp-mtag mod">🛡 Mod</span>`);
+    const avatarHtml = m.avatarUrl
+      ? `<img class="acp-mavatar" src="${escapeHtml(m.avatarUrl)}" alt="" />`
+      : m.avatar
+        ? `<span class="acp-mavatar emoji">${escapeHtml(m.avatar)}</span>`
+        : `<span class="acp-mavatar initials">${escapeHtml((m.displayName||m.username||"?").slice(0,2).toUpperCase())}</span>`;
+    return `<tr data-member-id="${escapeHtml(m.userId)}" class="member-status-${m.status||'active'}">
       <td>
-        <div class="acp-username">${escapeHtml(m.displayName || m.username || m.userId)}</div>
-        ${m.username ? `<div class="acp-meta">@${escapeHtml(m.username)}</div>` : ""}
+        <div class="acp-mcell">
+          ${avatarHtml}
+          <div>
+            <div class="acp-username">${escapeHtml(m.displayName || m.alias || m.username || m.userId)}</div>
+            ${m.username ? `<div class="acp-meta">@${escapeHtml(m.username)}${m.email ? " · " + escapeHtml(m.email) : ""}</div>` : ""}
+          </div>
+        </div>
       </td>
-      <td>${escapeHtml(m.email || "—")}</td>
+      <td><div class="acp-mtags">${tags.join("") || "—"}</div></td>
+      <td>${m.postCount || 0} post${(m.postCount||0)===1?"":"s"}</td>
       <td>${fmtDate(m.joinedAt)}</td>
       <td>
         <select class="acp-role-select" data-set-role="${escapeHtml(m.userId)}">
           ${roles.map((r) => `<option value="${r}" ${m.role===r?"selected":""}>${labelFor(r)}</option>`).join("")}
+        </select>
+      </td>
+      <td>
+        <select class="acp-role-select" data-set-status="${escapeHtml(m.userId)}">
+          ${statuses.map((s) => `<option value="${s}" ${m.status===s?"selected":""}>${statusLabel(s)}</option>`).join("")}
         </select>
       </td>
       <td><div class="acp-actions"><button class="acp-btn danger" data-remove="${escapeHtml(m.userId)}">Remove</button></div></td>
@@ -302,24 +340,45 @@
   function labelFor(r) {
     return r === "admin" ? "👑 Admin" : r === "moderator" ? "🛡 Moderator" : "💖 Member";
   }
+  function statusLabel(s) {
+    return s === "active" ? "✓ Active" : s === "muted" ? "🔇 Muted" : "🚫 Banned";
+  }
 
   document.getElementById("members-card").addEventListener("change", async (e) => {
-    const sel = e.target.closest("[data-set-role]");
-    if (!sel) return;
-    const userId = sel.dataset.setRole;
-    const role = sel.value;
-    sel.disabled = true;
-    try {
-      await fetchJson(`/api/acp/circles/${currentCircleId}/members/${encodeURIComponent(userId)}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ role }),
-      });
-      toast(`Role set to ${labelFor(role)}`);
-    } catch (err) {
-      toast(err.message || "Couldn't update role", "err");
-    } finally {
-      sel.disabled = false;
+    const roleSel = e.target.closest("[data-set-role]");
+    if (roleSel) {
+      const userId = roleSel.dataset.setRole;
+      const role = roleSel.value;
+      roleSel.disabled = true;
+      try {
+        await fetchJson(`/api/acp/circles/${currentCircleId}/members/${encodeURIComponent(userId)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ role }),
+        });
+        toast(`Role set to ${labelFor(role)}`);
+      } catch (err) {
+        toast(err.message || "Couldn't update role", "err");
+      } finally { roleSel.disabled = false; }
+      return;
+    }
+    const statusSel = e.target.closest("[data-set-status]");
+    if (statusSel) {
+      const userId = statusSel.dataset.setStatus;
+      const status = statusSel.value;
+      statusSel.disabled = true;
+      try {
+        await fetchJson(`/api/acp/circles/${currentCircleId}/members/${encodeURIComponent(userId)}/status`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        toast(`Status: ${statusLabel(status)}`);
+        await loadMembers(currentCircleId);
+      } catch (err) {
+        toast(err.message || "Couldn't update status", "err");
+        statusSel.disabled = false;
+      }
     }
   });
 
