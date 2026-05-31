@@ -325,7 +325,13 @@
             </select>
           </label>
           <label class="acp-field"><span>Model override <em style="color:#7a5f6c;font-weight:400">(blank = use BEDROCK_MODEL_ID)</em></span>
-            <input type="text" name="model" maxlength="200" placeholder="e.g. au.anthropic.claude-opus-4-8" />
+            <input type="text" name="model" id="cfg-model-input" maxlength="200" placeholder="e.g. au.anthropic.claude-opus-4-8" />
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+              <button type="button" class="acp-btn" id="cfg-list-profiles" style="font-size:12px;padding:6px 10px">🔎 List available profiles</button>
+              <button type="button" class="acp-btn" id="cfg-clear-model" style="font-size:12px;padding:6px 10px">Clear (use default)</button>
+              <span id="cfg-profiles-status" style="font-size:12px;color:#7a5f6c"></span>
+            </div>
+            <ul id="cfg-profiles-list" class="acp-profile-list" style="list-style:none;padding:0;margin:8px 0 0;display:none;max-height:240px;overflow:auto;border:1px solid #ffe2eb;border-radius:10px;background:#fff5f9"></ul>
           </label>
         </div>
         <label class="acp-field" style="display:flex;align-items:center;gap:10px;flex-direction:row">
@@ -340,6 +346,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-  <script src="/acp.js?v=1780141319" defer></script>
+  <script src="/acp.js?v=1780199000" defer></script>
 </body>
 </html>

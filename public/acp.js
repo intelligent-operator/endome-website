@@ -590,9 +590,64 @@
     });
     document.getElementById("cfg-title").textContent = `Edit insight — ${cfg.title}`;
     document.getElementById("cfg-status").textContent = "";
+    // Reset the profile picker for a fresh open
+    const list = document.getElementById("cfg-profiles-list");
+    if (list) { list.style.display = "none"; list.innerHTML = ""; }
+    const ps = document.getElementById("cfg-profiles-status");
+    if (ps) ps.textContent = "";
     cfgModal.classList.add("open");
     cfgModal.setAttribute("aria-hidden", "false");
   }
+
+  // Inference profile picker — lets admins discover which model ids are
+  // actually callable in the configured Bedrock region without leaving the
+  // page. Hits /api/acp/insights/profiles (a thin wrapper around Bedrock's
+  // ListInferenceProfiles) and renders a clickable list that drops the
+  // chosen id into the model field.
+  document.getElementById("cfg-clear-model")?.addEventListener("click", () => {
+    const input = document.getElementById("cfg-model-input");
+    if (input) input.value = "";
+  });
+  document.getElementById("cfg-list-profiles")?.addEventListener("click", async () => {
+    const status = document.getElementById("cfg-profiles-status");
+    const list = document.getElementById("cfg-profiles-list");
+    const input = document.getElementById("cfg-model-input");
+    if (!status || !list || !input) return;
+    status.textContent = "Loading…";
+    list.style.display = "none";
+    list.innerHTML = "";
+    try {
+      const data = await fetchJson("/api/acp/insights/profiles");
+      if (!data.ok) {
+        status.textContent = data.error || "Couldn't list profiles.";
+        return;
+      }
+      const profiles = data.profiles || [];
+      if (!profiles.length) {
+        status.textContent = `No inference profiles found in ${data.region || "region"}.`;
+        return;
+      }
+      status.textContent = `${profiles.length} profile${profiles.length === 1 ? "" : "s"} in ${data.region}. Click one to use it.`;
+      list.innerHTML = profiles.map((p) => `
+        <li data-profile-id="${escapeHtml(p.id)}" style="padding:10px 12px;border-bottom:1px solid #ffe2eb;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13px;color:#3a2330;font-weight:600">${escapeHtml(p.name || p.id)}</div>
+            <code style="font-size:11px;color:#7a5f6c;word-break:break-all">${escapeHtml(p.id)}</code>
+          </div>
+          <span style="font-size:11px;color:#7a5f6c;background:#fff;border:1px solid #ffe2eb;padding:2px 8px;border-radius:999px">${escapeHtml(p.type || "")}</span>
+        </li>`).join("");
+      list.style.display = "block";
+      list.querySelectorAll("[data-profile-id]").forEach((li) => {
+        li.addEventListener("click", () => {
+          input.value = li.dataset.profileId;
+          status.textContent = `Selected ${li.dataset.profileId}.`;
+          list.style.display = "none";
+        });
+      });
+    } catch (err) {
+      status.textContent = err.message || "Couldn't list profiles.";
+    }
+  });
   document.addEventListener("click", (e) => {
     if (e.target.closest("[data-close-cfg]")) {
       cfgModal.classList.remove("open");
