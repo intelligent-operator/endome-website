@@ -1537,7 +1537,7 @@ const ALLOWED_SYMPTOMS = new Set([
   // appetite
   "appetite",
 ]);
-const ALLOWED_PHASES   = new Set(["menstrual", "follicular", "ovulation", "luteal"]);
+const ALLOWED_PHASES   = new Set(["menstrual", "follicular", "ovulation", "luteal", "perimenopause", "postmenopause"]);
 const ALLOWED_FLOW     = new Set(["none", "spotting", "light", "medium", "heavy"]);
 const ALLOWED_MUCUS    = new Set(["dry", "sticky", "creamy", "watery", "eggwhite"]);
 const ALLOWED_MOVEMENT = new Set(["none", "light", "moderate", "vigorous"]);
@@ -2264,6 +2264,20 @@ async function postMorningCheckin(request, env, user) {
     pointsAwarded
   ).run();
 
+  // If the user picked perimenopause / postmenopause as today's phase,
+  // mirror that into their persistent life_stage so the rest of the app
+  // (cycle prediction, hidden cycle-day inputs, Buddy's stance) reacts
+  // immediately. We don't write back the cycling phases — perimenopausal
+  // people still get menstrual bleeds, so picking "menstrual" shouldn't
+  // demote a previously set life_stage.
+  if (cyclePhase === "perimenopause" || cyclePhase === "postmenopause") {
+    try {
+      await ensureProfileSchema(env);
+      await env.DB.prepare("UPDATE users SET life_stage = ? WHERE id = ?")
+        .bind(cyclePhase, user.id).run();
+    } catch (e) { console.warn("life_stage mirror failed:", e?.message); }
+  }
+
   const pet = await awardXp(env, user.id, pointsAwarded, date);
   const glow = await endopetGrantReward(env, user.id, "morning_checkin", date);
   const ach  = await endopetRunAllChecks(env, user.id, { welcomeBack: glow?.welcomeBack });
@@ -2405,12 +2419,34 @@ async function postSymptom(request, env, user) {
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     ).bind(user.id, date, now + i, s, severity, locationCsv, notes, triggers, relief, painType, pts));
   });
+  // Cycle context shipped from the symptom modal — optional. Lets users
+  // mark their phase (including perimenopause / postmenopause) without
+  // opening the morning check-in. Only writes the fields that were
+  // actually sent; COALESCE preserves whatever's already there.
+  const symCycleDay   = body.cycleDay == null || body.cycleDay === "" ? null : clampInt(body.cycleDay, 1, 60);
+  const symCyclePhase = oneOf(body.cyclePhase, ALLOWED_PHASES);
+
   stmts.push(env.DB.prepare(
-    `INSERT INTO daily_logs (user_id, log_date, points_total)
-     VALUES (?, ?, ?)
-     ON CONFLICT(user_id, log_date) DO UPDATE SET points_total = daily_logs.points_total + ?`
-  ).bind(user.id, date, totalPoints, totalPoints));
+    `INSERT INTO daily_logs (user_id, log_date, points_total, cycle_day, cycle_phase)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, log_date) DO UPDATE SET
+       points_total = daily_logs.points_total + ?,
+       cycle_day    = COALESCE(excluded.cycle_day,   daily_logs.cycle_day),
+       cycle_phase  = COALESCE(excluded.cycle_phase, daily_logs.cycle_phase)`
+  ).bind(user.id, date, totalPoints, symCycleDay, symCyclePhase, totalPoints));
   await env.DB.batch(stmts);
+
+  // Mirror peri / postmenopause into the persistent life_stage so the
+  // rest of the app (cycle prediction, hidden cycle-day inputs, Buddy's
+  // stance) reacts on next refresh. Same rule as the morning check-in:
+  // only promote, never demote from a cycling phase.
+  if (symCyclePhase === "perimenopause" || symCyclePhase === "postmenopause") {
+    try {
+      await ensureProfileSchema(env);
+      await env.DB.prepare("UPDATE users SET life_stage = ? WHERE id = ?")
+        .bind(symCyclePhase, user.id).run();
+    } catch (e) { console.warn("life_stage mirror from symptom failed:", e?.message); }
+  }
 
   const pet = await awardXp(env, user.id, totalPoints, date);
   const flareSym = symptoms.find((s) => ["pelvic_pain", "endo_belly"].includes(s));

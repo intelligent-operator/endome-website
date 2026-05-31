@@ -512,7 +512,7 @@
 
         <div class="modal-section" data-cycle-section>
           <h4 class="section-title">Cycle <span class="sec-hint">(optional, helps spot patterns)</span></h4>
-          <div class="field-grid-2" data-cycle-day-grid>
+          <div data-cycle-day-grid>
             <div class="counter-field">
               <label>Cycle day</label>
               <div class="counter">
@@ -521,17 +521,19 @@
                 <button type="button" data-counter-incr="1" data-counter-target="cycleDay" data-max="60" aria-label="Increase">+</button>
               </div>
             </div>
-            <div class="seg-field">
-              <label>Phase</label>
-              <div class="chip-pick wrap" data-chip="cyclePhase">
-                <button type="button" data-val="menstrual">🌑 Menstrual</button>
-                <button type="button" data-val="follicular">🌒 Follicular</button>
-                <button type="button" data-val="ovulation">🌕 Ovulation</button>
-                <button type="button" data-val="luteal">🌘 Luteal</button>
-              </div>
+          </div>
+          <div class="seg-field">
+            <label>Phase / stage</label>
+            <div class="chip-pick wrap" data-chip="cyclePhase">
+              <button type="button" data-val="menstrual">🌑 Menstrual</button>
+              <button type="button" data-val="follicular">🌒 Follicular</button>
+              <button type="button" data-val="ovulation">🌕 Ovulation</button>
+              <button type="button" data-val="luteal">🌘 Luteal</button>
+              <button type="button" data-val="perimenopause">🌗 Perimenopause</button>
+              <button type="button" data-val="postmenopause">🌑 Postmenopause</button>
             </div>
           </div>
-          <p class="sec-hint cycle-peri-hint" data-cycle-peri-hint hidden style="margin:6px 0 4px;color:#7a5f6c">Day-of-cycle and phase don't apply during perimenopause — just record any bleeding below.</p>
+          <p class="sec-hint cycle-peri-hint" data-cycle-peri-hint hidden style="margin:6px 0 4px;color:#7a5f6c">Cycle day doesn't apply during perimenopause — leave it blank and pick "Perimenopause" above.</p>
           <div class="seg-field" id="flow-row" hidden>
             <label>Flow today</label>
             <div class="flow-pick" data-chip="flow">
@@ -1044,6 +1046,32 @@
           </label>
         </div>
 
+        <div class="modal-section" data-cycle-section>
+          <h4 class="section-title">Cycle <span class="sec-hint">(optional)</span></h4>
+          <div data-cycle-day-grid>
+            <div class="counter-field">
+              <label>Cycle day</label>
+              <div class="counter">
+                <button type="button" data-counter-decr="1" data-counter-target="cycleDay" data-min="1" aria-label="Decrease">−</button>
+                <input type="number" name="cycleDay" min="1" max="60" placeholder="—" />
+                <button type="button" data-counter-incr="1" data-counter-target="cycleDay" data-max="60" aria-label="Increase">+</button>
+              </div>
+            </div>
+          </div>
+          <div class="seg-field">
+            <label>Phase / stage</label>
+            <div class="chip-pick wrap" data-chip="cyclePhase">
+              <button type="button" data-val="menstrual">🌑 Menstrual</button>
+              <button type="button" data-val="follicular">🌒 Follicular</button>
+              <button type="button" data-val="ovulation">🌕 Ovulation</button>
+              <button type="button" data-val="luteal">🌘 Luteal</button>
+              <button type="button" data-val="perimenopause">🌗 Perimenopause</button>
+              <button type="button" data-val="postmenopause">🌑 Postmenopause</button>
+            </div>
+          </div>
+          <p class="sec-hint cycle-peri-hint" data-cycle-peri-hint hidden style="margin:6px 0 4px;color:#7a5f6c">Cycle day doesn't apply during perimenopause — leave it blank and pick "Perimenopause" above.</p>
+        </div>
+
         <button type="submit" class="btn btn-primary full">Log symptoms <em class="xp-badge">+5 XP each</em></button>
         <p class="form-status" role="status"></p>
       </form>
@@ -1281,7 +1309,7 @@
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
   <script src="/pet-art.js?v=1780192887" defer></script>
-  <script src="/dashboard.js?v=1780199000" defer></script>
+  <script src="/dashboard.js?v=1780210000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780199000" defer></script>
 </body>

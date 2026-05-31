@@ -1830,22 +1830,25 @@ function prefillModal(name) {
       const v = cycle?.phase || suggested?.phase;
       if (v) selectChip(phaseGroup, v);
     }
-    // Perimenopause / postmenopause: hide the cycle-day + phase grid
-    // because Day-N badges and a 4-phase cycle don't map to irregular
-    // or ended cycles. The flow picker stays — bleeding still matters.
-    // Postmenopause hides the whole cycle section since flow shouldn't
-    // be expected; any spotting should be logged as a symptom + flagged.
+    // Perimenopause / postmenopause: hide the cycle-day input only —
+    // the phase chips stay visible so users can pick "Perimenopause" /
+    // "Postmenopause" here without leaving the modal. Postmenopause
+    // also hides the flow picker since regular bleeding isn't expected;
+    // any spotting should be logged as a symptom + flagged separately.
     const lifeStage = state?.user?.lifeStage || "cycling";
     const dayGrid  = modal.querySelector("[data-cycle-day-grid]");
     const periHint = modal.querySelector("[data-cycle-peri-hint]");
-    const section  = modal.querySelector("[data-cycle-section]");
+    const flowRow  = modal.querySelector("#flow-row");
     if (dayGrid)  dayGrid.hidden  = lifeStage !== "cycling";
     if (periHint) periHint.hidden = lifeStage === "cycling";
-    if (section)  section.hidden  = lifeStage === "postmenopause";
-    // Clear any pre-filled values when in peri/post so nothing carries over.
+    if (flowRow && lifeStage === "postmenopause") flowRow.hidden = true;
+    // Clear stale cycle-day for peri/post; pre-select the matching phase
+    // chip so the user can see their saved stage at a glance.
     if (lifeStage !== "cycling") {
       if (dayInput) dayInput.value = "";
-      if (phaseGroup) { phaseGroup.dataset.value = ""; phaseGroup.querySelectorAll("button.on").forEach((b) => b.classList.remove("on")); }
+      if (phaseGroup && !phaseGroup.dataset.value) {
+        selectChip(phaseGroup, lifeStage);
+      }
     }
   }
 }
@@ -2128,6 +2131,8 @@ submitForm(
       triggers: multiVals(form, "triggers"),
       relief: multiVals(form, "relief"),
       notes: form.notes.value || null,
+      cycleDay: form.cycleDay?.value || null,
+      cyclePhase: pickerVal(form, "cyclePhase", "chip"),
     };
   },
   api.logSymptom,
