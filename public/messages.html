@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780146586" />
   <link rel="stylesheet" href="/dashboard.css?v=1780147274" />
-  <link rel="stylesheet" href="/messages.css?v=1780188564" />
+  <link rel="stylesheet" href="/messages.css?v=1780191415" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body msg-page">
@@ -80,6 +80,13 @@
             <h1>Messages</h1>
             <button type="button" class="msg-new-btn" id="msg-new-btn" title="Add a friend">＋</button>
           </header>
+          <a class="msg-me-card" href="/profile" id="msg-me-card">
+            <div class="msg-me-avatar" id="msg-me-avatar">?</div>
+            <div class="msg-me-body">
+              <strong id="msg-me-name">Your profile</strong>
+              <span id="msg-me-handle">View your profile →</span>
+            </div>
+          </a>
           <div class="msg-search">
             <input type="search" id="msg-search-input" placeholder="Search conversations…" autocomplete="off" />
           </div>
@@ -114,12 +121,14 @@
             </div>
           </div>
 
-          <form class="msg-composer" id="msg-composer" autocomplete="off" novalidate hidden>
-            <textarea id="msg-input" rows="1" placeholder="Write a message…" maxlength="2000"></textarea>
-            <button type="submit" class="msg-send-btn" id="msg-send-btn" aria-label="Send">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M3 12l18-9-4 9 4 9-18-9z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
-            </button>
-          </form>
+          <div class="msg-composer-wrap">
+            <form class="msg-composer" id="msg-composer" autocomplete="off" novalidate hidden>
+              <textarea id="msg-input" rows="1" placeholder="Write a message…" maxlength="2000"></textarea>
+              <button type="submit" class="msg-send-btn" id="msg-send-btn" aria-label="Send">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M3 12l18-9-4 9 4 9-18-9z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+              </button>
+            </form>
+          </div>
         </section>
       </div>
     </main>
@@ -148,6 +157,6 @@
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/messages.js?v=1780188564" defer></script>
+  <script src="/messages.js?v=1780191415" defer></script>
 </body>
 </html>

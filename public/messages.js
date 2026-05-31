@@ -176,6 +176,7 @@ async function openBuddyThread(){
   $("#msg-thread-sub").textContent = "Your EndoMe Buddy · always here";
   $("#msg-thread-avatar").innerHTML = "🌸";
   $("#msg-thread-avatar").className = "msg-thread-avatar msg-thread-avatar-buddy";
+  _otherAvatarHtml = `<div class="ml-avatar ml-avatar-buddy" style="width:30px;height:30px;font-size:14px">🌸</div>`;
   // Find-or-create the user's most-recent buddy conversation.
   try {
     const list = await api("/api/me/buddy/conversations");
@@ -187,10 +188,13 @@ async function openBuddyThread(){
     }
     const full = await api(`/api/me/buddy/conversations/${buddyConvId}`);
     paintMessages(
+      // Server-side buddy_messages uses { content, createdAt } — DM rows
+      // use { body, sentAt }. Normalise here so paintMessages doesn't
+      // care which kind of thread it's painting.
       (full.messages || []).map((m) => ({
         fromMe: m.role === "user",
-        body: m.body,
-        sentAt: m.created_at,
+        body: m.content || "",
+        sentAt: m.createdAt || 0,
         isBuddy: m.role === "assistant",
       })),
       petName
@@ -209,8 +213,10 @@ async function openFriendThread(userId){
     $("#msg-thread-avatar").className = "msg-thread-avatar";
     if (other.avatarUrl) {
       $("#msg-thread-avatar").innerHTML = `<img src="${escapeHtml(other.avatarUrl)}" alt="">`;
+      _otherAvatarHtml = `<div class="ml-avatar" style="width:30px;height:30px"><img src="${escapeHtml(other.avatarUrl)}" alt=""></div>`;
     } else {
       $("#msg-thread-avatar").textContent = initials(other.displayName);
+      _otherAvatarHtml = `<div class="ml-avatar ml-avatar-text" style="width:30px;height:30px;font-size:11px">${escapeHtml(initials(other.displayName))}</div>`;
     }
     paintMessages(data.messages || [], other.displayName);
     // Re-render the conversation list so unread badge clears.
@@ -220,19 +226,28 @@ async function openFriendThread(userId){
   }
 }
 
+// Avatar for the OTHER side of the conversation (the small circle that
+// sits next to their bubbles). We pull it from the active thread state
+// so it's defined whether we're chatting with Buddy or a friend.
+let _otherAvatarHtml = "";
 function paintMessages(messages, otherName){
   const body = $("#msg-thread-body");
   if (!messages.length) {
     body.innerHTML = `
       <div class="msg-thread-empty">
         <span class="msg-thread-empty-icon">💬</span>
-        <p>No messages yet — say hi to ${escapeHtml(otherName)}.</p>
+        <p>No messages yet — say hi to ${escapeHtml(otherName || "them")}.</p>
       </div>`;
     return;
   }
-  // Group by day for nice date separators.
+  // Group by day. Skip empty bubbles so a corrupt row doesn't render as
+  // a phantom timestamp-only blob (which is what happened when the
+  // buddy api was returning `content` and the client was reading
+  // `body` — fixed, but the guard is cheap insurance).
+  const filtered = messages.filter((m) => (m.body || "").length > 0);
   let lastDayKey = "";
-  const html = messages.map((m) => {
+  let lastFromMe = null;
+  const html = filtered.map((m, idx) => {
     const d = new Date((m.sentAt || 0) * 1000);
     const dayKey = d.toDateString();
     let sep = "";
@@ -242,11 +257,17 @@ function paintMessages(messages, otherName){
     }
     const cls = m.fromMe ? "msg-bubble msg-mine" : "msg-bubble " + (m.isBuddy ? "msg-buddy" : "msg-theirs");
     const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    // Only show the opponent avatar on the FIRST bubble in a run of
+    // consecutive theirs-messages — iMessage / Messenger style.
+    const showAvatar = !m.fromMe && (lastFromMe !== false || sep);
+    lastFromMe = m.fromMe;
+    const avatar = showAvatar ? `<div class="msg-row-avatar">${_otherAvatarHtml}</div>` : `<div class="msg-row-avatar msg-row-avatar-placeholder"></div>`;
     return `${sep}<div class="msg-bubble-row ${m.fromMe ? "row-mine" : "row-theirs"}">
+      ${!m.fromMe ? avatar : ""}
       <div class="${cls}">${escapeHtml(m.body).replace(/\n/g, "<br>")}<span class="msg-time">${escapeHtml(time)}</span></div>
     </div>`;
   }).join("");
-  body.innerHTML = html;
+  body.innerHTML = `<div class="msg-thread-inner">${html}</div>`;
   body.scrollTop = body.scrollHeight;
 }
 
@@ -270,14 +291,17 @@ async function sendCurrent(text){
       await api(`/api/me/buddy/conversations/${buddyConvId}/messages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body }),
+        // Buddy backend expects `content` (it's the AI-side field name);
+        // friend DMs use `body`. Two different endpoints, two different
+        // schemas — normalise on the client side.
+        body: JSON.stringify({ content: body }),
       });
       const full = await api(`/api/me/buddy/conversations/${buddyConvId}`);
       paintMessages(
         (full.messages || []).map((m) => ({
           fromMe: m.role === "user",
-          body: m.body,
-          sentAt: m.created_at,
+          body: m.content || "",
+          sentAt: m.createdAt || 0,
           isBuddy: m.role === "assistant",
         })),
         petName
@@ -303,13 +327,20 @@ async function sendCurrent(text){
 }
 
 function appendOwn(body){
+  // Find or create the inner column so the bubble drops into the same
+  // centred container as everything else.
+  let inner = $("#msg-thread-body .msg-thread-inner");
+  const empty = $("#msg-thread-body .msg-thread-empty");
+  if (empty) empty.remove();
+  if (!inner) {
+    inner = document.createElement("div");
+    inner.className = "msg-thread-inner";
+    $("#msg-thread-body").appendChild(inner);
+  }
   const wrap = document.createElement("div");
   wrap.className = "msg-bubble-row row-mine";
   wrap.innerHTML = `<div class="msg-bubble msg-mine">${escapeHtml(body).replace(/\n/g, "<br>")}<span class="msg-time">now</span></div>`;
-  // Replace empty-state if needed
-  const empty = $("#msg-thread-body .msg-thread-empty");
-  if (empty) empty.remove();
-  $("#msg-thread-body").appendChild(wrap);
+  inner.appendChild(wrap);
   $("#msg-thread-body").scrollTop = $("#msg-thread-body").scrollHeight;
 }
 
@@ -317,10 +348,16 @@ function showTyping(on){
   const id = "msg-typing-row";
   document.getElementById(id)?.remove();
   if (!on) return;
+  let inner = $("#msg-thread-body .msg-thread-inner");
+  if (!inner) {
+    inner = document.createElement("div");
+    inner.className = "msg-thread-inner";
+    $("#msg-thread-body").appendChild(inner);
+  }
   const row = document.createElement("div");
   row.id = id; row.className = "msg-bubble-row row-theirs";
-  row.innerHTML = `<div class="msg-bubble msg-buddy msg-typing"><span></span><span></span><span></span></div>`;
-  $("#msg-thread-body").appendChild(row);
+  row.innerHTML = `<div class="msg-row-avatar">${_otherAvatarHtml}</div><div class="msg-bubble msg-buddy msg-typing"><span></span><span></span><span></span></div>`;
+  inner.appendChild(row);
   $("#msg-thread-body").scrollTop = $("#msg-thread-body").scrollHeight;
 }
 
@@ -451,10 +488,14 @@ $("#msg-composer").addEventListener("submit", (e) => {
   autoResize(input);
   sendCurrent(text);
 });
+// Grow the composer textarea with content. Reset to "auto" first so
+// scrollHeight reflects the true content height after deletions.
 function autoResize(el){
   el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 140) + "px";
+  el.style.height = Math.min(el.scrollHeight, 160) + "px";
 }
+// Resize once at script load in case the textarea starts with content.
+setTimeout(() => autoResize($("#msg-input")), 0);
 $("#msg-input").addEventListener("input", (e) => autoResize(e.target));
 $("#msg-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -558,9 +599,26 @@ document.addEventListener("visibilitychange", () => {
   else startPolling();
 });
 
+// Load + render the user's own profile chip at the top of the list pane
+// (avatar + name + @handle, links to /profile).
+async function loadMyProfile() {
+  try {
+    const data = await api("/api/me/profile");
+    const p = data.profile || {};
+    const card = $("#msg-me-card");
+    const av = $("#msg-me-avatar");
+    if (p.avatarUrl) av.innerHTML = `<img src="${escapeHtml(p.avatarUrl)}" alt="">`;
+    else av.textContent = initials(p.name || p.displayName || p.alias || "?");
+    $("#msg-me-name").textContent = p.displayName || p.alias || p.name || "Your profile";
+    $("#msg-me-handle").textContent = p.alias ? "@" + p.alias : "Set your @handle in Profile →";
+    card.title = "View your profile";
+  } catch {}
+}
+
 // Bootstrap: read ?c=… so /buddy and other deep-links land on the right
 // conversation.
 window.addEventListener("DOMContentLoaded", async () => {
+  loadMyProfile();
   await loadConversations();
   _lastUnreadTotal = totalUnread(conversations);
   const params = new URLSearchParams(location.search);

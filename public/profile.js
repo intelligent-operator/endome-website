@@ -55,7 +55,11 @@ console.info("EndoMe profile build v1");
   }
   function paintProfile(p) {
     document.getElementById("profile-name").textContent = p.name;
-    document.getElementById("profile-handle").textContent = "@" + p.username;
+    // Prefer the user's @alias as the public handle. Fall back to an
+    // explicit 'no @handle set — add one below' nudge rather than
+    // leaking the email (= username).
+    document.getElementById("profile-handle").textContent =
+      p.alias ? "@" + p.alias : "no @handle set yet";
     document.getElementById("profile-bio").textContent =
       p.bio || "Add a bio below — it shows on your profile.";
     paintAvatarDisplay(p);
