@@ -1,18 +1,43 @@
 /* =====================================================================
-   /documents — Files-app style layout with folders sidebar + grid.
+   /documents — 3-column layout: left nav · main grid · right sidebar.
    ===================================================================== */
 
-/* Widen the documents page beyond the default community max so we
-   actually use the horizontal canvas. */
-.community-layout:has(.docs-main){max-width:1720px;padding:24px 28px 48px}
+/* Three-column layout, wider than the default so we can breathe. */
+.docs-layout{
+  display:grid;
+  grid-template-columns:230px minmax(0,1fr) 340px;
+  gap:24px;
+  max-width:1760px;
+  padding:24px 28px 48px;
+  margin:0 auto;
+  align-items:start;
+}
+@media (max-width:1280px){
+  .docs-layout{grid-template-columns:210px minmax(0,1fr) 300px;gap:18px;padding:20px 18px 32px}
+}
+@media (max-width:1080px){
+  .docs-layout{grid-template-columns:200px minmax(0,1fr);gap:18px}
+  .docs-right{grid-column:1 / -1;display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+}
+@media (max-width:760px){
+  .docs-layout{grid-template-columns:minmax(0,1fr);gap:14px;padding:14px}
+  .docs-right{grid-template-columns:1fr}
+}
 
 .docs-main{display:flex;flex-direction:column;gap:22px;min-width:0}
+
+/* RIGHT SIDEBAR -------------------------------------------------------- */
+.docs-right{
+  display:flex;flex-direction:column;gap:16px;
+  position:sticky;top:18px;align-self:start;
+}
+@media (max-width:1080px){.docs-right{position:static}}
 
 /* HERO ----------------------------------------------------------------- */
 .docs-hero{
   background:linear-gradient(120deg,#fff0f5 0%,#ffe2eb 60%,#ffd6e0 100%);
   border-radius:24px;padding:28px 32px;
-  display:grid;grid-template-columns:minmax(0,1.4fr) minmax(280px,1fr);
+  display:grid;grid-template-columns:minmax(0,1.6fr) minmax(240px,1fr);
   gap:26px;align-items:center;
   position:relative;overflow:hidden;
 }
@@ -37,24 +62,44 @@
   backdrop-filter:blur(4px);
 }
 
-.docs-hero-side{
-  display:flex;flex-direction:column;gap:12px;position:relative;z-index:1;
+/* Hero upload CTA ------------------------------------------------------ */
+.docs-hero-cta{
+  background:#fff;border:0;border-radius:18px;padding:16px 20px;
+  display:flex;align-items:center;gap:14px;cursor:pointer;font-family:inherit;
+  box-shadow:0 8px 22px rgba(255,77,138,.16);text-align:left;
+  transition:transform .15s, box-shadow .15s;position:relative;z-index:1;
 }
+.docs-hero-cta:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(255,77,138,.24)}
+.docs-hero-cta-ico{
+  width:48px;height:48px;border-radius:14px;
+  background:linear-gradient(135deg,#ff8aab,#ff4e8a);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;flex-shrink:0;
+}
+.docs-hero-cta-text{display:flex;flex-direction:column;line-height:1.35;min-width:0}
+.docs-hero-cta-text strong{font-size:14px;color:#3a2330}
+.docs-hero-cta-text em{font-size:11px;color:#7a5f6c;font-style:normal;margin-top:2px}
 
-/* Big usage ring card -------------------------------------------------- */
-.docs-usage-card{
-  background:#fff;border-radius:18px;padding:16px 18px;
-  display:grid;grid-template-columns:96px 1fr;gap:16px;align-items:center;
-  box-shadow:0 8px 22px rgba(255,77,138,.12);
+/* SIDEBAR CARDS (right rail) ------------------------------------------ */
+.docs-sidebar-card{
+  background:#fff;border:1px solid #ffeaf2;border-radius:18px;padding:16px;
+  box-shadow:0 4px 14px rgba(255,77,138,.06);
 }
-.docs-usage-ring{position:relative;width:96px;height:96px}
+.docs-sidebar-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.docs-sidebar-head h2{margin:0;font-size:14px;color:#3a2330;font-weight:700}
+.docs-sidebar-head span{font-size:11px;color:#7a5f6c}
+
+/* Storage ring card --------------------------------------------------- */
+.docs-usage-card-wrap{padding:18px 16px}
+.docs-usage-card{
+  display:grid;grid-template-columns:88px 1fr;gap:14px;align-items:center;
+}
+.docs-usage-ring{position:relative;width:88px;height:88px}
 .docs-usage-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
 .docs-usage-ring .ring-track{
   fill:none;stroke:#ffeaf2;stroke-width:8;
 }
 .docs-usage-ring .ring-fill{
-  fill:none;stroke:url(#docs-gradient);stroke-width:8;stroke-linecap:round;
-  stroke:#ff4e8a;
+  fill:none;stroke:#ff4e8a;stroke-width:8;stroke-linecap:round;
   stroke-dasharray:264;stroke-dashoffset:264;
   transition:stroke-dashoffset .6s cubic-bezier(.2,.8,.2,1), stroke .3s;
 }
@@ -66,48 +111,12 @@
 }
 .docs-usage-ring-text strong{font-size:20px;color:#3a2330;line-height:1;font-variant-numeric:tabular-nums}
 .docs-usage-ring-text span{font-size:10px;color:#7a5f6c;letter-spacing:.06em;text-transform:uppercase}
-.docs-usage-meta{display:flex;flex-direction:column;gap:10px;min-width:0}
+.docs-usage-meta{display:flex;flex-direction:column;gap:8px;min-width:0}
 .docs-usage-meta div{display:flex;flex-direction:column}
-.docs-usage-meta strong{font-size:15px;color:#3a2330;font-variant-numeric:tabular-nums}
-.docs-usage-meta span{font-size:11px;color:#7a5f6c;letter-spacing:.04em;text-transform:uppercase}
+.docs-usage-meta strong{font-size:14px;color:#3a2330;font-variant-numeric:tabular-nums}
+.docs-usage-meta span{font-size:10px;color:#7a5f6c;letter-spacing:.04em;text-transform:uppercase}
 
-/* Hero upload CTA ------------------------------------------------------ */
-.docs-hero-cta{
-  background:#fff;border:0;border-radius:18px;padding:14px 18px;
-  display:flex;align-items:center;gap:14px;cursor:pointer;font-family:inherit;
-  box-shadow:0 8px 22px rgba(255,77,138,.12);text-align:left;
-  transition:transform .15s, box-shadow .15s;
-}
-.docs-hero-cta:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(255,77,138,.2)}
-.docs-hero-cta-ico{
-  width:44px;height:44px;border-radius:14px;
-  background:linear-gradient(135deg,#ff8aab,#ff4e8a);color:#fff;
-  display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0;
-}
-.docs-hero-cta-text{display:flex;flex-direction:column;line-height:1.35;min-width:0}
-.docs-hero-cta-text strong{font-size:14px;color:#3a2330}
-.docs-hero-cta-text em{font-size:11px;color:#7a5f6c;font-style:normal;margin-top:2px}
-
-/* TWO-PANE BODY -------------------------------------------------------- */
-.docs-grid{
-  display:grid;grid-template-columns:300px minmax(0,1fr);
-  gap:22px;align-items:start;
-}
-@media (max-width:1100px){.docs-grid{grid-template-columns:260px minmax(0,1fr);gap:16px}}
-@media (max-width:880px){.docs-grid{grid-template-columns:1fr}}
-
-.docs-sidebar{display:flex;flex-direction:column;gap:16px;position:sticky;top:18px;align-self:start}
-@media (max-width:880px){.docs-sidebar{position:static}}
-
-.docs-sidebar-card{
-  background:#fff;border:1px solid #ffeaf2;border-radius:18px;padding:16px;
-  box-shadow:0 4px 14px rgba(255,77,138,.06);
-}
-.docs-sidebar-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
-.docs-sidebar-head h2{margin:0;font-size:15px;color:#3a2330}
-.docs-sidebar-head span{font-size:11px;color:#7a5f6c}
-
-/* Folder list (vertical now, list-like) -------------------------------- */
+/* Folder list --------------------------------------------------------- */
 .docs-folders{display:flex;flex-direction:column;gap:4px}
 .docs-folder{
   display:flex;align-items:center;gap:12px;
@@ -135,9 +144,8 @@
 }
 .docs-folder.on .docs-folder-count{background:#ff4e8a;color:#fff}
 
-/* Upload card ---------------------------------------------------------- */
-.upload-card{padding:14px}
-.upload-zone{
+/* Upload card --------------------------------------------------------- */
+.upload-card .upload-zone{
   background:linear-gradient(135deg,#fff5f8,#fff);
   border:2px dashed #ffd6e0;border-radius:14px;
   padding:22px 14px;text-align:center;
@@ -166,7 +174,7 @@
 }
 .storage-warn code{background:#fff;padding:2px 6px;border-radius:6px;font-size:11px;color:#c2811a}
 
-/* Tips card ------------------------------------------------------------ */
+/* Tips card ----------------------------------------------------------- */
 .tips-card h3{margin:0 0 10px;font-size:13px;color:#3a2330}
 .tips-card ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
 .tips-card li{
@@ -178,17 +186,17 @@
   display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;
 }
 
-/* CONTENT (right pane) ------------------------------------------------- */
+/* CONTENT (main) ------------------------------------------------------ */
 .docs-content{
   background:#fff;border:1px solid #ffeaf2;border-radius:20px;
-  padding:20px 22px 24px;min-height:480px;
+  padding:22px 24px 28px;min-height:520px;
   box-shadow:0 4px 14px rgba(255,77,138,.06);
 }
 .docs-content-head{
   display:flex;justify-content:space-between;align-items:center;gap:12px;
-  padding-bottom:14px;border-bottom:1px solid #ffeaf2;margin-bottom:18px;
+  padding-bottom:16px;border-bottom:1px solid #ffeaf2;margin-bottom:20px;
 }
-.docs-content-head h2{margin:0;font-size:18px;color:#3a2330}
+.docs-content-head h2{margin:0;font-size:20px;color:#3a2330}
 .docs-content-head p{margin:2px 0 0;font-size:12px;color:#7a5f6c}
 .docs-view-toggle{
   display:flex;background:#fff5f8;border-radius:10px;padding:3px;gap:2px;
@@ -201,10 +209,10 @@
 .docs-view-btn:hover{color:#3a2330}
 .docs-view-btn.on{background:#fff;color:#ff4e8a;box-shadow:0 2px 6px rgba(255,77,138,.18)}
 
-/* Document grid (default view) ---------------------------------------- */
+/* Document grid ------------------------------------------------------- */
 .doc-list{
   list-style:none;padding:0;margin:0;
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;
 }
 .doc-list.view-list{grid-template-columns:1fr;gap:8px}
 
@@ -271,12 +279,8 @@
 @keyframes ai-pulse{0%,100%{opacity:1}50%{opacity:.55}}
 
 /* List view ----------------------------------------------------------- */
-.doc-list.view-list .doc-card{
-  flex-direction:row;align-items:stretch;
-}
-.doc-list.view-list .doc-thumb{
-  width:90px;height:auto;min-height:90px;flex-shrink:0;
-}
+.doc-list.view-list .doc-card{flex-direction:row;align-items:stretch}
+.doc-list.view-list .doc-thumb{width:90px;height:auto;min-height:90px;flex-shrink:0}
 .doc-list.view-list .doc-thumb-icon{font-size:36px}
 .doc-list.view-list .doc-thumb-tag{display:none}
 .doc-list.view-list .doc-body{display:flex;flex-direction:column;justify-content:center;padding:12px 18px}
@@ -351,10 +355,7 @@
 .doc-viewer-card-block textarea:disabled,
 .doc-viewer-card-block input:disabled{background:#fff5f8;color:#7a5f6c}
 
-.ai-block{
-  background:linear-gradient(135deg,#fff5f8,#fff);
-  border-color:#ffd6e0;
-}
+.ai-block{background:linear-gradient(135deg,#fff5f8,#fff);border-color:#ffd6e0}
 .ai-block .ai-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .ai-block .ai-head strong{font-size:13px;color:#3a2330}
 .ai-status{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;margin-left:8px}
@@ -375,12 +376,8 @@
 @media (max-width: 1100px){
   .docs-hero{grid-template-columns:1fr;padding:24px}
   .docs-hero-copy h1{font-size:26px}
-  .docs-hero-side{flex-direction:row;gap:12px}
-  .docs-usage-card{flex:1;min-width:0}
-  .docs-hero-cta{flex:1;min-width:0}
 }
 @media (max-width: 900px){
-  .docs-hero-side{flex-direction:column}
   .doc-viewer-grid{
     grid-template-columns:1fr;grid-template-rows:minmax(280px,40vh) 1fr;
     height:calc(100dvh - 20px);max-height:none;
@@ -389,8 +386,8 @@
   .doc-viewer-side{padding:16px}
 }
 @media (max-width: 600px){
-  .community-layout:has(.docs-main){padding:14px}
   .docs-hero{padding:20px;border-radius:18px}
   .docs-hero-copy h1{font-size:22px}
   .doc-list{grid-template-columns:1fr}
+  .docs-content{padding:16px}
 }

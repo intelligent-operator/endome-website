@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780193972" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/documents.css?v=1780215000" />
+  <link rel="stylesheet" href="/documents.css?v=1780220000" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -53,7 +53,7 @@
     </div>
   </header>
 
-  <div class="dash-layout community-layout">
+  <div class="dash-layout docs-layout">
     <aside class="dash-sidebar">
       <nav class="side-nav">
         <a href="/dashboard"><span class="ico">🏠</span> Overview</a>
@@ -75,7 +75,7 @@
       </nav>
     </aside>
 
-    <main class="dash-main community-main docs-main">
+    <main class="dash-main docs-main">
       <header class="docs-hero">
         <div class="docs-hero-copy">
           <p class="hero-eyebrow">Documents</p>
@@ -87,94 +87,101 @@
             <span class="docs-hero-pill">✨ Feeds insights</span>
           </div>
         </div>
-        <div class="docs-hero-side">
-          <div class="docs-usage-card" id="docs-usage" hidden>
-            <div class="docs-usage-ring">
-              <svg viewBox="0 0 100 100" aria-hidden="true">
-                <circle cx="50" cy="50" r="42" class="ring-track"></circle>
-                <circle cx="50" cy="50" r="42" class="ring-fill" id="docs-usage-ring-fill"></circle>
-              </svg>
-              <div class="docs-usage-ring-text">
-                <strong id="docs-usage-pct">0%</strong>
-                <span>used</span>
-              </div>
-            </div>
-            <div class="docs-usage-meta">
-              <div>
-                <strong id="docs-usage-text">0 / 500 MB</strong>
-                <span>storage</span>
-              </div>
-              <div>
-                <strong id="docs-usage-count">0 / 100</strong>
-                <span>files</span>
-              </div>
-            </div>
-          </div>
-          <button type="button" class="docs-hero-cta" id="docs-hero-upload">
-            <span class="docs-hero-cta-ico">⤴</span>
-            <span class="docs-hero-cta-text">
-              <strong>Upload a document</strong>
-              <em>JPG, PNG, PDF, TXT, CSV · up to 25 MB</em>
-            </span>
-          </button>
-        </div>
+        <button type="button" class="docs-hero-cta" id="docs-hero-upload">
+          <span class="docs-hero-cta-ico">⤴</span>
+          <span class="docs-hero-cta-text">
+            <strong>Upload a document</strong>
+            <em>JPG, PNG, PDF, TXT, CSV · up to 25 MB</em>
+          </span>
+        </button>
       </header>
 
-      <section class="docs-grid">
-        <aside class="docs-sidebar">
-          <div class="docs-sidebar-card">
-            <header class="docs-sidebar-head">
-              <h2>📂 Folders</h2>
-              <span>Tap to filter</span>
-            </header>
-            <div class="docs-folders" id="docs-folders"></div>
+      <section class="docs-content">
+        <header class="docs-content-head">
+          <div>
+            <h2 id="docs-list-title">All documents</h2>
+            <p id="docs-list-sub">Private to your account</p>
           </div>
-
-          <div class="docs-sidebar-card upload-card">
-            <div class="upload-zone" id="upload-zone">
-              <input type="file" id="upload-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv" hidden />
-              <div class="upload-inner">
-                <div class="upload-emoji">📁</div>
-                <strong>Drop a file here</strong>
-                <span class="upload-hint">or <button class="upload-btn" type="button" id="upload-pick">pick from your device</button></span>
-                <span class="upload-meta">JPG · PNG · WebP · GIF · PDF · TXT · CSV<br/>Up to 25 MB, 500 MB total</span>
-              </div>
-            </div>
-            <div id="upload-status" class="upload-status" hidden></div>
-            <p class="storage-warn" id="storage-warn" hidden>
-              ⚠️ Storage isn't configured. Admin needs to add the
-              <code>endome-docs</code> R2 binding.
-            </p>
+          <div class="docs-view-toggle" role="tablist" aria-label="View mode">
+            <button type="button" class="docs-view-btn on" data-view="grid" aria-label="Grid view">▦</button>
+            <button type="button" class="docs-view-btn" data-view="list" aria-label="List view">☰</button>
           </div>
-
-          <div class="docs-sidebar-card tips-card">
-            <h3>✨ What the AI does</h3>
-            <ul>
-              <li><span class="tips-ico">📝</span>Transcribes any handwritten notes</li>
-              <li><span class="tips-ico">🩺</span>Translates jargon to plain English</li>
-              <li><span class="tips-ico">🩸</span>Lists lab values vs. reference ranges</li>
-              <li><span class="tips-ico">📍</span>Flags findings worth raising</li>
-              <li><span class="tips-ico">✏️</span>You can edit anything that's wrong</li>
-            </ul>
-          </div>
-        </aside>
-
-        <section class="docs-content">
-          <header class="docs-content-head">
-            <div>
-              <h2 id="docs-list-title">All documents</h2>
-              <p id="docs-list-sub">Private to your account</p>
-            </div>
-            <div class="docs-view-toggle" role="tablist" aria-label="View mode">
-              <button type="button" class="docs-view-btn on" data-view="grid" aria-label="Grid view">▦</button>
-              <button type="button" class="docs-view-btn" data-view="list" aria-label="List view">☰</button>
-            </div>
-          </header>
-          <ul class="doc-list" id="doc-list">
-            <li class="empty-state">Loading…</li>
-          </ul>
-        </section>
+        </header>
+        <ul class="doc-list" id="doc-list">
+          <li class="empty-state">Loading…</li>
+        </ul>
       </section>
+    </main>
+
+    <aside class="dash-right docs-right">
+      <div class="docs-sidebar-card docs-usage-card-wrap">
+        <header class="docs-sidebar-head">
+          <h2>📊 Storage</h2>
+        </header>
+        <div class="docs-usage-card" id="docs-usage" hidden>
+          <div class="docs-usage-ring">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="42" class="ring-track"></circle>
+              <circle cx="50" cy="50" r="42" class="ring-fill" id="docs-usage-ring-fill"></circle>
+            </svg>
+            <div class="docs-usage-ring-text">
+              <strong id="docs-usage-pct">0%</strong>
+              <span>used</span>
+            </div>
+          </div>
+          <div class="docs-usage-meta">
+            <div>
+              <strong id="docs-usage-text">0 / 500 MB</strong>
+              <span>storage</span>
+            </div>
+            <div>
+              <strong id="docs-usage-count">0 / 100</strong>
+              <span>files</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="docs-sidebar-card">
+        <header class="docs-sidebar-head">
+          <h2>📂 Folders</h2>
+          <span>Tap to filter</span>
+        </header>
+        <div class="docs-folders" id="docs-folders"></div>
+      </div>
+
+      <div class="docs-sidebar-card upload-card">
+        <header class="docs-sidebar-head">
+          <h2>⤴ Upload</h2>
+        </header>
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="upload-input" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/csv" hidden />
+          <div class="upload-inner">
+            <div class="upload-emoji">📁</div>
+            <strong>Drop a file here</strong>
+            <span class="upload-hint">or <button class="upload-btn" type="button" id="upload-pick">pick from your device</button></span>
+            <span class="upload-meta">JPG · PNG · WebP · GIF · PDF · TXT · CSV<br/>Up to 25 MB, 500 MB total</span>
+          </div>
+        </div>
+        <div id="upload-status" class="upload-status" hidden></div>
+        <p class="storage-warn" id="storage-warn" hidden>
+          ⚠️ Storage isn't configured. Admin needs to add the
+          <code>endome-docs</code> R2 binding.
+        </p>
+      </div>
+
+      <div class="docs-sidebar-card tips-card">
+        <h3>✨ What the AI does</h3>
+        <ul>
+          <li><span class="tips-ico">📝</span>Transcribes any handwritten notes</li>
+          <li><span class="tips-ico">🩺</span>Translates jargon to plain English</li>
+          <li><span class="tips-ico">🩸</span>Lists lab values vs. reference ranges</li>
+          <li><span class="tips-ico">📍</span>Flags findings worth raising</li>
+          <li><span class="tips-ico">✏️</span>You can edit anything that's wrong</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
 
       <!-- Metadata modal (set after pick, before upload) -->
       <div class="modal" id="meta-modal" aria-hidden="true" role="dialog">
@@ -270,14 +277,12 @@
           </div>
         </div>
       </div>
-    </main>
-  </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/documents.js?v=1780215000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
-  <script src="/log-symptom-widget.js?v=1780215000" defer></script>
+  <script src="/log-symptom-widget.js?v=1780220000" defer></script>
   <script src="/buddy-widget.js?v=1780199000" defer></script>
 </body>
 </html>

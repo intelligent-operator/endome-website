@@ -35,6 +35,24 @@
     .lsw-fab span{display:none}
     .lsw-fab svg{width:22px;height:22px}
   }
+  /* Sidebar Log card injected after .side-nav on every authed page so the
+     "Log Symptom" button is always visible, not just floating bottom-right. */
+  .lsw-side-card{
+    background:#fff;border-radius:18px;padding:16px;
+    box-shadow:0 4px 14px rgba(255,77,138,.06);
+    text-align:center;display:flex;flex-direction:column;gap:8px;
+  }
+  .lsw-side-head{display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;color:#3a2330;font-weight:700}
+  .lsw-side-card p{font-size:12px;color:#7a5f6c;margin:0 0 6px}
+  .lsw-side-btn{
+    background:linear-gradient(135deg,#ff8aab,#ff4e8a);color:#fff;
+    border:0;border-radius:999px;padding:11px 14px;cursor:pointer;
+    font-family:inherit;font-weight:700;font-size:13px;width:100%;
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 6px 14px rgba(255,77,138,.28);
+    transition:transform .14s, box-shadow .14s;
+  }
+  .lsw-side-btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px rgba(255,77,138,.36)}
   `;
   const style = document.createElement("style");
   style.textContent = STYLE;
@@ -187,12 +205,29 @@
   document.addEventListener("DOMContentLoaded", init, { once: true });
   if (document.readyState !== "loading") init();
 
+  const SIDE_CARD_HTML = `
+    <div class="lsw-side-card" id="lsw-side-card">
+      <div class="lsw-side-head"><span>📅</span> Quick log</div>
+      <p>Caught a flare? Log it before it slips your mind.</p>
+      <button type="button" class="lsw-side-btn" id="lsw-side-btn">
+        <span>＋</span> Log Symptom
+      </button>
+    </div>`;
+
   let initialised = false;
   function init() {
     if (initialised) return;
     initialised = true;
     document.body.insertAdjacentHTML("beforeend", FAB_HTML);
     document.body.insertAdjacentHTML("beforeend", MODAL_HTML);
+    // Inject the visible "Log Symptom" pill into the sidebar nav so it's
+    // not only available via the floating FAB. Sits right under the side
+    // navigation, same shape + colour as the dashboard's existing one.
+    const sideNav = document.querySelector(".dash-sidebar .side-nav");
+    if (sideNav && !document.getElementById("lsw-side-card")) {
+      sideNav.insertAdjacentHTML("afterend", SIDE_CARD_HTML);
+      document.getElementById("lsw-side-btn")?.addEventListener("click", () => openModal());
+    }
     wire();
   }
 
