@@ -1,13 +1,22 @@
 /* /messages — full-bleed inbox (conversation list left, thread right).
    Buddy is pinned at the top; friend DMs are below in recency order. */
 
+/* /messages — full-width inbox.
+   The global .dash-layout reserves a 300px right rail and a 32px gap
+   for the dashboard's right column, plus a 1600px max-width cap. On
+   /messages we use neither — override so the chat shell uses every
+   available pixel. */
+.dash-body.msg-page .dash-layout{
+  grid-template-columns:230px 1fr;
+  gap:0;padding:0;max-width:none;
+}
 .messages-main{padding:0;max-width:none;height:calc(100vh - 64px);height:calc(100dvh - 64px)}
 .msg-shell{
   display:grid;grid-template-columns:320px 1fr;
   height:100%;background:#fff;
-  border:1px solid #ffeaf2;border-radius:18px;
-  margin:14px 20px 14px 14px;
-  overflow:hidden;box-shadow:0 4px 18px rgba(255,77,138,.05);
+  border:1px solid #ffeaf2;border-radius:0;
+  margin:0;
+  overflow:hidden;box-shadow:none;
 }
 @media (min-width:1400px){
   .msg-shell{grid-template-columns:360px 1fr}

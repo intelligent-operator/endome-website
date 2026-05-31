@@ -471,10 +471,98 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// --- Polling: near-real-time updates without WebSockets ------------------
+// Every 4s while the page is visible we re-fetch the conversation list +
+// the currently-open thread (if it's a friend DM). When unread count goes
+// up on a row that isn't currently open, ping a sound + favicon dot so
+// the user knows even from another browser tab.
+let _convPoll = null, _threadPoll = null;
+let _lastUnreadTotal = 0;
+let _newMsgPing = null;
+function totalUnread(list) {
+  return (list || []).reduce((s, c) => s + (c.unread || 0), 0);
+}
+function startPolling() {
+  stopPolling();
+  // Conversation list — keeps the sidebar previews + unread badges fresh.
+  _convPoll = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const data = await api("/api/me/messages/conversations");
+      const newList = data.conversations || [];
+      const newUnread = totalUnread(newList);
+      if (newUnread > _lastUnreadTotal && !document.hasFocus()) {
+        // Tab unfocused + new unread → audible + favicon ping.
+        pingNewMessage();
+      }
+      _lastUnreadTotal = newUnread;
+      conversations = newList;
+      paintList();
+      // Reflect in the document title for tab-switchers.
+      if (newUnread > 0) document.title = `(${newUnread}) Messages – EndoMe`;
+      else document.title = `Messages – EndoMe`;
+    } catch {}
+  }, 4000);
+  // Active thread — keeps the open conversation refreshed.
+  _threadPoll = setInterval(async () => {
+    if (document.hidden) return;
+    if (!activeKey || activeKind !== "friend") return;
+    try {
+      const data = await api(`/api/me/messages/dm/${encodeURIComponent(activeKey)}`);
+      // Only repaint if message count or last id changed — stops the
+      // scroll position from jumping every poll.
+      const sig = (data.messages || []).map((m) => `${m.id}:${m.body.length}`).join("|");
+      if (sig !== _threadSig) {
+        _threadSig = sig;
+        const wasAtBottom = isThreadAtBottom();
+        paintMessages(data.messages || [], data.other?.displayName || "");
+        if (wasAtBottom) scrollThreadToBottom();
+      }
+    } catch {}
+  }, 3000);
+}
+function stopPolling() {
+  if (_convPoll) { clearInterval(_convPoll); _convPoll = null; }
+  if (_threadPoll) { clearInterval(_threadPoll); _threadPoll = null; }
+}
+let _threadSig = "";
+function isThreadAtBottom() {
+  const el = $("#msg-thread-body");
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
+function scrollThreadToBottom() {
+  const el = $("#msg-thread-body");
+  if (el) el.scrollTop = el.scrollHeight;
+}
+function pingNewMessage() {
+  // A polite single chime — most browsers block autoplay so this is
+  // best-effort. We construct an oscillator inline; no external file.
+  try {
+    if (!_newMsgPing) _newMsgPing = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _newMsgPing;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.frequency.value = 720;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.06, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.4);
+  } catch {}
+}
+// Pause polling when the tab loses focus, resume on return — saves
+// battery on mobile.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopPolling();
+  else startPolling();
+});
+
 // Bootstrap: read ?c=… so /buddy and other deep-links land on the right
 // conversation.
 window.addEventListener("DOMContentLoaded", async () => {
   await loadConversations();
+  _lastUnreadTotal = totalUnread(conversations);
   const params = new URLSearchParams(location.search);
   const want = params.get("c");
   if (want === "buddy" || !want) {
@@ -484,4 +572,5 @@ window.addEventListener("DOMContentLoaded", async () => {
     openConversation(want, "friend", want);
   }
   $("#page-loader")?.classList.add("is-hidden");
+  startPolling();
 });

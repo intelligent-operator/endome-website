@@ -1742,6 +1742,7 @@ function computeNotifications() {
       const id = String(n.id);
       if (id.startsWith("appt:")) icon = "📅";
       else if (id.startsWith("friend_req:")) icon = "🤝";
+      else if (id.startsWith("dm:")) icon = "💬";
       else icon = "💊";
     }
     items.push({

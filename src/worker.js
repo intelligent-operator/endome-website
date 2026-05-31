@@ -1742,8 +1742,59 @@ async function getMeToday(request, env, user, ctx) {
       ...(await computeMedReminders(env, user).catch(() => [])),
       ...(await computeAppointmentReminders(env, user).catch(() => [])),
       ...(await computeFriendRequestReminders(env, user).catch(() => [])),
+      ...(await computeUnreadDmReminders(env, user).catch(() => [])),
     ],
   });
+}
+
+// Unread DMs surfaced in the bell so users on other pages get notified
+// of a new message without polling /messages. One virtual notification
+// per sender (id 'dm:<senderId>') so multiple messages from the same
+// person collapse into one row. Dismissable like everything else.
+async function computeUnreadDmReminders(env, user) {
+  let rows = { results: [] };
+  try {
+    rows = await env.DB.prepare(
+      "SELECT m.sender_id, COUNT(*) AS n, MAX(m.sent_at) AS latest, " +
+      "       COALESCE(u.alias, u.display_name, 'A friend') AS name " +
+      "FROM direct_messages m " +
+      "JOIN users u ON u.id = m.sender_id " +
+      "WHERE m.recipient_id = ? AND m.read_at IS NULL " +
+      "GROUP BY m.sender_id ORDER BY latest DESC LIMIT 10"
+    ).bind(user.id).all();
+  } catch { return []; }
+  if (!(rows.results || []).length) return [];
+  // Fetch dismissal timestamps for DM keys specifically — a NEW message
+  // arriving AFTER a previous dismissal should re-alert, so we compare
+  // latest message time vs read_at rather than just hiding any key in
+  // the dismissed set.
+  let dmDismissals = { results: [] };
+  try {
+    dmDismissals = await env.DB.prepare(
+      "SELECT reminder_key, read_at FROM dismissed_reminders " +
+      "WHERE user_id = ? AND reminder_key LIKE 'dm:%'"
+    ).bind(user.id).all();
+  } catch {}
+  const dismissedAt = new Map();
+  for (const d of (dmDismissals.results || [])) dismissedAt.set(d.reminder_key, d.read_at);
+
+  const out = [];
+  for (const r of rows.results) {
+    const key = `dm:${r.sender_id}`;
+    const dismissed = dismissedAt.get(key);
+    // Suppress only if the user dismissed AFTER the latest unread arrived.
+    if (dismissed && r.latest <= dismissed) continue;
+    out.push({
+      id: key,
+      type: "dm",
+      title: `💬 ${r.name}`,
+      body: r.n > 1 ? `${r.n} new messages — tap to read.` : `New message — tap to read.`,
+      action_url: "/messages",
+      created_at: r.latest || nowSec(),
+      read_at: null,
+    });
+  }
+  return out;
 }
 
 // Pending incoming friend requests surfaced in the bell so users don't
