@@ -16,6 +16,62 @@ console.info("EndoMe community build v2");
   let currentCircle = null;
   let me = null;
 
+  // Cached lists for client-side search + filter. We keep raw arrays in
+  // memory after the initial fetch so typing into a search box doesn't
+  // hit the server on every keystroke.
+  let myCirclesAll = [];
+  let discoverAll = [];
+  let circleFilter = "all";
+  let circleQuery = "";
+  let storiesAll = [];
+  let storySort = "recent";
+  let storyQuery = "";
+  let resourcesAll = [];
+  let resourceCats = [];
+  let resourceCat = "all";
+  let resourceQuery = "";
+
+  // Fuzzy-ish search: tokenise the query into words, require each word
+  // to appear (substring, case-insensitive) inside ANY of the haystack
+  // fields. This handles "letter pain" → matches a circle titled
+  // "Pain after laparoscopy" with description "letters from members".
+  // Cheap enough to run on every keystroke against a few hundred items.
+  function fuzzyMatch(query, fields) {
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return true;
+    const hay = fields.filter(Boolean).join(" \n ").toLowerCase();
+    // Multi-word AND: every whitespace-separated token must be present.
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return tokens.every((t) => hay.includes(t));
+  }
+  // Highlight matched substrings in escaped HTML.
+  function highlight(text, query) {
+    const t = String(text || "");
+    const q = String(query || "").trim();
+    if (!q) return escapeHtml(t);
+    const tokens = q.split(/\s+/).filter((x) => x.length >= 2);
+    if (!tokens.length) return escapeHtml(t);
+    // Build a regex from the longest tokens first so overlapping matches
+    // don't get re-wrapped. Escape regex specials before composing.
+    const re = new RegExp(
+      tokens
+        .sort((a, b) => b.length - a.length)
+        .map((tok) => tok.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join("|"),
+      "gi"
+    );
+    return escapeHtml(t).replace(re, (m) => `<mark>${m}</mark>`);
+  }
+  // Debounce so typing N characters runs the filter once at the end,
+  // not N times.
+  function debounce(fn, ms = 120) {
+    let h = null;
+    return (...args) => {
+      clearTimeout(h);
+      h = setTimeout(() => fn(...args), ms);
+    };
+  }
+
   // --- Routing ----------------------------------------------------------
   function parseRoute() {
     const params = new URLSearchParams(location.search);
@@ -45,30 +101,11 @@ console.info("EndoMe community build v2");
   // --- Stories view ---------------------------------------------------
   async function loadStoriesView() {
     const grid = document.getElementById("published-stories");
-    const countEl = document.getElementById("stories-count");
     grid.innerHTML = `<p class="empty-state">Loading…</p>`;
     try {
       const data = await fetchJson("/api/community/stories");
-      const stories = data.stories || [];
-      countEl.textContent = stories.length ? `${stories.length} published` : "";
-      if (!stories.length) {
-        grid.innerHTML = `<p class="empty-state">No stories published yet — be the first to share yours.</p>`;
-      } else {
-        grid.innerHTML = stories.map((s) => `
-          <a class="story-card" href="/read-story?id=${s.id}">
-            ${s.coverImageUrl
-              ? `<div class="story-card-img"><img src="${escapeHtml(s.coverImageUrl)}" alt="" loading="lazy" /></div>`
-              : `<div class="story-card-img story-card-img-empty">📖</div>`}
-            <div class="story-card-body">
-              <h3>${escapeHtml(s.title)}</h3>
-              ${s.summary ? `<p class="story-card-summary">${escapeHtml(s.summary)}</p>` : ""}
-              <div class="story-card-foot">
-                <span class="story-card-author">${escapeHtml(s.author)}</span>
-                <span class="story-card-date">${s.publishedAt ? new Date(s.publishedAt * 1000).toLocaleDateString() : ""}</span>
-              </div>
-            </div>
-          </a>`).join("");
-      }
+      storiesAll = data.stories || [];
+      renderStoriesView();
     } catch (err) {
       grid.innerHTML = `<p class="empty-state">Couldn't load stories.</p>`;
     }
@@ -94,37 +131,155 @@ console.info("EndoMe community build v2");
     } catch {}
   }
 
+  // Renders the stories grid against the cached storiesAll list using
+  // the current search query + sort. Cheap enough to call on every
+  // keystroke against a few hundred items.
+  function renderStoriesView() {
+    const grid = document.getElementById("published-stories");
+    const countEl = document.getElementById("stories-count");
+    if (!grid) return;
+    let list = storiesAll.filter((s) =>
+      fuzzyMatch(storyQuery, [s.title, s.summary, s.author])
+    );
+    if (storySort === "title")  list = [...list].sort((a, b) => String(a.title || "").localeCompare(b.title || ""));
+    if (storySort === "author") list = [...list].sort((a, b) => String(a.author || "").localeCompare(b.author || ""));
+    if (storySort === "recent") list = [...list].sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0));
+    countEl.textContent = storiesAll.length
+      ? (storyQuery ? `· ${list.length}/${storiesAll.length}` : `· ${storiesAll.length}`)
+      : "";
+    if (!list.length) {
+      grid.innerHTML = `<p class="empty-state">${storyQuery
+        ? `No stories match "${escapeHtml(storyQuery)}".`
+        : "No stories published yet — be the first to share yours."}</p>`;
+      return;
+    }
+    grid.innerHTML = list.map((s) => `
+      <a class="story-card" href="/read-story?id=${s.id}">
+        ${s.coverImageUrl
+          ? `<div class="story-card-img"><img src="${escapeHtml(s.coverImageUrl)}" alt="" loading="lazy" /></div>`
+          : `<div class="story-card-img story-card-img-empty">📖</div>`}
+        <div class="story-card-body">
+          <h3>${highlight(s.title, storyQuery)}</h3>
+          ${s.summary ? `<p class="story-card-summary">${highlight(s.summary, storyQuery)}</p>` : ""}
+          <div class="story-card-foot">
+            <span class="story-card-author">${highlight(s.author, storyQuery)}</span>
+            <span class="story-card-date">${s.publishedAt ? new Date(s.publishedAt * 1000).toLocaleDateString() : ""}</span>
+          </div>
+        </div>
+      </a>`).join("");
+  }
+  (function wireStoriesControls() {
+    const input = document.getElementById("stories-search");
+    const clear = document.getElementById("stories-search-clear");
+    if (input) {
+      const onInput = debounce(() => {
+        storyQuery = input.value.trim();
+        clear.hidden = !storyQuery;
+        renderStoriesView();
+      }, 80);
+      input.addEventListener("input", onInput);
+      clear.addEventListener("click", () => {
+        input.value = ""; storyQuery = ""; clear.hidden = true;
+        input.focus(); renderStoriesView();
+      });
+    }
+    document.querySelectorAll("[data-story-sort]").forEach((b) => {
+      b.addEventListener("click", () => {
+        storySort = b.dataset.storySort;
+        document.querySelectorAll("[data-story-sort]").forEach((x) =>
+          x.classList.toggle("is-active", x === b));
+        renderStoriesView();
+      });
+    });
+  })();
+
   // --- Resources view -------------------------------------------------
   async function loadResourcesView() {
     const slot = document.getElementById("resources-slot");
     slot.innerHTML = `<p class="empty-state">Loading resources…</p>`;
     try {
       const data = await fetchJson("/api/community/resources");
-      const cats = data.categories || [];
-      const byCat = {};
-      for (const r of (data.resources || [])) (byCat[r.category] ||= []).push(r);
-      const html = cats
-        .filter((c) => byCat[c.key]?.length)
-        .map((c) => `
-          <section class="community-section resource-cat">
-            <div class="section-head">
-              <h2>${c.icon} ${escapeHtml(c.label)}</h2>
-              <span class="section-hint">${byCat[c.key].length} link${byCat[c.key].length === 1 ? "" : "s"}</span>
-            </div>
-            <div class="resources-grid">
-              ${byCat[c.key].map((r) => `
-                <article class="resource-card">
-                  <h3>${escapeHtml(r.title)}</h3>
-                  ${r.summary ? `<p>${escapeHtml(r.summary)}</p>` : ""}
-                  ${r.url ? `<a class="resource-link" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">Visit →</a>` : ""}
-                </article>`).join("")}
-            </div>
-          </section>`).join("");
-      slot.innerHTML = html || `<p class="empty-state">No resources published yet.</p>`;
+      resourceCats = data.categories || [];
+      resourcesAll = data.resources || [];
+      renderResourcesChips();
+      renderResourcesView();
     } catch (err) {
       slot.innerHTML = `<p class="empty-state">Couldn't load resources.</p>`;
     }
   }
+  function renderResourcesChips() {
+    const chips = document.getElementById("resources-cat-chips");
+    if (!chips) return;
+    const counts = new Map();
+    for (const r of resourcesAll) counts.set(r.category, (counts.get(r.category) || 0) + 1);
+    const items = [
+      { key: "all", label: "🌟 All", count: resourcesAll.length },
+      ...resourceCats.filter((c) => counts.get(c.key)).map((c) => ({
+        key: c.key, label: `${c.icon} ${c.label}`, count: counts.get(c.key) || 0,
+      })),
+    ];
+    chips.innerHTML = items.map((it) => `
+      <button type="button" class="filter-chip ${it.key === resourceCat ? "is-active" : ""}" data-resource-cat="${escapeHtml(it.key)}">
+        ${escapeHtml(it.label)} <span class="chip-count">${it.count}</span>
+      </button>`).join("");
+    chips.querySelectorAll("[data-resource-cat]").forEach((b) => {
+      b.addEventListener("click", () => {
+        resourceCat = b.dataset.resourceCat;
+        chips.querySelectorAll("[data-resource-cat]").forEach((x) =>
+          x.classList.toggle("is-active", x === b));
+        renderResourcesView();
+      });
+    });
+  }
+  function renderResourcesView() {
+    const slot = document.getElementById("resources-slot");
+    if (!slot) return;
+    const filtered = resourcesAll.filter((r) =>
+      (resourceCat === "all" || r.category === resourceCat) &&
+      fuzzyMatch(resourceQuery, [r.title, r.summary, r.category])
+    );
+    if (!filtered.length) {
+      slot.innerHTML = `<p class="empty-state">${resourceQuery
+        ? `No resources match "${escapeHtml(resourceQuery)}".`
+        : "No resources in this category yet."}</p>`;
+      return;
+    }
+    // Group by category for visual structure.
+    const byCat = {};
+    for (const r of filtered) (byCat[r.category] ||= []).push(r);
+    slot.innerHTML = resourceCats
+      .filter((c) => byCat[c.key]?.length)
+      .map((c) => `
+        <section class="community-section resource-cat">
+          <div class="section-head">
+            <h2>${c.icon} ${escapeHtml(c.label)} <span class="head-count">· ${byCat[c.key].length}</span></h2>
+          </div>
+          <div class="resources-grid">
+            ${byCat[c.key].map((r) => `
+              <article class="resource-card">
+                <h3>${highlight(r.title, resourceQuery)}</h3>
+                ${r.summary ? `<p>${highlight(r.summary, resourceQuery)}</p>` : ""}
+                ${r.url ? `<a class="resource-link" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">Visit ↗</a>` : ""}
+              </article>`).join("")}
+          </div>
+        </section>`).join("");
+  }
+  (function wireResourcesControls() {
+    const input = document.getElementById("resources-search");
+    const clear = document.getElementById("resources-search-clear");
+    if (input) {
+      const onInput = debounce(() => {
+        resourceQuery = input.value.trim();
+        clear.hidden = !resourceQuery;
+        renderResourcesView();
+      }, 80);
+      input.addEventListener("input", onInput);
+      clear.addEventListener("click", () => {
+        input.value = ""; resourceQuery = ""; clear.hidden = true;
+        input.focus(); renderResourcesView();
+      });
+    }
+  })();
   function goCircle(slug, push = true) {
     if (push) history.pushState({}, "", `/community?c=${encodeURIComponent(slug)}`);
     showView("circle");
@@ -313,8 +468,11 @@ console.info("EndoMe community build v2");
       const officialIdx = my.findIndex((c) => c.is_official);
       const official = officialIdx >= 0 ? my.splice(officialIdx, 1)[0] : null;
       renderOfficial(official);
-      renderCircles(document.getElementById("my-circles"), my, { showRole: true });
-      renderCircles(document.getElementById("discover-circles"), data.discover || [], { showRole: false, withJoin: true });
+      // Cache the raw lists; renderCirclesView re-renders against the
+      // current search query + filter.
+      myCirclesAll = my;
+      discoverAll  = data.discover || [];
+      renderCirclesView();
 
       const createBtn = document.getElementById("btn-create");
       createBtn.disabled = false;
@@ -324,6 +482,69 @@ console.info("EndoMe community build v2");
         `<p class="empty-state">Couldn't load circles right now.</p>`;
     }
   }
+
+  function renderCirclesView() {
+    const matchFilter = (c, isJoined) => {
+      if (circleFilter === "all") return true;
+      if (circleFilter === "joined") return isJoined;
+      if (circleFilter === "open") return !!c.is_open;
+      if (circleFilter === "private") return !c.is_open;
+      return true;
+    };
+    const matchQuery = (c) => fuzzyMatch(circleQuery, [c.name, c.description]);
+    const my = myCirclesAll.filter((c) => matchFilter(c, true) && matchQuery(c));
+    const dis = discoverAll.filter((c) => matchFilter(c, false) && matchQuery(c));
+
+    document.getElementById("my-circles-count").textContent =
+      myCirclesAll.length ? `· ${my.length}/${myCirclesAll.length}` : "";
+    document.getElementById("discover-count").textContent =
+      discoverAll.length ? `· ${dis.length}/${discoverAll.length}` : "";
+
+    // Joined-only filter hides Discover entirely; "All" + "Open"/"Private"
+    // still show Discover but apply the filter to it too.
+    const discoverSection = document.getElementById("discover-section");
+    if (discoverSection) discoverSection.hidden = (circleFilter === "joined");
+
+    renderCircles(document.getElementById("my-circles"), my, {
+      showRole: true, query: circleQuery,
+      emptyMessage: circleQuery
+        ? `No matches in your circles for "${circleQuery}".`
+        : (circleFilter === "joined" ? "You haven't joined any circles yet — try Discover below." : "You're in the official EndoMe circle above. Join others from Discover."),
+    });
+    renderCircles(document.getElementById("discover-circles"), dis, {
+      showRole: false, withJoin: true, query: circleQuery,
+      emptyMessage: circleQuery
+        ? `No matches in Discover for "${circleQuery}".`
+        : "No new circles to discover right now.",
+    });
+  }
+
+  // Wire search + filter (idempotent — these listeners are added once at
+  // bootstrap; renderCirclesView runs whenever any of them changes).
+  (function wireCirclesControls() {
+    const input = document.getElementById("circles-search");
+    const clear = document.getElementById("circles-search-clear");
+    if (input) {
+      const onInput = debounce(() => {
+        circleQuery = input.value.trim();
+        clear.hidden = !circleQuery;
+        renderCirclesView();
+      }, 80);
+      input.addEventListener("input", onInput);
+      clear.addEventListener("click", () => {
+        input.value = ""; circleQuery = ""; clear.hidden = true;
+        input.focus(); renderCirclesView();
+      });
+    }
+    document.querySelectorAll("[data-circle-filter]").forEach((b) => {
+      b.addEventListener("click", () => {
+        circleFilter = b.dataset.circleFilter;
+        document.querySelectorAll("[data-circle-filter]").forEach((x) =>
+          x.classList.toggle("is-active", x === b));
+        renderCirclesView();
+      });
+    });
+  })();
 
   function renderOfficial(c) {
     const section = document.getElementById("official-section");
@@ -358,23 +579,22 @@ console.info("EndoMe community build v2");
 
   function renderCircles(container, list, opts = {}) {
     if (!list.length) {
-      container.innerHTML = opts.withJoin
-        ? `<p class="empty-state">No new circles to discover right now. Once Trusted, you can create your own.</p>`
-        : `<p class="empty-state">You're in the official EndoMe circle above. Join others from "Discover" below or create your own once you're Trusted.</p>`;
+      container.innerHTML = `<p class="empty-state">${escapeHtml(opts.emptyMessage || "Nothing here yet.")}</p>`;
       return;
     }
+    const q = opts.query || "";
     container.innerHTML = list.map((c) => `
       <article class="circle-card ${c.is_official ? "is-official" : ""}">
         <div class="circle-card-top">
           <div class="circle-card-icon">${c.is_official ? "🌸" : "💬"}</div>
           <div class="circle-card-body">
             <div class="circle-card-name">
-              ${escapeHtml(c.name)}
+              ${highlight(c.name, q)}
               ${c.is_official ? `<span class="official-pill small">Official</span>` : ""}
-              <span class="type-pill small">${c.is_open ? "Open" : "Private"}</span>
-              ${opts.showRole && c.role ? `<span class="role-pill role-${c.role}">${c.role}</span>` : ""}
+              <span class="type-pill small">${c.is_open ? "🌐 Open" : "🔒 Private"}</span>
+              ${opts.showRole && c.role ? `<span class="role-pill role-${c.role}">${escapeHtml(c.role)}</span>` : ""}
             </div>
-            <p class="circle-card-desc">${escapeHtml(c.description || "")}</p>
+            <p class="circle-card-desc">${highlight(c.description || "", q)}</p>
             <div class="circle-card-meta">
               <span>👥 ${c.member_count || 0} member${(c.member_count||0)===1?"":"s"}</span>
               ${c.post_count != null ? `<span>· 💬 ${c.post_count} post${c.post_count===1?"":"s"}</span>` : ""}

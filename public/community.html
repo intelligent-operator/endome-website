@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css?v=1780193972" />
   <link rel="stylesheet" href="/dashboard.css?v=1779934116" />
-  <link rel="stylesheet" href="/community.css?v=1780141319" />
+  <link rel="stylesheet" href="/community.css?v=1780230000" />
   <link rel="stylesheet" href="/profile.css?v=1779934116" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
@@ -185,17 +185,35 @@
           <div id="official-card-slot"></div>
         </section>
 
-        <section class="community-section">
-          <div class="section-head">
-            <h2>Your circles</h2>
-            <button class="btn-create" id="btn-create">+ Create a circle</button>
+        <!-- Search + filter bar -->
+        <section class="community-search-bar">
+          <div class="searchbox">
+            <span class="searchbox-ico" aria-hidden="true">🔎</span>
+            <input type="search" id="circles-search" placeholder="Search circles by name or description…" autocomplete="off" aria-label="Search circles" />
+            <button type="button" class="searchbox-clear" id="circles-search-clear" hidden aria-label="Clear search">×</button>
           </div>
-          <div id="my-circles" class="circles-grid"></div>
+          <div class="filter-chips" role="tablist" aria-label="Filter circles">
+            <button type="button" class="filter-chip is-active" data-circle-filter="all">All</button>
+            <button type="button" class="filter-chip" data-circle-filter="joined">⭐ Joined</button>
+            <button type="button" class="filter-chip" data-circle-filter="open">🌐 Open</button>
+            <button type="button" class="filter-chip" data-circle-filter="private">🔒 Private</button>
+          </div>
+          <button class="btn-create" id="btn-create">+ Create circle</button>
         </section>
 
-        <section class="community-section">
+        <section class="community-section" id="my-circles-section">
           <div class="section-head">
-            <h2>Discover</h2>
+            <h2>Your circles <span class="head-count" id="my-circles-count"></span></h2>
+            <span class="section-hint">Circles you've joined</span>
+          </div>
+          <div id="my-circles" class="circles-grid">
+            <p class="empty-state">Loading…</p>
+          </div>
+        </section>
+
+        <section class="community-section" id="discover-section">
+          <div class="section-head">
+            <h2>Discover <span class="head-count" id="discover-count"></span></h2>
             <span class="section-hint">Open circles you can join</span>
           </div>
           <div id="discover-circles" class="circles-grid">
@@ -215,10 +233,23 @@
           <a class="btn btn-primary" href="/write-story">✍️ Write your story</a>
         </header>
 
+        <section class="community-search-bar">
+          <div class="searchbox">
+            <span class="searchbox-ico" aria-hidden="true">🔎</span>
+            <input type="search" id="stories-search" placeholder="Search stories by title, summary or author…" autocomplete="off" aria-label="Search stories" />
+            <button type="button" class="searchbox-clear" id="stories-search-clear" hidden aria-label="Clear search">×</button>
+          </div>
+          <div class="filter-chips" role="tablist" aria-label="Filter stories">
+            <button type="button" class="filter-chip is-active" data-story-sort="recent">🆕 Recent</button>
+            <button type="button" class="filter-chip" data-story-sort="title">🔤 Title</button>
+            <button type="button" class="filter-chip" data-story-sort="author">👤 Author</button>
+          </div>
+        </section>
+
         <section class="community-section">
           <div class="section-head">
-            <h2>📖 Published stories</h2>
-            <span class="section-hint" id="stories-count"></span>
+            <h2>📖 Published stories <span class="head-count" id="stories-count"></span></h2>
+            <span class="section-hint">Reviewed and shared with the community</span>
           </div>
           <div class="stories-grid" id="published-stories">
             <p class="empty-state">Loading…</p>
@@ -245,6 +276,18 @@
             <p class="hero-lead">A curated library — endo organisations, evidence-based guidelines, mental-health support, pain management, surgery, fertility, advocacy. Maintained by the EndoMe team.</p>
           </div>
         </header>
+
+        <section class="community-search-bar">
+          <div class="searchbox">
+            <span class="searchbox-ico" aria-hidden="true">🔎</span>
+            <input type="search" id="resources-search" placeholder="Search resources by topic, organisation, or keyword…" autocomplete="off" aria-label="Search resources" />
+            <button type="button" class="searchbox-clear" id="resources-search-clear" hidden aria-label="Clear search">×</button>
+          </div>
+          <div class="filter-chips" id="resources-cat-chips" role="tablist" aria-label="Filter by category">
+            <!-- Populated from /api/community/resources categories -->
+          </div>
+        </section>
+
         <div id="resources-slot">
           <p class="empty-state">Loading resources…</p>
         </div>
@@ -338,7 +381,7 @@
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
   <script src="/account-menu.js?v=1779934116" defer></script>
-  <script src="/community.js?v=1780141319" defer></script>
+  <script src="/community.js?v=1780230000" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/log-symptom-widget.js?v=1780225000" defer></script>
   <script src="/buddy-widget.js?v=1780199000" defer></script>
