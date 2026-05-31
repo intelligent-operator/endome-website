@@ -59,16 +59,42 @@ console.info("EndoMe food build v1");
     if (!recent) return;
     try {
       const data = await fetchJson("/api/me/cravings");
-      const items = (data.cravings || []).slice(0, 8);
+      const items = data.cravings || [];
       if (!items.length) { recent.innerHTML = `<li class="cravings-empty">No cravings logged yet — they cluster in the luteal phase.</li>`; return; }
       const LABEL = { salty:"🧂 Salty", sweet:"🍬 Sweet", fatty:"🥑 Fatty", carbs:"🍞 Carbs",
         chocolate:"🍫 Chocolate", spicy:"🌶 Spicy", protein:"🥩 Protein", cold:"🍦 Cold",
         sour:"🍋 Sour", other:"＋ Other" };
-      recent.innerHTML = items.map((c) => `<li class="cravings-chip-log" data-cid="${c.id}">
-        <span>${escapeHtml(LABEL[c.craving] || c.craving)}</span>
-        <span class="cravings-meta">${escapeHtml(c.log_date)}</span>
-        <button type="button" data-del-craving="${c.id}" aria-label="Remove">×</button>
-      </li>`).join("");
+      // Group by day so the user sees their per-day cravings instead of
+      // a flat aggregated chip list. Newest day first; only show the
+      // last 14 days to keep it tidy.
+      const byDay = new Map();
+      for (const c of items) {
+        if (!byDay.has(c.log_date)) byDay.set(c.log_date, []);
+        byDay.get(c.log_date).push(c);
+      }
+      const days = [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 14);
+      const fmtDay = (iso) => {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const d = new Date(iso + "T00:00:00");
+        const diff = Math.round((today - d) / 86400000);
+        if (diff === 0) return "Today";
+        if (diff === 1) return "Yesterday";
+        return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+      };
+      recent.innerHTML = days.map(([date, dayItems]) => `
+        <li class="cravings-day">
+          <div class="cravings-day-head">
+            <strong>${escapeHtml(fmtDay(date))}</strong>
+            <span class="cravings-day-count">${dayItems.length} craving${dayItems.length === 1 ? "" : "s"}</span>
+          </div>
+          <div class="cravings-day-chips">
+            ${dayItems.map((c) => `
+              <span class="cravings-chip-log" data-cid="${c.id}">
+                ${escapeHtml(LABEL[c.craving] || c.craving)}
+                <button type="button" data-del-craving="${c.id}" aria-label="Remove">×</button>
+              </span>`).join("")}
+          </div>
+        </li>`).join("");
       recent.querySelectorAll("[data-del-craving]").forEach((b) =>
         b.addEventListener("click", async () => {
           try { await fetchJson(`/api/me/cravings/${b.dataset.delCraving}`, { method: "DELETE" }); loadCravings(); }
@@ -414,22 +440,39 @@ console.info("EndoMe food build v1");
   // Opens its own modal, takes "bacon egg roll" and POSTs to
   // /api/me/food/parse — server uses Claude Haiku to itemise + cost
   // calories/macros, then user reviews + saves each item to the diary.
-  const smartModal = document.getElementById("smart-log-modal");
-  document.getElementById("btn-smart-log")?.addEventListener("click", () => {
+  // Bind via delegation so mobile Safari can never miss the tap on a
+  // newly-rendered button, and so a missing modal node doesn't throw.
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#btn-smart-log")) return;
+    e.preventDefault();
+    openSmartLog();
+  });
+  function openSmartLog() {
+    const smartModal = document.getElementById("smart-log-modal");
+    if (!smartModal) { toast("Smart log unavailable — refresh the page.", "err"); return; }
     smartModal.classList.add("open");
     smartModal.setAttribute("aria-hidden", "false");
     document.body.classList.add("modal-open");
-    document.getElementById("smart-log-input").value = "";
-    document.getElementById("smart-log-result").hidden = true;
-    document.getElementById("smart-log-save-btn").disabled = true;
+    const inp = document.getElementById("smart-log-input");
+    if (inp) inp.value = "";
+    const result = document.getElementById("smart-log-result");
+    if (result) result.hidden = true;
+    const saveBtn = document.getElementById("smart-log-save-btn");
+    if (saveBtn) saveBtn.disabled = true;
     smartModal.querySelectorAll("[data-close-modal]").forEach((el) => {
       el.onclick = () => {
         smartModal.classList.remove("open");
         document.body.classList.remove("modal-open");
       };
     });
-    setTimeout(() => document.getElementById("smart-log-input").focus(), 80);
-  });
+    // Only focus on desktop — on mobile the keyboard popping shoves the
+    // modal up and ends up unreachable.
+    if (!matchMedia("(max-width: 820px)").matches && inp) {
+      setTimeout(() => inp.focus(), 80);
+    }
+  }
+  // Reference kept for the existing close handler in the rest of this fn.
+  const smartModal = document.getElementById("smart-log-modal");
   document.getElementById("smart-log-parse-btn")?.addEventListener("click", async () => {
     const text = document.getElementById("smart-log-input").value.trim();
     if (!text) { toast("Type what you ate first", "err"); return; }

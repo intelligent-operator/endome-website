@@ -231,3 +231,12 @@
   border-radius:10px;font-size:12.5px;color:#3a2330;
 }
 .smart-result-totals strong{color:#ff4e8a}
+
+/* Per-day cravings grouping inside the cravings card */
+.cravings-recent{list-style:none;padding:0;margin:14px 0 0;display:flex;flex-direction:column;gap:10px}
+.cravings-day{background:#fff5f8;border:1px solid #ffeaf2;border-radius:12px;padding:10px 12px}
+.cravings-day-head{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.cravings-day-head strong{font-size:13px;color:#2b1922;font-weight:700}
+.cravings-day-count{font-size:11px;color:#7a5f6c}
+.cravings-day-chips{display:flex;flex-wrap:wrap;gap:6px}
+.cravings-day-chips .cravings-chip-log{background:#fff;border-color:#ffd6e0}

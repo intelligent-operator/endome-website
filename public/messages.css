@@ -256,11 +256,16 @@
 .btn-small{padding:5px 11px;font-size:12px;border-radius:8px}
 
 /* ============ Mobile ============ */
-/* Tablet — keep both panes but drop the dashboard sidebar so the
-   conversation list + thread together fill the page. */
+/* Tablet — drop the dashboard sidebar OUT OF GRID FLOW so the
+   conversation list + thread together fill the page. We don't use
+   display:none because the global account-menu.js converts the
+   sidebar into a slide-in drawer at <=880px — that drawer needs the
+   sidebar element to still exist (position:fixed). */
 @media (max-width:1024px) and (min-width:761px){
   .dash-body.msg-page .dash-layout{grid-template-columns:1fr}
-  .dash-body.msg-page .dash-sidebar{display:none}
+  /* The sidebar is repositioned as a drawer by account-menu.js +
+     dashboard.css — we don't need to hide it, just let the drawer
+     system control its visibility. */
   .msg-shell{grid-template-columns:280px 1fr}
 }
 
@@ -268,7 +273,6 @@
    a row (then is-thread-open swaps them). */
 @media (max-width:760px){
   .dash-body.msg-page .dash-layout{grid-template-columns:1fr}
-  .dash-body.msg-page .dash-sidebar{display:none}
   .messages-main{padding:0;height:calc(100dvh - 56px)}
   .msg-shell{
     grid-template-columns:1fr;

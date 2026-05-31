@@ -6339,7 +6339,10 @@ async function listMessageConversations(env, user) {
       userId: r.id,
       username: r.username,
       displayName: publicName(r),
+      // Pass both the uploaded photo URL AND the emoji avatar — the
+      // client falls back to the emoji when no image has been uploaded.
       avatarUrl: r.avatar_image_key ? `/api/u/${encodeURIComponent(r.id)}/avatar` : null,
+      avatar:    r.avatar || null,
       lastMessage: last ? String(last.body).slice(0, 140) : null,
       lastAt: last?.sent_at || null,
       unread: unreadByOther.get(r.id) || 0,

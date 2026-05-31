@@ -1149,3 +1149,8 @@ pre::-webkit-scrollbar-thumb{
 .acp-modal-card::-webkit-scrollbar-track{
   background:transparent;
 }
+
+/* All clickable buttons get touch-action:manipulation so iOS doesn't
+   apply the 300ms double-tap-to-zoom delay that makes everything feel
+   sluggish + occasionally swallows taps inside modals. */
+button, .btn{touch-action:manipulation}

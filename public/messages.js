@@ -96,14 +96,40 @@ function paintList(){
   ul.innerHTML = out.join("");
 }
 
+// Cache the user's pet so the conversation-list Buddy row can show its
+// actual SVG (luna/poppy/...) instead of a generic 🌸. Loaded once at
+// page boot — refreshed cheaply only when the pet changes (rare).
+let _petCache = null;
+async function loadPet() {
+  try {
+    const r = await api("/api/me/pet");
+    _petCache = r?.pet || r || null;
+  } catch { _petCache = null; }
+}
+function buddyAvatarHtml(opts = {}) {
+  const size = opts.size || 42;
+  if (!_petCache || !window.PET_SVGS || !window.PET_SVGS[_petCache.type]) {
+    return `<div class="ml-avatar ml-avatar-buddy" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.45)}px">🌸</div>`;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "ml-avatar ml-avatar-pet";
+  wrap.style.width = size + "px"; wrap.style.height = size + "px";
+  window.renderPetSvgInto(wrap, {
+    type: _petCache.type, mood: _petCache.mood, colorSeed: _petCache.colorSeed,
+  });
+  return wrap.outerHTML;
+}
+
 function convRowHtml(c){
   const key = c.type === "buddy" ? "buddy" : c.userId;
   const isActive = activeKey === key;
   const avatar = c.type === "buddy"
-    ? `<div class="ml-avatar ml-avatar-buddy">🌸</div>`
+    ? buddyAvatarHtml({ size: 42 })
     : (c.avatarUrl
         ? `<div class="ml-avatar"><img src="${escapeHtml(c.avatarUrl)}" alt=""></div>`
-        : `<div class="ml-avatar ml-avatar-text">${escapeHtml(initials(c.displayName))}</div>`);
+        : c.avatar
+          ? `<div class="ml-avatar" style="font-size:22px">${escapeHtml(c.avatar)}</div>`
+          : `<div class="ml-avatar ml-avatar-text">${escapeHtml(initials(c.displayName))}</div>`);
   const preview = c.lastMessage
     ? `<span class="ml-preview ${c.unread ? "ml-unread" : ""}">${c.youSentLast ? "You: " : ""}${escapeHtml(c.lastMessage)}</span>`
     : `<span class="ml-preview ml-muted">${c.type === "buddy" ? "Tap to chat with your Buddy" : "Say hi 👋"}</span>`;
@@ -174,29 +200,20 @@ async function openConversation(key, kind, userId){
 async function openBuddyThread(){
   $("#msg-thread-name").textContent = petName;
   $("#msg-thread-sub").textContent = "Your EndoMe Buddy · always here";
-  // Render the user's actual pet (luna/poppy/mochi/...) tinted with
-  // their colorSeed. Falls back to a 🌸 emoji if /api/me/pet isn't
-  // available yet (e.g. cold start).
+  // Render the user's actual pet in the thread header + as the chip
+  // next to every Buddy bubble. Falls back to 🌸 if the /api/me/pet
+  // call hasn't returned yet.
+  if (!_petCache) await loadPet();
   const headAvatar = $("#msg-thread-avatar");
   headAvatar.className = "msg-thread-avatar msg-thread-avatar-pet";
-  headAvatar.innerHTML = "🌸";
-  _otherAvatarHtml = `<div class="ml-avatar ml-avatar-buddy" style="width:30px;height:30px;font-size:14px">🌸</div>`;
-  try {
-    const r = await api("/api/me/pet");
-    const pet = r?.pet || r;
-    if (pet?.type && window.PET_SVGS) {
-      // Big avatar in the header
-      window.renderPetSvgInto(headAvatar, { type: pet.type, mood: pet.mood, colorSeed: pet.colorSeed });
-      // Mini avatar that paints next to each Buddy bubble. We render
-      // a fresh tiny container with the same SVG so chat rows can
-      // drop it inline.
-      const mini = document.createElement("div");
-      mini.className = "ml-avatar ml-avatar-pet";
-      mini.style.width = "30px"; mini.style.height = "30px";
-      window.renderPetSvgInto(mini, { type: pet.type, mood: pet.mood, colorSeed: pet.colorSeed });
-      _otherAvatarHtml = mini.outerHTML;
-    }
-  } catch {}
+  if (_petCache && window.PET_SVGS?.[_petCache.type]) {
+    window.renderPetSvgInto(headAvatar, {
+      type: _petCache.type, mood: _petCache.mood, colorSeed: _petCache.colorSeed,
+    });
+  } else {
+    headAvatar.innerHTML = "🌸";
+  }
+  _otherAvatarHtml = buddyAvatarHtml({ size: 30 });
   // Find-or-create the user's most-recent buddy conversation.
   try {
     const list = await api("/api/me/buddy/conversations");
@@ -231,9 +248,17 @@ async function openFriendThread(userId){
     $("#msg-thread-name").textContent = other.displayName || other.alias || other.username;
     $("#msg-thread-sub").textContent = "@" + other.username;
     $("#msg-thread-avatar").className = "msg-thread-avatar";
+    // Resolve the avatar in priority order: uploaded photo →
+    // emoji avatar the user picked → initials fallback. The friend
+    // chat was previously falling back to initials whenever the
+    // server didn't return avatarUrl, even when the friend had
+    // chosen an emoji avatar.
     if (other.avatarUrl) {
       $("#msg-thread-avatar").innerHTML = `<img src="${escapeHtml(other.avatarUrl)}" alt="">`;
       _otherAvatarHtml = `<div class="ml-avatar" style="width:30px;height:30px"><img src="${escapeHtml(other.avatarUrl)}" alt=""></div>`;
+    } else if (other.avatar) {
+      $("#msg-thread-avatar").textContent = other.avatar;
+      _otherAvatarHtml = `<div class="ml-avatar" style="width:30px;height:30px;font-size:16px">${escapeHtml(other.avatar)}</div>`;
     } else {
       $("#msg-thread-avatar").textContent = initials(other.displayName);
       _otherAvatarHtml = `<div class="ml-avatar ml-avatar-text" style="width:30px;height:30px;font-size:11px">${escapeHtml(initials(other.displayName))}</div>`;
@@ -639,6 +664,9 @@ async function loadMyProfile() {
 // conversation.
 window.addEventListener("DOMContentLoaded", async () => {
   loadMyProfile();
+  // Load pet BEFORE the conversation list so the Buddy row's avatar
+  // can render the actual pet SVG on first paint.
+  await loadPet();
   await loadConversations();
   _lastUnreadTotal = totalUnread(conversations);
   const params = new URLSearchParams(location.search);

@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/styles.css?v=1780146586" />
-  <link rel="stylesheet" href="/dashboard.css?v=1780186227" />
+  <link rel="stylesheet" href="/styles.css?v=1780193972" />
+  <link rel="stylesheet" href="/dashboard.css?v=1780193972" />
   <link rel="stylesheet" href="/account-menu.css?v=1779934116" />
 </head>
 <body class="dash-body">
@@ -496,6 +496,21 @@
         </div>
 
         <div class="modal-section">
+          <h4 class="section-title">Any cravings? <span class="sec-hint">(tap any) <span class="multi-count inline" data-multi-count-for="morningCravings" hidden>0</span></span></h4>
+          <div class="chip-pick wrap multi" data-multi="morningCravings">
+            <button type="button" data-val="salty">🧂 Salty</button>
+            <button type="button" data-val="sweet">🍬 Sweet</button>
+            <button type="button" data-val="fatty">🥑 Fatty</button>
+            <button type="button" data-val="carbs">🍞 Carbs</button>
+            <button type="button" data-val="chocolate">🍫 Chocolate</button>
+            <button type="button" data-val="spicy">🌶 Spicy</button>
+            <button type="button" data-val="protein">🥩 Protein</button>
+            <button type="button" data-val="cold">🍦 Cold</button>
+            <button type="button" data-val="sour">🍋 Sour</button>
+          </div>
+        </div>
+
+        <div class="modal-section">
           <h4 class="section-title">Cycle <span class="sec-hint">(optional, helps spot patterns)</span></h4>
           <div class="field-grid-2">
             <div class="counter-field">
@@ -639,6 +654,21 @@
             <button type="button" data-val="mood_numb">😶 Numb</button>
             <button type="button" data-val="spotting">🩸 Spotting</button>
             <button type="button" data-val="muscle_aches">💪 Muscle aches</button>
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <h4 class="section-title">Cravings <span class="sec-hint">(tap any) <span class="multi-count inline" data-multi-count-for="afternoonCravings" hidden>0</span></span></h4>
+          <div class="chip-pick wrap multi" data-multi="afternoonCravings">
+            <button type="button" data-val="salty">🧂 Salty</button>
+            <button type="button" data-val="sweet">🍬 Sweet</button>
+            <button type="button" data-val="fatty">🥑 Fatty</button>
+            <button type="button" data-val="carbs">🍞 Carbs</button>
+            <button type="button" data-val="chocolate">🍫 Chocolate</button>
+            <button type="button" data-val="spicy">🌶 Spicy</button>
+            <button type="button" data-val="protein">🥩 Protein</button>
+            <button type="button" data-val="cold">🍦 Cold</button>
+            <button type="button" data-val="sour">🍋 Sour</button>
           </div>
         </div>
 
@@ -1142,6 +1172,20 @@
             </div>
           </div>
           <div class="seg-field" style="margin-top:14px">
+            <label>Cravings today <em>(tap any)</em> <span class="multi-count inline" data-multi-count-for="eveningCravings" hidden>0</span></label>
+            <div class="chip-pick wrap multi" data-multi="eveningCravings">
+              <button type="button" data-val="salty">🧂 Salty</button>
+              <button type="button" data-val="sweet">🍬 Sweet</button>
+              <button type="button" data-val="fatty">🥑 Fatty</button>
+              <button type="button" data-val="carbs">🍞 Carbs</button>
+              <button type="button" data-val="chocolate">🍫 Chocolate</button>
+              <button type="button" data-val="spicy">🌶 Spicy</button>
+              <button type="button" data-val="protein">🥩 Protein</button>
+              <button type="button" data-val="cold">🍦 Cold</button>
+              <button type="button" data-val="sour">🍋 Sour</button>
+            </div>
+          </div>
+          <div class="seg-field" style="margin-top:14px">
             <label>Appetite</label>
             <div class="chip-pick wrap" data-chip="appetite">
               <button type="button" data-val="low">🥄 Low</button>
@@ -1234,7 +1278,7 @@
   <script src="/account-menu.js?v=1779934116" defer></script>
   <script src="/med-catalog.js?v=1779934116" defer></script>
   <script src="/pet-art.js?v=1780192887" defer></script>
-  <script src="/dashboard.js?v=1780192887" defer></script>
+  <script src="/dashboard.js?v=1780193972" defer></script>
   <link rel="stylesheet" href="/buddy-widget.css?v=1780118228" />
   <script src="/buddy-widget.js?v=1780180907" defer></script>
 </body>

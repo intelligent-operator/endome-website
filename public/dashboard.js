@@ -2059,6 +2059,32 @@ submitForm(
   "Symptoms logged"
 );
 
+// Cravings inside check-ins — when the user picks any cravings chips
+// inside morning/afternoon/evening, fire-and-forget a POST to
+// /api/me/cravings for each. Runs in parallel with the main check-in
+// save; doesn't block or surface its own toast.
+function postCheckinCravingsFor(formId, slot) {
+  const form = document.getElementById(formId);
+  if (!form) return;
+  form.addEventListener("submit", () => {
+    try {
+      const picks = multiVals(form, slot);
+      if (!picks.length) return;
+      for (const craving of picks) {
+        fetch("/api/me/cravings", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ craving, intensity: 3 }),
+        }).catch(() => {});
+      }
+    } catch {}
+  });
+}
+postCheckinCravingsFor("form-morning",   "morningCravings");
+postCheckinCravingsFor("form-afternoon", "afternoonCravings");
+postCheckinCravingsFor("form-evening",   "eveningCravings");
+
 submitForm(
   "form-evening",
   (form) => {
