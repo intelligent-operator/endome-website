@@ -39,10 +39,14 @@
     setStatus("");
 
     const displayName = form.displayName.value.trim();
+    const aliasRaw = (form.alias?.value || "").trim().replace(/^@+/, "");
     const email = form.email.value.trim().toLowerCase();
     const password = form.password.value;
 
     if (!displayName) return setStatus("Please tell us what to call you.");
+    if (aliasRaw && !/^[A-Za-z0-9_.-]{2,30}$/.test(aliasRaw)) {
+      return setStatus("@handle: letters, numbers, underscore, hyphen, dot only (2-30 chars).");
+    }
     if (!email.includes("@") || !email.includes(".")) {
       return setStatus("Please enter a valid email.");
     }
@@ -60,7 +64,7 @@
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify({ displayName, email, password }),
+        body: JSON.stringify({ displayName, email, password, alias: aliasRaw || null }),
         credentials: "same-origin",
         redirect: "manual",
       });

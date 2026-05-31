@@ -2169,16 +2169,21 @@ async function renderIntimacyList() {
     slot.innerHTML = `<p class="empty-state small">Private log for pain &amp; comfort patterns. Tap + Log to record an entry — only you (and the EndoMe insights engine) ever see it.</p>`;
     return;
   }
-  slot.innerHTML = `<ul class="intimacy-rows">${entries.map((e) => `
+  slot.innerHTML = `<ul class="intimacy-rows">${entries.map((e) => {
+    const when = e.logged_at
+      ? new Date(e.logged_at * 1000).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+      : e.log_date;
+    return `
     <li class="intimacy-row" data-id="${e.id}">
       <span class="intimacy-icon">${e.kind === "solo" ? "🌸" : "👫"}</span>
-      <span class="intimacy-date">${escapeHtml(e.log_date)}</span>
+      <span class="intimacy-date">${escapeHtml(when)}</span>
       <span class="intimacy-meta">
         ${e.pain_level != null ? `pain <strong>${e.pain_level}/5</strong>` : ""}
         ${e.comfort != null ? ` · comfort <strong>${e.comfort}/5</strong>` : ""}
       </span>
       <button type="button" class="intimacy-del" data-del-intimacy="${e.id}" aria-label="Remove">×</button>
-    </li>`).join("")}</ul>`;
+    </li>`;
+  }).join("")}</ul>`;
   slot.querySelectorAll("[data-del-intimacy]").forEach((b) =>
     b.addEventListener("click", async () => {
       try {
@@ -2189,6 +2194,23 @@ async function renderIntimacyList() {
   );
 }
 
+// Prefill the date + time inputs when the intimacy modal opens. Defaults
+// to "right now in the user's local time" — they can override either if
+// they're logging something from earlier today / yesterday.
+document.addEventListener("click", (e) => {
+  const open = e.target.closest?.('[data-modal="intimacy"]');
+  if (!open) return;
+  setTimeout(() => {
+    const d = document.getElementById("intimacy-when-date");
+    const t = document.getElementById("intimacy-when-time");
+    if (d && !d.value) d.value = todayLocalDate();
+    if (t && !t.value) {
+      const now = new Date();
+      t.value = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+    }
+  }, 60);
+});
+
 document.addEventListener("submit", async (e) => {
   if (e.target.id !== "form-intimacy") return;
   e.preventDefault();
@@ -2198,6 +2220,16 @@ document.addEventListener("submit", async (e) => {
   const comfort = pickerVal(e.target, "intimacyComfort");
   const notes = e.target.notes.value.trim() || null;
   if (pain == null && comfort == null && !notes) { toast("Add at least one detail.", "error"); return; }
+  // Combine date + time into a single epoch-seconds timestamp.
+  // Defaults to right now if the user cleared the inputs.
+  const dateStr = e.target.when_date.value || todayLocalDate();
+  const timeStr = e.target.when_time.value || (() => {
+    const n = new Date();
+    return String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0");
+  })();
+  const local = new Date(`${dateStr}T${timeStr}:00`);
+  const occurredAt = isNaN(local.getTime()) ? Math.floor(Date.now() / 1000) : Math.floor(local.getTime() / 1000);
+
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true; btn.textContent = "Saving…";
   try {
@@ -2205,7 +2237,11 @@ document.addEventListener("submit", async (e) => {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind, pain_level: pain, comfort, notes }),
+      body: JSON.stringify({
+        kind, pain_level: pain, comfort, notes,
+        date: dateStr,
+        occurred_at: occurredAt,
+      }),
     });
     if (!r.ok) throw new Error(await safeError(r));
     toast("Logged 🤍");

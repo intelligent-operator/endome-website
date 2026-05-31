@@ -111,8 +111,8 @@ function paintFriendRequests(incoming){
   list.innerHTML = incoming.map((p) => `
     <li class="msg-req-row" data-uid="${escapeHtml(p.id)}">
       <div class="msg-req-name">
-        <strong>${escapeHtml(p.displayName || p.alias || p.username || "Someone")}</strong>
-        <span>@${escapeHtml(p.username)}</span>
+        <strong>${escapeHtml(p.displayName || p.alias || "Someone")}</strong>
+        ${p.alias ? `<span>@${escapeHtml(p.alias)}</span>` : ""}
       </div>
       <div class="msg-req-actions">
         <button type="button" class="btn btn-primary btn-small" data-act="accept">Accept</button>
@@ -343,10 +343,10 @@ async function runFriendSearch(){
         else if (u.friendStatus === "incoming") action = `<button class="btn btn-primary btn-small" data-act="accept" data-uid="${escapeHtml(u.id)}">Accept</button>`;
         else action = `<button class="btn btn-primary btn-small" data-act="request" data-uid="${escapeHtml(u.id)}">Send request</button>`;
         return `<li class="friend-result">
-          <div class="friend-avatar">${u.avatarUrl ? `<img src="${escapeHtml(u.avatarUrl)}" alt="">` : escapeHtml(initials(u.displayName || u.username))}</div>
+          <div class="friend-avatar">${u.avatarUrl ? `<img src="${escapeHtml(u.avatarUrl)}" alt="">` : escapeHtml(initials(u.displayName || u.alias || "?"))}</div>
           <div class="friend-info">
-            <strong>${escapeHtml(u.displayName || u.alias || u.username)}</strong>
-            <span>@${escapeHtml(u.username)}</span>
+            <strong>${escapeHtml(u.displayName || u.alias || "Someone")}</strong>
+            ${u.alias ? `<span>@${escapeHtml(u.alias)}</span>` : `<span class="friend-noalias">no handle set</span>`}
           </div>
           ${action}
         </li>`;

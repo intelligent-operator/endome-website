@@ -2,11 +2,22 @@
    Buddy is pinned at the top; friend DMs are below in recency order. */
 
 .messages-main{padding:0;max-width:none;height:calc(100vh - 64px);height:calc(100dvh - 64px)}
+
+/* Use the full width on /messages — the conversation list IS the
+   navigation here, so we hide the global dash-sidebar and let the
+   chat shell stretch edge-to-edge. The dashboard sidebar still works
+   from other pages; we just don't double up on /messages. */
+.dash-body.msg-fullbleed .dash-sidebar{display:none}
+.dash-body.msg-fullbleed .dash-layout{grid-template-columns:1fr}
+.dash-body.msg-fullbleed .messages-main{height:calc(100vh - 64px);height:calc(100dvh - 64px)}
 .msg-shell{
-  display:grid;grid-template-columns:340px 1fr;
+  display:grid;grid-template-columns:360px 1fr;
   height:100%;background:#fff;
-  border:1px solid #ffeaf2;border-radius:18px;margin:14px 20px 14px 14px;
-  overflow:hidden;box-shadow:0 4px 18px rgba(255,77,138,.05);
+  border:1px solid #ffeaf2;border-radius:0;margin:0;
+  overflow:hidden;box-shadow:none;
+}
+@media (min-width:1400px){
+  .msg-shell{grid-template-columns:400px 1fr}
 }
 
 /* ============ LIST PANE ============ */
@@ -14,9 +25,14 @@
   border-right:1px solid #ffeaf2;background:#fff5f8;
   display:flex;flex-direction:column;min-height:0;
 }
+.msg-back-home{
+  display:inline-block;margin:14px 18px 0;padding:4px 0;
+  font-size:12px;color:#ff4e8a;font-weight:600;text-decoration:none;
+}
+.msg-back-home:hover{text-decoration:underline}
 .msg-list-head{
   display:flex;align-items:center;justify-content:space-between;
-  padding:18px 18px 8px;
+  padding:8px 18px 8px;
 }
 .msg-list-head h1{margin:0;font-size:20px;color:#2b1922;font-weight:800}
 .msg-new-btn{
@@ -203,8 +219,14 @@
 .friend-info{flex:1;min-width:0;display:flex;flex-direction:column}
 .friend-info strong{font-size:13px;color:#2b1922}
 .friend-info span{font-size:11.5px;color:#7a5f6c}
+.friend-noalias{color:#a08596;font-style:italic;font-size:11px}
 .friend-empty{padding:14px;text-align:center;color:#7a5f6c;font-size:12.5px;font-style:italic}
 .friend-pending{font-size:11.5px;color:#7a5f6c;font-style:italic;padding:4px 10px}
+.friend-search-hint{
+  margin:8px 0 0;font-size:11.5px;color:#7a5f6c;text-align:center;
+}
+.friend-search-hint a{color:#ff4e8a;font-weight:600;text-decoration:none}
+.friend-search-hint a:hover{text-decoration:underline}
 
 .btn-small{padding:5px 11px;font-size:12px;border-radius:8px}
 

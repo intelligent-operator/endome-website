@@ -821,6 +821,16 @@ async function handleRegister(request, env) {
   const email = typeof body?.email === "string" ? body.email.toLowerCase().trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
   const displayName = sanitizeText(body?.displayName, 60);
+  // Optional @handle. Strip a leading @ and validate the same way the
+  // profile-update endpoint does so a registration alias and a later
+  // profile edit follow identical rules.
+  let alias = sanitizeText(body?.alias, 30);
+  if (alias) {
+    alias = alias.replace(/^@+/, "").trim();
+    if (alias.length < 2 || !/^[A-Za-z0-9_.-]+$/.test(alias)) {
+      return json({ error: "@handle: letters, numbers, underscore, hyphen, dot only (2-30 chars)." }, 400);
+    }
+  }
 
   // Validation
   if (!isEmail(email) || email.length > 200) {
@@ -848,6 +858,13 @@ async function handleRegister(request, env) {
     await sleep(LOGIN_FAIL_DELAY_MS);
     return json({ error: "An account with that email already exists." }, 409);
   }
+  // Alias uniqueness (case-insensitive).
+  if (alias) {
+    const clash = await env.DB.prepare(
+      "SELECT 1 FROM users WHERE LOWER(alias) = LOWER(?) LIMIT 1"
+    ).bind(alias).first().catch(() => null);
+    if (clash) return json({ error: "That @handle is already taken — try another." }, 409);
+  }
 
   const { hash, salt } = await hashPassword(password);
   const id = `u_${b64url(crypto.getRandomValues(new Uint8Array(8)))}`;
@@ -856,9 +873,9 @@ async function handleRegister(request, env) {
   try {
     await env.DB.batch([
       env.DB.prepare(
-        "INSERT INTO users (id, username, email, display_name, password_hash, password_salt, timezone, created_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, 'UTC', ?)"
-      ).bind(id, email, email, displayName, hash, salt, now),
+        "INSERT INTO users (id, username, email, display_name, alias, password_hash, password_salt, timezone, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'UTC', ?)"
+      ).bind(id, email, email, displayName, alias || null, hash, salt, now),
       env.DB.prepare(
         "INSERT INTO pets (user_id, pet_type, pet_name, level, xp, mood, streak_days, updated_at) " +
         "VALUES (?, 'luna', 'Luna', 1, 0, 'happy', 0, ?)"
@@ -5900,7 +5917,21 @@ async function putMyProfile(request, env, user) {
   const binds  = [];
   if ("alias" in body) {
     let v = sanitizeText(body.alias, MAX_ALIAS_LEN);
-    if (v && !/^[\p{L}\p{N} _'\-.]+$/u.test(v)) return json({ error: "Alias has invalid characters." }, 400);
+    if (v) {
+      // Strip a leading @ so users can type "@beth-endo" naturally.
+      v = v.replace(/^@+/, "").trim();
+      if (v.length < 2) return json({ error: "@handle must be at least 2 characters." }, 400);
+      // Tighter character set than display_name — handles should look like
+      // usernames (letters, numbers, underscore, hyphen, dot). No spaces.
+      if (!/^[A-Za-z0-9_.-]+$/.test(v)) {
+        return json({ error: "@handle can only contain letters, numbers, underscore, hyphen and dot." }, 400);
+      }
+      // Uniqueness check (case-insensitive).
+      const clash = await env.DB.prepare(
+        "SELECT id FROM users WHERE LOWER(alias) = LOWER(?) AND id != ? LIMIT 1"
+      ).bind(v, user.id).first().catch(() => null);
+      if (clash) return json({ error: "That @handle is already taken — try another." }, 409);
+    }
     fields.push("alias = ?"); binds.push(v || null);
   }
   if ("avatar" in body) {
@@ -6088,18 +6119,24 @@ async function deleteFriendship(env, user, otherId) {
 async function searchUsersForFriend(request, env, user) {
   await ensureProfileSchema(env);
   const url = new URL(request.url);
-  const q = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 60);
+  // Strip a leading @ so users can search "@beth-endo" naturally.
+  let q = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 60);
+  if (q.startsWith("@")) q = q.slice(1);
   if (!q || q.length < 2) return json({ results: [] });
   const like = `%${q.replace(/[%_]/g, (c) => "\\" + c)}%`;
+  // Only search by ALIAS and DISPLAY NAME. Searching by username would
+  // surface raw email addresses (which is what `username` is), so we
+  // privacy-protect users by requiring them to set an alias to be
+  // discoverable. Users who haven't set an alias can still be searched
+  // by their display name.
   const rows = await env.DB.prepare(
     "SELECT id, username, display_name, alias, avatar, avatar_image_key, bio " +
     "FROM users " +
     "WHERE id != ? AND (" +
-    "  LOWER(username) LIKE ? ESCAPE '\\' OR " +
-    "  LOWER(display_name) LIKE ? ESCAPE '\\' OR " +
-    "  LOWER(alias) LIKE ? ESCAPE '\\'" +
+    "  LOWER(alias) LIKE ? ESCAPE '\\' OR " +
+    "  LOWER(display_name) LIKE ? ESCAPE '\\'" +
     ") LIMIT 20"
-  ).bind(user.id, like, like, like).all().catch(() => ({ results: [] }));
+  ).bind(user.id, like, like).all().catch(() => ({ results: [] }));
 
   const ids = (rows.results || []).map((r) => r.id);
   // Look up each result's friendship status with the requester in one go.
@@ -7381,12 +7418,21 @@ async function logIntimacy(request, env, user) {
   const triggers = sanitizeText(body.triggers, 240);
   const notes = sanitizeText(body.notes, 500);
   const date = parseDateParam(body.date) || normaliseDate(null);
-  const now = nowSec();
+  // Accept an explicit occurred_at (epoch seconds) from the client so the
+  // log row reflects WHEN the user did it, not when they tapped Save —
+  // critical for pain-correlation insights ("flare 90 minutes later" etc).
+  // Reject anything in the future or older than 90 days to keep it sensible.
+  const nowS = nowSec();
+  let occurredAt = nowS;
+  if (Number.isFinite(body.occurred_at)) {
+    const v = Math.floor(body.occurred_at);
+    if (v > 0 && v <= nowS + 60 && v >= nowS - 90 * 86400) occurredAt = v;
+  }
   try {
     const r = await env.DB.prepare(
       "INSERT INTO intimacy_logs (user_id, log_date, logged_at, kind, pain_level, comfort, protected, triggers, notes) " +
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id"
-    ).bind(user.id, date, now, kind, pain, comfort, prot, triggers, notes).first();
+    ).bind(user.id, date, occurredAt, kind, pain, comfort, prot, triggers, notes).first();
     return json({ ok: true, id: r?.id });
   } catch (e) {
     console.warn("logIntimacy:", e?.message);
@@ -11361,19 +11407,24 @@ async function ctxIntimacy(env, user, days) {
   await ensureFoodSchema(env);
   const sinceDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
   const r = await env.DB.prepare(
-    "SELECT log_date, kind, pain_level, comfort, triggers, notes FROM intimacy_logs " +
+    "SELECT log_date, logged_at, kind, pain_level, comfort, triggers, notes FROM intimacy_logs " +
     "WHERE user_id = ? AND log_date >= ? ORDER BY logged_at DESC LIMIT 60"
   ).bind(user.id, sinceDate).all().catch(() => ({ results: [] }));
   if (!(r.results || []).length) return `### Intimacy (last ${days} days)\nNothing logged.`;
-  const lines = (r.results || []).map((c) =>
-    `- ${c.log_date}: ${c.kind}` +
-    (c.pain_level != null ? ` · pain ${c.pain_level}/5` : "") +
-    (c.comfort != null ? ` · comfort ${c.comfort}/5` : "") +
-    (c.triggers ? ` · triggers: ${c.triggers}` : "") +
-    (c.notes ? ` · "${String(c.notes).slice(0, 80)}"` : "")
-  ).join("\n");
+  const lines = (r.results || []).map((c) => {
+    // Include the precise timestamp so the model can correlate pain
+    // logged a few hours afterwards (the whole reason we capture time).
+    const ts = c.logged_at
+      ? new Date(c.logged_at * 1000).toISOString().slice(0, 16).replace("T", " ")
+      : c.log_date;
+    return `- ${ts}: ${c.kind}` +
+      (c.pain_level != null ? ` · pain ${c.pain_level}/5` : "") +
+      (c.comfort != null ? ` · comfort ${c.comfort}/5` : "") +
+      (c.triggers ? ` · triggers: ${c.triggers}` : "") +
+      (c.notes ? ` · "${String(c.notes).slice(0, 80)}"` : "");
+  }).join("\n");
   return `### Intimacy (last ${days} days, ${r.results.length} entries)\n` +
-         `Dyspareunia and post-coital pelvic pain are common endo markers — useful to correlate with cycle day and any pain logged 12-48 h afterwards.\n${lines}`;
+         `Dyspareunia and post-coital pelvic pain are common endo markers. Each entry below carries its exact timestamp — cross-check against any symptoms / pain logs that follow within the next 24-48 hours.\n${lines}`;
 }
 
 async function ctxCycles(env, user) {
