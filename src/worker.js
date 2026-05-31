@@ -1558,7 +1558,7 @@ const ALLOWED_EVENING_SYMPTOMS = new Set([
 ]);
 const ALLOWED_APPETITE = new Set(["low", "normal", "high"]);
 const ALLOWED_PAIN_TYPES = new Set([
-  "sharp", "dull", "deep", "burning", "aching", "throbbing", "cramping", "stabbing", "shooting", "pressure", "twisting", "pulling",
+  "sharp", "dull", "deep", "burning", "aching", "throbbing", "cramping", "stabbing", "shooting", "pressure", "twisting", "pulling", "pinching",
 ]);
 // Pain-type field only makes sense for these symptom ids.
 const PAIN_SYMPTOMS = new Set([
