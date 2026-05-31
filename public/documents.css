@@ -66,6 +66,13 @@
 .docs-hero.compact{grid-template-columns:1fr;padding:24px 28px}
 .docs-hero.compact .docs-hero-copy h1{font-size:28px;margin-top:2px}
 
+/* Multi-file preview line shown in the metadata modal when the user
+   picked more than one file at once. */
+.meta-files-preview{
+  display:inline-block;margin-top:6px;font-size:11px;color:#7a5f6c;
+  line-height:1.5;word-break:break-word;
+}
+
 /* TOP UPLOAD HERO — big drop zone right under the title so users see
    the action they came here to do first, not buried in a side panel. */
 .docs-upload-hero{display:flex;flex-direction:column;gap:10px}

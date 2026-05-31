@@ -18,7 +18,11 @@ console.info("EndoMe documents build v2");
   const FOLDER_BY_ID = Object.fromEntries(FOLDERS.map((f) => [f.id, f]));
   const MAX_BYTES = 25 * 1024 * 1024;
 
-  let pendingFile = null;
+  // Files queued for upload — we collect every File from a multi-select
+  // (or a multi-file drop), let the user pick ONE folder + notes that
+  // applies to the whole batch, then upload sequentially so each gets
+  // its own row and its own AI review on the server.
+  let pendingFiles = [];
   let storageReady = true;
   let docs = [];
   let activeFolder = "all";
@@ -185,33 +189,61 @@ console.info("EndoMe documents build v2");
   input.addEventListener("change", () => {
     const files = [...input.files || []];
     input.value = "";
-    if (files.length) startUpload(files[0]);
+    if (files.length) startUpload(files);
   });
   ["dragenter", "dragover"].forEach((evt) =>
     zone.addEventListener(evt, (e) => { e.preventDefault(); zone.classList.add("is-drop"); }));
   ["dragleave", "drop"].forEach((evt) =>
     zone.addEventListener(evt, (e) => { e.preventDefault(); zone.classList.remove("is-drop"); }));
   zone.addEventListener("drop", (e) => {
-    const f = e.dataTransfer?.files?.[0];
-    if (f) startUpload(f);
+    const files = [...(e.dataTransfer?.files || [])];
+    if (files.length) startUpload(files);
   });
 
-  function startUpload(file) {
-    if (file.size > MAX_BYTES) { toast("File too big — max 25 MB.", "err"); return; }
-    pendingFile = file;
-    document.getElementById("meta-filename").textContent = `${file.name} · ${Math.round(file.size / 1024)} KB`;
+  function guessKind(file) {
+    const lc = (file.name || "").toLowerCase();
+    return /ultraso|tvs|tvus/.test(lc) ? "ultrasound"
+         : /\bmri\b|\bct\b|\bxray\b|scan/.test(lc) ? "scan"
+         : /\bblood\b|\bcbc\b|\bfbe\b|\blab\b|hba1c|ferritin/.test(lc) ? "lab"
+         : /\bprescrip|script|rx\b/.test(lc) ? "prescription"
+         : /letter/.test(lc) ? "letter"
+         : /report|notes/.test(lc) ? "report"
+         : (file.type || "").startsWith("image/") ? "image"
+         : "other";
+  }
+
+  function startUpload(files) {
+    // Drop oversized files up front and warn for each one. Anything
+    // valid joins the pending batch.
+    const accepted = [];
+    for (const f of files) {
+      if (f.size > MAX_BYTES) {
+        toast(`${f.name}: too big (max 25 MB)`, "err");
+        continue;
+      }
+      accepted.push(f);
+    }
+    if (!accepted.length) return;
+    pendingFiles = accepted;
+
+    // Pick the most common kind across the batch as the default. Users
+    // who mix types just override the dropdown once for all.
+    const counts = {};
+    for (const f of accepted) {
+      const k = guessKind(f);
+      counts[k] = (counts[k] || 0) + 1;
+    }
+    const guess = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "other";
+
+    const single = accepted.length === 1;
+    const totalKb = Math.round(accepted.reduce((s, f) => s + f.size, 0) / 1024);
+    document.getElementById("meta-filename").innerHTML = single
+      ? `${escapeHtml(accepted[0].name)} · ${Math.round(accepted[0].size / 1024)} KB`
+      : `<strong>${accepted.length} files</strong> · ${totalKb} KB total<br/>
+         <span class="meta-files-preview">${accepted.slice(0, 4).map((f) => escapeHtml(f.name)).join(" · ")}${accepted.length > 4 ? ` · +${accepted.length - 4} more` : ""}</span>`;
+
     const form = document.getElementById("meta-form");
     form.reset();
-    // Default folder guess based on filename.
-    const lc = file.name.toLowerCase();
-    const guess = /ultraso|tvs|tvus/.test(lc) ? "ultrasound"
-                : /\bmri\b|\bct\b|\bxray\b|scan/.test(lc) ? "scan"
-                : /\bblood\b|\bcbc\b|\bfbe\b|\blab\b|hba1c|ferritin/.test(lc) ? "lab"
-                : /\bprescrip|script|rx\b/.test(lc) ? "prescription"
-                : /letter/.test(lc) ? "letter"
-                : /report|notes/.test(lc) ? "report"
-                : file.type.startsWith("image/") ? "image"
-                : "other";
     form.kind.value = guess;
     document.getElementById("meta-status").textContent = "";
     metaModal.classList.add("open"); metaModal.setAttribute("aria-hidden", "false");
@@ -220,46 +252,74 @@ console.info("EndoMe documents build v2");
   document.querySelectorAll("[data-close-modal]").forEach((el) =>
     el.addEventListener("click", (e) => {
       e.preventDefault();
+      pendingFiles = [];
       metaModal.classList.remove("open"); metaModal.setAttribute("aria-hidden", "true");
     })
   );
 
   document.getElementById("meta-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!pendingFile) return;
+    if (!pendingFiles.length) return;
     const form = e.target;
     const status = document.getElementById("meta-status");
     const statusBar = document.getElementById("upload-status");
-    status.textContent = "Uploading…"; status.className = "form-status";
-    statusBar.hidden = false; statusBar.textContent = `Uploading ${pendingFile.name}…`;
-    try {
-      const data = await fetch("/api/me/documents", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          "content-type": pendingFile.type || "application/octet-stream",
-          "x-filename":   pendingFile.name,
-          "x-kind":       form.kind.value,
-          "x-notes":      form.notes.value || "",
-        },
-        body: pendingFile,
-      }).then(async (r) => {
+    const kind  = form.kind.value;
+    const notes = form.notes.value || "";
+
+    // Close the modal immediately so the user sees the progress bar at
+    // the top of the page rather than a sticky modal.
+    metaModal.classList.remove("open"); metaModal.setAttribute("aria-hidden", "true");
+    statusBar.hidden = false;
+    const total = pendingFiles.length;
+    let firstNewId = null;
+    let okCount = 0;
+    const errors = [];
+
+    // Upload sequentially. Each POST kicks off its own AI review on the
+    // server (ctx.waitUntil) so they run in parallel after we respond,
+    // even though we're posting in series here.
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const file = pendingFiles[i];
+      statusBar.textContent = total > 1
+        ? `Uploading ${i + 1} of ${total} — ${file.name}…`
+        : `Uploading ${file.name}…`;
+      try {
+        const r = await fetch("/api/me/documents", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "content-type": file.type || "application/octet-stream",
+            "x-filename":   file.name,
+            "x-kind":       kind,
+            "x-notes":      notes,
+          },
+          body: file,
+        });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || `Upload failed (${r.status})`);
-        return d;
-      });
-      toast(`Uploaded — AI is reviewing now`, "ok");
-      pendingFile = null;
-      metaModal.classList.remove("open"); metaModal.setAttribute("aria-hidden", "true");
-      statusBar.hidden = true;
-      await load();
-      // Open viewer straight away so the user can watch the AI populate it.
-      if (data?.id) openViewer(data.id);
-    } catch (err) {
-      status.textContent = err.message || "Couldn't upload.";
-      status.className = "form-status err";
-      statusBar.hidden = true;
+        if (d?.id && firstNewId == null) firstNewId = d.id;
+        okCount += 1;
+      } catch (err) {
+        errors.push(`${file.name}: ${err.message || "upload failed"}`);
+      }
     }
+
+    pendingFiles = [];
+    statusBar.hidden = true;
+    if (okCount > 0) {
+      toast(total === 1 ? "Uploaded — AI is reviewing now" : `Uploaded ${okCount}/${total} — AI is reviewing each one`);
+    }
+    if (errors.length) {
+      // Surface the first error in the meta modal in case the user wants
+      // to retry; show as a toast for the rest.
+      status.textContent = errors[0]; status.className = "form-status err";
+      for (let i = 1; i < errors.length; i++) toast(errors[i], "err");
+    }
+    await load();
+    // Pop the viewer for the FIRST new doc so the user can watch the AI
+    // populate it — only when single-file or when the user can sensibly
+    // follow along (we don't pop one for each upload in a batch).
+    if (firstNewId && total === 1) openViewer(firstNewId);
   });
 
   // --- Viewer modal ----------------------------------------------------

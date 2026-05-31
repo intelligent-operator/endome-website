@@ -311,31 +311,43 @@ mark{
 
 /* ---------- Official circle hero ---------- */
 .circle-hero-card{
-  background:linear-gradient(135deg,#ff4e8a 0%, #ff7aa6 60%, #ffa6c1 100%);
-  color:#fff;border-radius:24px;padding:22px 26px;
+  background:linear-gradient(135deg,#fff5f8 0%, #ffeaf2 55%, #ffe0ec 100%);
+  color:#3a2330;border:1px solid #ffd6e0;
+  border-radius:24px;padding:22px 26px;
   display:grid;grid-template-columns:auto 1fr auto;gap:20px;align-items:center;
-  box-shadow:0 14px 34px rgba(255,77,138,.25);cursor:pointer;
-  transition:transform .15s, box-shadow .15s;
+  box-shadow:0 10px 26px rgba(255,77,138,.10);cursor:pointer;
+  transition:transform .15s, box-shadow .15s, border-color .15s;
+  position:relative;overflow:hidden;
 }
-.circle-hero-card:hover{transform:translateY(-2px);box-shadow:0 18px 40px rgba(255,77,138,.32)}
+.circle-hero-card::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:5px;
+  background:linear-gradient(180deg,#ff8aab,#ff4e8a);
+  border-top-left-radius:24px;border-bottom-left-radius:24px;
+}
+.circle-hero-card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 16px 34px rgba(255,77,138,.18);
+  border-color:#ffb8cb;
+}
 .circle-hero-card-icon{
-  width:64px;height:64px;border-radius:20px;background:rgba(255,255,255,.18);
+  width:64px;height:64px;border-radius:20px;
+  background:linear-gradient(135deg,#fff,#fff5f8);
   display:flex;align-items:center;justify-content:center;font-size:32px;
-  backdrop-filter:blur(4px);
+  box-shadow:0 6px 16px rgba(255,77,138,.18);
 }
 .circle-hero-card-body{min-width:0}
 .circle-hero-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
-.circle-hero-card-top h2{margin:0;font-size:22px;letter-spacing:-.3px}
-.circle-hero-card-top .official-pill{background:rgba(255,255,255,.95);color:#ff4e8a}
-.circle-hero-card-top .role-pill{background:rgba(255,255,255,.25);color:#fff}
-.circle-hero-card-body p{margin:0 0 8px;font-size:14px;line-height:1.5;opacity:.96;max-width:560px}
-.circle-hero-card-meta{display:flex;gap:14px;font-size:12px;font-weight:600;opacity:.92}
+.circle-hero-card-top h2{margin:0;font-size:22px;letter-spacing:-.3px;color:#2b1922}
+.circle-hero-card-top .official-pill{background:#fff;color:#c4344b;border:1px solid #ffd6e0}
+.circle-hero-card-top .role-pill{background:#fff;color:#7a5f6c;border:1px solid #ffd6e0}
+.circle-hero-card-body p{margin:0 0 8px;font-size:14px;line-height:1.55;color:#5a3a48;max-width:600px}
+.circle-hero-card-meta{display:flex;gap:14px;font-size:12px;font-weight:600;color:#7a5f6c}
 .circle-hero-card-actions .btn-primary{
-  background:#fff;color:#ff4e8a;border:none;border-radius:999px;
+  background:linear-gradient(135deg,#ff8aab,#ff4e8a);color:#fff;border:none;border-radius:999px;
   padding:11px 20px;font-weight:700;font-family:inherit;cursor:pointer;
-  box-shadow:0 8px 18px rgba(0,0,0,.10);transition:transform .12s;
+  box-shadow:0 8px 18px rgba(255,77,138,.30);transition:transform .12s, box-shadow .12s;
 }
-.circle-hero-card-actions .btn-primary:hover{transform:translateY(-1px)}
+.circle-hero-card-actions .btn-primary:hover{transform:translateY(-1px);box-shadow:0 12px 24px rgba(255,77,138,.38)}
 @media (max-width:720px){
   .circle-hero-card{grid-template-columns:1fr;text-align:center;padding:22px}
   .circle-hero-card-icon{justify-self:center}
